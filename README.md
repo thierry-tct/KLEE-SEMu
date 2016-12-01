@@ -1,3 +1,11 @@
+# KLEE-SEMu Dynamic Symbolic Execution-Assisted Mutation Framework
+
+KLEE-SEMu is a Dynamic Symbolic Execution-Assisted Mutation framework build on top of [KLEE](https://github.com/klee/klee) Symbolic Virtual Machine.
+  - __KLEE-SEMu-GenMu__ component generate mutants according to mutation specification.
+
+=============================
+=============================
+
 KLEE Symbolic Virtual Machine
 =============================
 
