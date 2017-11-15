@@ -44,7 +44,7 @@ QueryLoggingSolver::QueryLoggingSolver(Solver *_solver, std::string path,
 #endif
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
     os = new llvm::raw_fd_ostream(path.c_str(), ErrorInfo,
-                                  llvm::sys::fs::OpenFlags::F_Text);
+                                  llvm::sys::fs::OpenFlags::F_Textz);
 #else
     os = new llvm::raw_fd_ostream(path.c_str(), ErrorInfo);
 #endif

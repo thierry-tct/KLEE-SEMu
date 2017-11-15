@@ -17,6 +17,10 @@ LEVEL=..
 #
 PARALLEL_DIRS=klee kleaver ktest-tool gen-random-bout klee-stats
 
+# @KLEE-SEMu
+PARALLEL_DIRS += klee-semu
+#~KS
+
 include $(LEVEL)/Makefile.config
 
 ifeq ($(ENABLE_POSIX_RUNTIME),1)

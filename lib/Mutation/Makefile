@@ -1,4 +1,4 @@
-#===-- lib/Makefile ----------------------------------------*- Makefile -*--===#
+#===-- lib/Core/Makefile -----------------------------------*- Makefile -*--===#
 #
 #                     The KLEE Symbolic Virtual Machine
 #
@@ -7,12 +7,11 @@
 #
 #===------------------------------------------------------------------------===#
 
-LEVEL=..
+LEVEL=../..
 
-PARALLEL_DIRS=Basic Support Expr Solver Module Core
-
-# @KLEE-SEMu
-PARALLEL_DIRS += Mutation
-#~KS
+LIBRARYNAME=kleeSemuCore
+DONT_BUILD_RELINKED=1
+BUILD_ARCHIVE=1
+NO_INSTALL=1
 
 include $(LEVEL)/Makefile.common

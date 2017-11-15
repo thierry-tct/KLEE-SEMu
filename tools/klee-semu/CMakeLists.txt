@@ -6,13 +6,17 @@
 # License. See LICENSE.TXT for details.
 #
 #===------------------------------------------------------------------------===#
-add_subdirectory(gen-random-bout)
-add_subdirectory(kleaver)
-add_subdirectory(klee)
-add_subdirectory(klee-replay)
-add_subdirectory(klee-stats)
-add_subdirectory(ktest-tool)
+add_executable(klee-semu
+  klee-semu.cpp
+)
 
-# @KLEE-SEMu
-add_subdirectory(klee-semu)
-#~KS
+set(KLEE_LIBS
+  kleeSemuCore
+)
+
+target_link_libraries(klee-semu ${KLEE_LIBS})
+
+install(TARGETS klee-semu RUNTIME DESTINATION bin)
+
+# The KLEE binary depends on the runtimes
+add_dependencies(klee-semu BuildKLEERuntimes)
