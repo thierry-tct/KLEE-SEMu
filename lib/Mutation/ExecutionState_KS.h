@@ -75,11 +75,11 @@ public:
 public:
   typedef unsigned KS_MutantIDType;
   
-  enum KS_StateDiff_t {ksNO_DIFF=0, ksVARS_DIFF=1, ksPC_DIFF=2, ksSYMBOLICS_DIFF=3, ksOUTENV_DIFF=4, ksRETCODE_DIFF_MAINFUNC=5, ksRETCODE_DIFF_ENTRYFUNC=6, ksRETCODE_DIFF_OTHERFUNC=7};
+  enum KS_StateDiff_t {ksNO_DIFF=0x00, ksVARS_DIFF=0x01, ksRETCODE_DIFF_OTHERFUNC=0x03, ksRETCODE_DIFF_ENTRYFUNC=0x07, ksRETCODE_DIFF_MAINFUNC=0x0F, ksOUTENV_DIFF=0x1F, ksSYMBOLICS_DIFF=0x3F, ksPC_DIFF=0x7F};
   
   inline static bool ks_isCriticalDiff (KS_StateDiff_t sdiff)
   {
-    return (sdiff >= ksPC_DIFF && sdiff <= ksRETCODE_DIFF_ENTRYFUNC);           //XXX: should SYMBOLICS and ENTRYFUNC be here?
+    return (sdiff >= ksRETCODE_DIFF_ENTRYFUNC && sdiff <= ksPC_DIFF);           //XXX: should SYMBOLICS and ENTRYFUNC be here?
   }
   
   struct KS_OrigBranchTreeNode {
@@ -126,7 +126,7 @@ public:
   
   ExecutionState *ks_branchMut();
   
-  enum KS_StateDiff_t ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, ref<Expr> &inStateDiffExp, bool checkRegs=false);
+  enum KS_StateDiff_t ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, std::vector<ref<Expr>> &inStateDiffExp, bool checkRegs=false);
   
 //~KS
 

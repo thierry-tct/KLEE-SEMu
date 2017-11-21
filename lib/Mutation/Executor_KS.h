@@ -15,6 +15,7 @@
 #ifndef KLEE_EXECUTOR_H
 #define KLEE_EXECUTOR_H
 
+#include "KS_Z3MaxSat.h"
 #include "ExecutionState_KS.h"
 #include "klee/Interpreter.h"
 #include "klee/Internal/Module/Cell.h"
@@ -523,6 +524,10 @@ private:
   
   //timeout to kill state with infinite loop  //TODO: make it be passed as parameter
   const double ks_loopBreakDelay = 1;
+
+  // Partial Max Sat Solver
+  // Make this with cache
+  ks::PartialMaxSATSolver pmaxsat_solver;
 public:
   /// Create new states where each constraint is that of the input state
   /// and return the results. The input state is *NOT* included
@@ -543,9 +548,16 @@ public:
   
   inline llvm::Instruction * ks_makeArgSym (llvm::Module &module, llvm::GlobalVariable * &emptyStrAddr, llvm::Instruction *insAfter, llvm::Value *memAddr, llvm::Type *valtype);
   
-  bool ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, ref<Expr> &inStateDiffExp);
+  bool ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp);
   
   bool ks_isOutEnvCall (llvm::CallInst *ci);
+
+  // This take the path condition common to a mutant and original, together 
+  // with the conditions of equality, for each state variable, between
+  // original and mutant
+  void ks_checkMaxSat (ConstraintManager const &mutPathCond,
+                       ConstraintManager const &origPathCond,
+                                  std::vector<ref<Expr>> const &stateDiffExprs); 
   
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS

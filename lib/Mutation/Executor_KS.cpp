@@ -3886,6 +3886,7 @@ Expr::Width Executor::getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const {
 }
 
 // @KLEE-SEMu
+//#define ENABLE_KLEE_SEMU_DEBUG 1
 
 inline llvm::Instruction * Executor::ks_makeArgSym (Module &module, GlobalVariable * &emptyStrAddr, Instruction *insAfter, Value *memAddr, Type *valtype) {
   llvm::Function *f_make_symbolic = module.getFunction("klee_make_symbolic");
@@ -4040,15 +4041,22 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
 }
 
 ////>
-inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, ref<Expr> &inStateDiffExp) {
+inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp) {
   CallInst *acins = dyn_cast<CallInst>(a.pc->inst);
   CallInst *bcins = dyn_cast<CallInst>(b.pc->inst);
-  if (!(acins && bcins))
+  if (!(acins && bcins)) {
+    // They are certainly different. Insert true to show that
+    inStateDiffExp.push_back(ConstantExpr::alloc(1, Expr::Bool));
     return true;
+  }
   if (acins->getCalledFunction() != bcins->getCalledFunction()) { //TODO: consider indirect, maybe getCalledValue is better
+    // They are certainly different. Insert true to show that
+    inStateDiffExp.push_back(ConstantExpr::alloc(1, Expr::Bool));
     return true;
   }
   if (acins->getNumArgOperands () != bcins->getNumArgOperands ()) {
+    // They are certainly different. Insert true to show that
+    inStateDiffExp.push_back(ConstantExpr::alloc(1, Expr::Bool));
     return true;
   }
   unsigned numArgs = acins->getNumArgOperands();
@@ -4056,18 +4064,23 @@ inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const Executio
     ref<Expr> aArg = eval(&*(a.pc), j+1, const_cast<ExecutionState &>(a)).value;
     ref<Expr> bArg = eval(&*(b.pc), j+1, const_cast<ExecutionState &>(b)).value;
     if (aArg.compare(bArg)) {
+#ifdef ENABLE_KLEE_SEMU_DEBUG
       llvm::errs() << "--> External call args differ.\n";
-      inStateDiffExp = NeExpr::create(aArg, bArg);    //XXX: need to do 'or' of all the diff found hre befre returning true?
-      return true;
+#endif
+      inStateDiffExp.push_back(NeExpr::create(aArg, bArg));    //XXX: need to do 'or' of all the diff found hre befre returning true?
+      //return true;
     }
   }
+  if (!inStateDiffExp.empty())
+    return true;
   return false;
 }
   
 inline bool Executor::ks_isOutEnvCall (CallInst *ci) {
+  static std::set<std::string> outEnvFuncs = {"printf", "vprintf" "puts", "putchar", "putc", "fprintf", "vfprintf", "fwrite", "fputs", "fputc", "perror", "assert"};
   Function *f = ci->getCalledFunction();  //TODO: consider indirect, maybe getCalledValue is better
   if (f && f->isDeclaration() && f->getIntrinsicID() == Intrinsic::not_intrinsic) {
-    if (f->getName() == "printf") 
+    if (outEnvFuncs.count(f->getName()))
       return true;
   }
   return false;
@@ -4150,55 +4163,96 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates) {
 //XXX: For a mutant do we need to generate test for all difference with original or only one?
 bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect,
                                            std::map<ExecutionState *, ref<Expr>> &origSuffConstr) {
+  static const bool outputTestCases = false;
+  static const bool doMaxSat = true;
+
+  std::vector<ref<Expr>> inStateDiffExp;
+  bool diffFound = false;
+
   for (auto mSisState: mSisStatesVect) {
     bool result;
     bool success = solver->mayBeTrue(*mState, origSuffConstr.at(mSisState), result);
     assert(success && "KS: Unhandled solver failure");
     (void) success;
     if (result) {
-      //compare these
-      ref<Expr> inStateDiffExp;
+      // Clear diff expr list
+      inStateDiffExp.clear();
+
+      // compare these
       ExecutionState::KS_StateDiff_t sDiff; 
       if (/*mState->pc &&*/ (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
         sDiff = ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
+        // TODO: Should we also compare states (ks_compareStateWith) here or not?
       } else {
         sDiff = mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp);
       }
       if (sDiff == ExecutionState::KS_StateDiff_t::ksNO_DIFF) {
+#ifdef ENABLE_KLEE_SEMU_DEBUG
         llvm::errs() << "<==> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Equivalent.\n\n";
+#endif
       } else {
+#ifdef ENABLE_KLEE_SEMU_DEBUG
         llvm::errs() << "<!=> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Different.\n\n";
-        if (ExecutionState::ks_isCriticalDiff(sDiff)) {
+#endif
+        if (outputTestCases && ExecutionState::ks_isCriticalDiff(sDiff)) {
           // generate test case of this difference.
-          if (inStateDiffExp.isNull())
-            inStateDiffExp = origSuffConstr.at(mSisState);
-          else 
-            inStateDiffExp = AndExpr::create(inStateDiffExp, origSuffConstr.at(mSisState));
+          ref<Expr> insdiff = origSuffConstr.at(mSisState);
+          // TODO: improve this so the test constraint is smaller: remove condition for variable
+          // that are not of the output (not returned nor printed)
+          for (auto &expr: inStateDiffExp) 
+            insdiff = AndExpr::create(insdiff, expr);
           size_t clen = mState->constraints.size();
-          mState->addConstraint (inStateDiffExp); //TODO TODO
+          mState->addConstraint (insdiff); //TODO TODO
           interpreterHandler->processTestCase(*mState, "", std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
           if (mState->constraints.size() > clen) {
             mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
           } 
-          return true;
+          diffFound = true;
+          //return true;
+        }
+        if (doMaxSat) {
+          ks_checkMaxSat(mState->constraints, mSisState->constraints, inStateDiffExp);
         }
       }
     } else {
+#ifdef ENABLE_KLEE_SEMU_DEBUG
       llvm::errs() << "# Infesible differential between an original and a Mutant-" << mState->ks_mutantID <<".\n\n";
+#endif
     }
   }
   
   //compare children as well
   for (ExecutionState *es: mState->ks_childrenStates) {
-    if(ks_compareRecursive (es, mSisStatesVect, origSuffConstr))
-        return true; //break;
+    diffFound |= ks_compareRecursive (es, mSisStatesVect, origSuffConstr);
   }
   
-  return false;
+  return diffFound;
+}
+
+
+// This take the path condition common to a mutant and original, together 
+// with the conditions of equality, for each state variable, between
+// original and mutant
+void Executor::ks_checkMaxSat (ConstraintManager const &mutPathCond,
+                                ConstraintManager const &origPathCond,
+                                std::vector<ref<Expr>> const &stateDiffExprs) {
+  unsigned nMaxFeasibleDiffs, nMaxFeasibleEqs, nSoftClauses;
+
+  nSoftClauses = stateDiffExprs.size();
+  nMaxFeasibleDiffs = nMaxFeasibleEqs = 0;
+  
+  // XXX Make this better (considering overlap  in both path conds), usig set?
+  std::set<ref<Expr>> hardClauses(origPathCond.begin(), origPathCond.end());
+  hardClauses.insert(mutPathCond.begin(), mutPathCond.end());
+    
+  pmaxsat_solver.checkMaxSat(hardClauses, stateDiffExprs, nMaxFeasibleDiffs, nMaxFeasibleEqs);
+  
+  // TODO Print nSoftCluses, (nSoftCluses - nMaxFeasibleDiffs) and (nSoftClauses - nMaxFeasibleEqs) to the mutant file
+  
 }
 
 /**/
-//This function is called when running Under Const
+// This function is called when running Under Const
 bool Executor::ks_lazyInitialize (ExecutionState &state, KInstruction *ki) {
   
   return true;
