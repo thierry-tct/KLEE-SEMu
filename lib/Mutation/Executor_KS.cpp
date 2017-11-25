@@ -1585,7 +1585,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
             // XXX need to check other param attrs ?
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
-      bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
+            bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
 #elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 2)
 	    bool isSExt = cs.paramHasAttr(0, llvm::Attributes::SExt);
 #else
@@ -1821,7 +1821,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             // produce mutants states from the current original's state with each state having 
             // one of the possible Mutants of this mutation point (successors of this switch)
             ks_mutationPointBranching(state, mIdsHere);
-                
+            //llvm::errs() << fromMID << " " << toMID << " --\n";    
+            //i->dump();
             // Set to visited, so that subsequent pass do not mutate anymore
             state.ks_VisitedMutPointsSet.insert(i);
                 
@@ -4041,6 +4042,7 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
 }
 
 ////>
+// TODO TODO: Handle state comparison in here
 inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp) {
   CallInst *acins = dyn_cast<CallInst>(a.pc->inst);
   CallInst *bcins = dyn_cast<CallInst>(b.pc->inst);
@@ -4100,6 +4102,24 @@ inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction 
 }
 ///
 
+
+void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes) {
+  std::vector<ExecutionState *> children(pes->ks_childrenStates.begin(), pes->ks_childrenStates.end());
+  for (ExecutionState *ces: children) {
+    ks_fixTerminatedChildrenRecursive(ces);
+    if (ks_terminatedBeforeWP.count(ces) > 0) {
+      pes->ks_childrenStates.erase(ces);
+      if (! ces->ks_childrenStates.empty()) {
+        auto *newparent = *(ces->ks_childrenStates.begin());
+        pes->ks_childrenStates.insert(newparent);
+        
+        ces->ks_childrenStates.erase(newparent);
+        newparent->ks_childrenStates.insert(ces->ks_childrenStates.begin(), ces->ks_childrenStates.end());
+      }
+    }
+  }
+}
+
 void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates) {
   //TODO TODO: Make efficient
   std::vector<ExecutionState *> mutParentStates;
@@ -4139,18 +4159,32 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates) {
       }
     }
     if (ks_compareRecursive (es, correspOriginals, origSuffConstr)) {
-      //terminate all the states of this mutant by removing them from ks_reachedWatchPoint and adding them to ks_terminatedBeforeWP
-      //XXX: For a mutant do we need to generate test for all difference with original or only one (mutant forked from different original have different test generated)?
-      //TODO improve this
-      for(ExecutionState *ites: ks_reachedWatchPoint) {
+      // terminate all the states of this mutant by removing them from ks_reachedWatchPoint and adding them to ks_terminatedBeforeWP
+      // XXX: For a mutant do we need to generate test for all difference with original or only one (mutant forked from different original have different test generated)?
+      // TODO improve this
+      /*for(ExecutionState *ites: ks_reachedWatchPoint) {
         if (ites->ks_mutantID == es->ks_mutantID) {
           ks_reachedWatchPoint.erase(ites);
-          ks_terminatedBeforeWP.insert(ites);   //TODO TODO: add the states on this mutant that are in 'states' but did not check here (of course after removing them from searcher)
+          ks_terminatedBeforeWP.insert(ites); 
         }
-      }
+      }*/
+    }
+
+    // Remove mutants states that are terminated form their parent's 'children set'
+    ks_fixTerminatedChildrenRecursive (es);
+
+    // let a child mutant state be the new parent of the group in case this parent terminated
+    // XXX at this point, all terminated children are removed from its chindren set
+    if (ks_terminatedBeforeWP.count(es) > 0 && !es->ks_childrenStates.empty()) {
+      auto *newParent = *(es->ks_childrenStates.begin());
+      es->ks_childrenStates.erase(newParent);
+      
+      newParent->ks_childrenStates.insert(es->ks_childrenStates.begin(), es->ks_childrenStates.end());
+      assert (newParent->ks_originalMutSisterStates == nullptr);
+      newParent->ks_originalMutSisterStates = es->ks_originalMutSisterStates;
     }
   }
-  
+
   //Temporary
   remainStates.clear();
   remainStates.insert(remainStates.begin(), ks_reachedWatchPoint.begin(), ks_reachedWatchPoint.end());
@@ -4179,14 +4213,20 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
       inStateDiffExp.clear();
 
       // compare these
-      ExecutionState::KS_StateDiff_t sDiff; 
+      int sDiff = ExecutionState::KS_StateDiff_t::ksNO_DIFF; 
+
       if (/*mState->pc &&*/ (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
-        sDiff = ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
-        // TODO: Should we also compare states (ks_compareStateWith) here or not?
+        sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
+        // XXX: we also compare states (ks_compareStateWith) here or not?
+        sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, false/*post...*/);
       } else {
-        sDiff = mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp);
+        sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, true/*post...*/);
       }
-      if (sDiff == ExecutionState::KS_StateDiff_t::ksNO_DIFF) {
+      
+      // make sure that the sDiff is not having an error. If error, abort
+      ExecutionState::ks_checkNoDiffError(sDiff, mState->ks_mutantID);
+
+      if (ExecutionState::ks_isNoDiff(sDiff)) {
 #ifdef ENABLE_KLEE_SEMU_DEBUG
         llvm::errs() << "<==> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Equivalent.\n\n";
 #endif
@@ -4211,7 +4251,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
           //return true;
         }
         if (doMaxSat) {
-          ks_checkMaxSat(mState->constraints, mSisState->constraints, inStateDiffExp);
+          ks_checkMaxSat(mState->constraints, mSisState->constraints, inStateDiffExp, mState->ks_mutantID, sDiff);
         }
       }
     } else {
@@ -4235,7 +4275,8 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
 // original and mutant
 void Executor::ks_checkMaxSat (ConstraintManager const &mutPathCond,
                                 ConstraintManager const &origPathCond,
-                                std::vector<ref<Expr>> const &stateDiffExprs) {
+                                std::vector<ref<Expr>> &stateDiffExprs,
+                                ExecutionState::KS_MutantIDType mutant_id, int sDiff) {
   unsigned nMaxFeasibleDiffs, nMaxFeasibleEqs, nSoftClauses;
 
   nSoftClauses = stateDiffExprs.size();
@@ -4243,12 +4284,71 @@ void Executor::ks_checkMaxSat (ConstraintManager const &mutPathCond,
   
   // XXX Make this better (considering overlap  in both path conds), usig set?
   std::set<ref<Expr>> hardClauses(origPathCond.begin(), origPathCond.end());
+  //llvm::errs() << origPathCond.size() << " oooo##$$$\n";
+  //llvm::errs() << mutPathCond.size() << " ##$$$\n";
+  //mutPathCond.back()->dump(); (*mutPathCond.begin())->dump();
   hardClauses.insert(mutPathCond.begin(), mutPathCond.end());
+
+  // remove the false from soft clauses: 
+  // They are certainly not part of maxsat for nSoftClauses
+  // remove the true from soft clauses: 
+  // They are certainly not part of maxsat for nMaxFeasibleEqs, but added to ...Diffs
+  std::vector<unsigned> posToRemove;
+  unsigned nFalse = 0, nTrue = 0;
+  for (unsigned i = 0; i < stateDiffExprs.size(); ++i) {
+    if (stateDiffExprs[i]->isTrue()) {
+      ++nTrue;
+      posToRemove.push_back(i);
+    } else if (stateDiffExprs[i]->isFalse()) {
+      ++nFalse;
+      posToRemove.push_back(i);
+    }
+  }
+  // remove
+  for (auto it = posToRemove.rbegin(), ie = posToRemove.rend(); it != ie; ++it)
+    stateDiffExprs.erase(stateDiffExprs.begin() + (*it));
     
-  pmaxsat_solver.checkMaxSat(hardClauses, stateDiffExprs, nMaxFeasibleDiffs, nMaxFeasibleEqs);
+  if (! stateDiffExprs.empty()) {
+    //Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
+    //bool ress;
+    //std::vector<ref<Expr>> xxx; xxx.insert(xxx.begin(), hardClauses.begin(), hardClauses.end());
+    //bool rr = coreSolver->mayBeTrue(Query(ConstraintManager(xxx), stateDiffExprs.back()), ress); 
+    //llvm::errs() << rr << " " << ress<< " #\n";
+    pmaxsat_solver.checkMaxSat(hardClauses, stateDiffExprs, nMaxFeasibleDiffs, nMaxFeasibleEqs);
+  }
   
-  // TODO Print nSoftCluses, (nSoftCluses - nMaxFeasibleDiffs) and (nSoftClauses - nMaxFeasibleEqs) to the mutant file
+  // update using nTrue and nFalse
+  nMaxFeasibleDiffs += nTrue;
+  nSoftClauses -= nFalse;
+
+  ks_writeMutantStateData (mutant_id, nSoftClauses, nMaxFeasibleDiffs, nMaxFeasibleEqs, sDiff);
+}
+
+void Executor::ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id,
+                                unsigned nSoftClauses,
+                                unsigned nMaxFeasibleDiffs,
+                                unsigned nMaxFeasibleEqs,
+                                int sDiff) {
+  static const std::string fnPrefix("mutant-");
+  static const std::string fnSuffix(".semu");
+  //llvm::errs() << "MutantID | nSoftClauses  nMaxFeasibleDiffs  nMaxFeasibleEqs | Diff Type\n";
+  //llvm::errs() << mutant_id << " | " << nSoftClauses << "  " << nMaxFeasibleDiffs << "  " << nMaxFeasibleEqs << " | " << sDiff << "\n";
+  std::string out_file_name =
+    interpreterHandler->getOutputFilename(fnPrefix+std::to_string(mutant_id)+fnSuffix);
+
+  std::ofstream ofs(out_file_name, std::ofstream::out | std::ofstream::app); 
+  if (ofs.is_open()) {
+    ofs << mutant_id << " " << nSoftClauses << " " << nMaxFeasibleDiffs << " " << nMaxFeasibleEqs << " " << sDiff << "\n";
+    ofs.close();
+  } else {
+    llvm::errs() << "Error: Unable to create info file: " << out_file_name 
+                 << ". Mutant ID is:" << mutant_id << ".\n";
+    assert(false);
+    exit(1);
+  }
+
   
+
 }
 
 /**/

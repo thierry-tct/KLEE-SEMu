@@ -540,6 +540,7 @@ public:
   // Test wheather we reached the point to compare the states
   bool ks_watchPointReached (ExecutionState &state, KInstruction *ki);
   
+  void ks_fixTerminatedChildrenRecursive (ExecutionState *pes); 
   void ks_compareStates (std::vector<ExecutionState *> &remainStates);
   bool ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect, 
                           std::map<ExecutionState *, ref<Expr>> &origSuffConstr);
@@ -557,8 +558,14 @@ public:
   // original and mutant
   void ks_checkMaxSat (ConstraintManager const &mutPathCond,
                        ConstraintManager const &origPathCond,
-                                  std::vector<ref<Expr>> const &stateDiffExprs); 
-  
+                       std::vector<ref<Expr>> &stateDiffExprs,
+                       ExecutionState::KS_MutantIDType mutant_id, 
+                       int sDiff); 
+  void ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id,
+                                unsigned nSoftClauses,
+                                unsigned nMaxFeasibleDiffs,
+                                unsigned nMaxFeasibleEqs,
+                                int sDiff);  
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS
 };

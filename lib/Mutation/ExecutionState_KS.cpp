@@ -157,38 +157,65 @@ ExecutionState *ExecutionState::ks_branchMut() {
   return falseState;
 }
 
-ExecutionState::KS_StateDiff_t ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, std::vector<ref<Expr>> &inStateDiffExp, bool checkRegs/*=false*/) {
+int ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, std::vector<ref<Expr>> &inStateDiffExp, bool postExec, bool checkRegs/*=false*/) {
   //if (pc != b.pc)     //Commented beacause some states may terminate early but should still be considered(they may have different PC)
   //  return false;
   
   bool checkLocals = true;
 
   // The returned code
-  KS_StateDiff_t  returnedCode = ksNO_DIFF;
+  int returnedCode = ksNO_DIFF;
   
+  KInstIterator aPC, bPC;
+  if (postExec) {
+    aPC = prevPC;
+    bPC = b.prevPC;
+  } else {
+    aPC = pc;
+    bPC = b.pc;
+  }
+
   //TODO>
-  //> First: They should have same prevPC (The both executed the watch point)
-  if (prevPC != b.prevPC) { 
+  //> First: They should have same PC (The both executed the watch point)
+  if (aPC != bPC) { 
 #ifdef ENABLE_KLEE_SEMU_DEBUG
-    llvm::errs() << "--> prevPC != b.prevPC\n";  
+    llvm::errs() << "--> aPC != bPC\n";  
 #endif
     // They are certainly different. Insert true to show that
     inStateDiffExp.push_back(ConstantExpr::alloc(1, Expr::Bool));
-    return ksPC_DIFF;
+    returnedCode |= ksPC_DIFF;
+
+    if (!aPC || !bPC) 
+      return returnedCode;
+
+    // XXX: Necessary - Stop if the 2 states are in different functions
+    // We make this relax because the same statement can have 2 locations
+    // one in original code, one in mutant code. and a mutant is limited within a function
+    if (aPC->inst->getParent()->getParent() != bPC->inst->getParent()->getParent())
+      return returnedCode;
   } 
 
     // we cannot compare states if the two have different call stack: Therefore the asserts
+  if (false) //XXX: disable this for now, 
   {
     std::vector<StackFrame>::const_iterator itA = stack.begin();
     std::vector<StackFrame>::const_iterator itB = b.stack.begin();
     while (itA!=stack.end() && itB!=b.stack.end()) {
       // XXX vaargs?
-      if (itA->caller!=itB->caller || itA->kf!=itB->kf) {
+      if (itA->caller != itB->caller || itA->kf != itB->kf) {
 #ifdef ENABLE_KLEE_SEMU_DEBUG
         llvm::errs() << "--> itA->caller!=itB->caller || itA->kf!=itB->kf\n";
 #endif
+        llvm::errs() << "# A's Stack:";
+        dumpStack(llvm::errs()); 
+        llvm::errs() << "# B's Stack:";
+        b.dumpStack(llvm::errs()); 
+        //llvm::errs() << itA->caller << " " << itB->caller << "\n";
+        //itA->caller->inst->dump(); itB->caller->inst->dump();
+        //llvm::errs() << (itA->caller != itB->caller) << " " << (itA->kf != itB->kf) << "\n";
         assert (false && "@SEMU-ERROR: Different call stack: diff func (wrong watch point)");
-        //return false;
+        llvm::errs() << "\n@SEMU-ERROR: Different call stack: diff func (wrong watch point)\n";
+        return ksFAILURE_BUG;
       }
       ++itA;
       ++itB;
@@ -197,14 +224,19 @@ ExecutionState::KS_StateDiff_t ExecutionState::ks_compareStateWith (const Execut
 #ifdef ENABLE_KLEE_SEMU_DEBUG
       llvm::errs() << "--> itA!=stack.end() || itB!=b.stack.end()\n";
 #endif
+      llvm::errs() << "# A's Stack:";
+      dumpStack(llvm::errs()); 
+      llvm::errs() << "# B's Stack:";
+      b.dumpStack(llvm::errs()); 
       assert (false && "@SEMU-ERROR: Different call stack: diff length (wrong watch point)");
-      //return false;
+      llvm::errs() << "\n@SEMU-ERROR: Different call stack: diff length (wrong watch point)\n";
+      return ksFAILURE_BUG;
     }
   }
 
   //Here we are sure that both have same call stack
   //> Second is the watchpoint a ret instruction?
-  if (llvm::ReturnInst *ri = llvm::dyn_cast<llvm::ReturnInst>(prevPC->inst)) {
+  if (llvm::ReturnInst *ri = llvm::dyn_cast<llvm::ReturnInst>(aPC->inst)) {
     const char *mainFName[] = {"main", "__user_main"};
     int noEntry_NegEntry0_1;
     if (stack.size() == 2)
@@ -219,8 +251,7 @@ ExecutionState::KS_StateDiff_t ExecutionState::ks_compareStateWith (const Execut
           llvm::errs() << "--> return Codes differ: main function.\n";
 #endif
           inStateDiffExp.push_back(NeExpr::create(ks_lastReturnedVal, b.ks_lastReturnedVal));
-          if (returnedCode < ksRETCODE_DIFF_MAINFUNC)
-            returnedCode = ksRETCODE_DIFF_MAINFUNC;
+          returnedCode |= ksRETCODE_DIFF_MAINFUNC;
         }
         else {
           //return ksNO_DIFF;
@@ -231,8 +262,7 @@ ExecutionState::KS_StateDiff_t ExecutionState::ks_compareStateWith (const Execut
           llvm::errs() << "--> return Codes differ: other entry point function.\n";
 #endif
           inStateDiffExp.push_back(NeExpr::create(ks_lastReturnedVal, b.ks_lastReturnedVal));
-          if (returnedCode < ksRETCODE_DIFF_ENTRYFUNC)
-            returnedCode = ksRETCODE_DIFF_ENTRYFUNC;
+          returnedCode |= ksRETCODE_DIFF_ENTRYFUNC;
         }
         //checkLocals  = false;
       }
@@ -242,8 +272,7 @@ ExecutionState::KS_StateDiff_t ExecutionState::ks_compareStateWith (const Execut
         llvm::errs() << "--> return Codes differ: non entry point function.\n";
 #endif
         inStateDiffExp.push_back(NeExpr::create(ks_lastReturnedVal, b.ks_lastReturnedVal));
-        if (returnedCode < ksRETCODE_DIFF_OTHERFUNC)
-          returnedCode = ksRETCODE_DIFF_OTHERFUNC;
+        returnedCode |= ksRETCODE_DIFF_OTHERFUNC;
       }
       //checkLocals  = true;
     }
@@ -257,7 +286,10 @@ ExecutionState::KS_StateDiff_t ExecutionState::ks_compareStateWith (const Execut
     llvm::errs() << "--> symbolics!=b.symbolics\n";
 #endif
     assert (false && "@SEMU-ERROR: Different in symbolics. BUG?");
-    //return ksSYMBOLICS_DIFF;
+    llvm::errs() << "\n@SEMU-ERROR: Different in symbolics. BUG?\n";
+    inStateDiffExp.push_back(ConstantExpr::alloc(1, Expr::Bool));
+    returnedCode |= ksSYMBOLICS_DIFF;
+    return returnedCode;
   }
 
   // We cannot merge if addresses would resolve differently in the
@@ -295,23 +327,23 @@ ExecutionState::KS_StateDiff_t ExecutionState::ks_compareStateWith (const Execut
       // They are certainly different. Insert true to show that
       inStateDiffExp.push_back(ConstantExpr::alloc(1, Expr::Bool));
       //return ksVARS_DIFF;
-    }
+    } else {
     
-    if (ai->first->isLocal && !checkLocals) {
-      continue;
-    }
-    
-    if (ai->second != bi->second && (*ai->second).read(0, ai->first->size*8).compare((*bi->second).read(0, bi->first->size*8)) != 0 && ai->first->allocSite != MutantIDSelectDeclIns) {
-      if (DebugLogStateMerge)
-        llvm::errs() << "\t\tmutated: " << ai->first->id << "\n";
-      mutated.insert(ai->first);
-      inStateDiffExp.push_back(NeExpr::create((*ai->second).read(0, ai->first->size*8), (*bi->second).read(0, bi->first->size*8)));
+      if (ai->first->isLocal && !checkLocals) {
+        continue;
+      }
+      
+      if (ai->second != bi->second && (*ai->second).read(0, ai->first->size*8).compare((*bi->second).read(0, bi->first->size*8)) != 0 && ai->first->allocSite != MutantIDSelectDeclIns) {
+        if (DebugLogStateMerge)
+          llvm::errs() << "\t\tmutated: " << ai->first->id << "\n";
+        mutated.insert(ai->first);
+        inStateDiffExp.push_back(NeExpr::create((*ai->second).read(0, ai->first->size*8), (*bi->second).read(0, bi->first->size*8)));
+      }
     }
   }
   if (mutated.size() > 0) {
-    llvm::errs() << "Global objects mutated(" << mutated.size() << ")\n";
-    if (returnedCode < ksVARS_DIFF)
-      returnedCode = ksVARS_DIFF;
+    //llvm::errs() << "Global objects mutated(" << mutated.size() << ")\n";
+    returnedCode |= ksVARS_DIFF;
   }
   if (ai!=ae || bi!=be) {
     if (DebugLogStateMerge)
@@ -321,8 +353,7 @@ ExecutionState::KS_StateDiff_t ExecutionState::ks_compareStateWith (const Execut
 #endif
     // They are certainly different. Insert true to show that
     inStateDiffExp.push_back(ConstantExpr::alloc(1, Expr::Bool));
-    if (returnedCode < ksVARS_DIFF)
-      returnedCode = ksVARS_DIFF;
+    returnedCode |= ksVARS_DIFF;
   }
   
   if (checkRegs) {
@@ -342,8 +373,7 @@ ExecutionState::KS_StateDiff_t ExecutionState::ks_compareStateWith (const Execut
             llvm::errs() << "--> Registers Differs\n";
 #endif
             inStateDiffExp.push_back(NeExpr::create(av, bv));
-            if (returnedCode < ksVARS_DIFF)
-              returnedCode = ksVARS_DIFF;
+            returnedCode |= ksVARS_DIFF;
           }
         }
       }

@@ -75,13 +75,25 @@ public:
 public:
   typedef unsigned KS_MutantIDType;
   
-  enum KS_StateDiff_t {ksNO_DIFF=0x00, ksVARS_DIFF=0x01, ksRETCODE_DIFF_OTHERFUNC=0x03, ksRETCODE_DIFF_ENTRYFUNC=0x07, ksRETCODE_DIFF_MAINFUNC=0x0F, ksOUTENV_DIFF=0x1F, ksSYMBOLICS_DIFF=0x3F, ksPC_DIFF=0x7F};
+  enum KS_StateDiff_t {ksNO_DIFF=0x00, ksVARS_DIFF=0x01, ksRETCODE_DIFF_OTHERFUNC=0x02, ksRETCODE_DIFF_ENTRYFUNC=0x04, ksRETCODE_DIFF_MAINFUNC=0x08, ksOUTENV_DIFF=0x10, ksSYMBOLICS_DIFF=0x20, ksPC_DIFF=0x40, ksFAILURE_BUG=0x80/*A bug in program*/};
   
-  inline static bool ks_isCriticalDiff (KS_StateDiff_t sdiff)
+  inline static bool ks_isCriticalDiff (int sdiff)
   {
     return (sdiff >= ksRETCODE_DIFF_ENTRYFUNC && sdiff <= ksPC_DIFF);           //XXX: should SYMBOLICS and ENTRYFUNC be here?
   }
+  inline static bool ks_isNoDiff (int sdiff)
+  {
+    return (sdiff == ksNO_DIFF); 
+  }
   
+  inline static void ks_checkNoDiffError(int sdiff, KS_MutantIDType mutant_id)
+  {
+    if (sdiff >= ksFAILURE_BUG) {
+      llvm::errs() << "error in semu execution - Mutant ID: " << mutant_id << ", error code: 1\n";
+      exit(1); //ERROR
+    }
+  }
+
   struct KS_OrigBranchTreeNode {
     struct KS_OrigBranchTreeNode * parent;
     struct KS_OrigBranchTreeNode * lchild;
@@ -109,8 +121,8 @@ public:
   //The last returned value: Help compare states when the watch point is end of the function
   ref<Expr> ks_lastReturnedVal;
   
-  //pointer to the original state Sp from where this state Sm was 
-  //originated (PathCondition of Sp includes PathCondition of Sm)
+  // pointer to the original state Sp from where this state Sm was 
+  // originated (PathCondition of Sp includes PathCondition of Sm)
   struct KS_OrigBranchTreeNode *ks_originalMutSisterStates;
   
   struct KS_OrigBranchTreeNode *ks_curBranchTreeNode;
@@ -126,7 +138,8 @@ public:
   
   ExecutionState *ks_branchMut();
   
-  enum KS_StateDiff_t ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, std::vector<ref<Expr>> &inStateDiffExp, bool checkRegs=false);
+  // Post exec say whether the comparison is done after the chekpoint instruction execution
+  int ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, std::vector<ref<Expr>> &inStateDiffExp, bool postExec=true, bool checkRegs=false);
   
 //~KS
 

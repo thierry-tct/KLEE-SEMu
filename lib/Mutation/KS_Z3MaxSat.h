@@ -114,7 +114,6 @@ private:
   template<typename Iter>
   Z3_ast * get_constraints(Iter it, Iter end,  unsigned num_cnstrs, bool negateSoftClauses) 
   {
-      klee::Z3Builder temp_builder(false/*, (char *)0*/);
 
       Z3_ast * result;
       unsigned i;
@@ -122,10 +121,12 @@ private:
       if (negateSoftClauses) {
         for (i = 0; it != end; ++it) {
             result[i++] = (Z3_ast) temp_builder.construct(klee::NotExpr::create(*it));
+            //(*it)->dump();
         }
       } else {
         for (i = 0; it != end; ++it) {
             result[i++] = (Z3_ast) temp_builder.construct(*it);
+            //(*it)->dump();
         }
       }
       return result;
@@ -581,7 +582,10 @@ private:
   static const int NAIVE_MAXSAT = 0;
   static const int FU_MALIK_MAXSAT = 1;
 
+  klee::Z3Builder temp_builder;
+
 public:
+  PartialMaxSATSolver(): temp_builder(false/*, (char *)0*/) {}
 
   // TODO: Have the solver as class property to take use of caching
   bool checkMaxSat(std::set<klee::ref<klee::Expr>> const &hardClauseExpr, std::vector<klee::ref<klee::Expr>> const &softClauses, unsigned &nPosMaxFeasible, unsigned nNegMaxFeasible) {
@@ -601,7 +605,7 @@ public:
       Z3_context ctx;
       Z3_solver s;
       unsigned result = 0;
-      ctx = mk_context();
+      ctx = temp_builder.ctx; //mk_context();
       s = mk_solver(ctx);
       soft_cnstrs = get_constraints<>(softClauses.begin(), softClauses.end(), num_soft_cnstrs, (bool)outsel);
       switch (approach) {
