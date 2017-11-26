@@ -113,6 +113,33 @@ public:
           rchild->getAllStates(vect);
       }
     }
+    // TODO: implements this and call it. return true if fine (not terminated)
+    bool cleanTerminatedOriginals(llvm::SmallPtrSet<ExecutionState *, 5> const &ks_terminatedBeforeWP) {
+      if (exState && ks_terminatedBeforeWP.count(exState) > 0)
+        exState = nullptr;
+      if (lchild) {
+        if (lchild->exState) {
+          if (ks_terminatedBeforeWP.count(lchild->exState) > 0) {
+            //delete lchild;
+            //lchild = nullptr;
+            lchild->exState = nullptr;
+          }  
+        } else {
+          lchild->cleanTerminatedOriginals(ks_terminatedBeforeWP);
+        }
+      }
+      if (rchild) {
+        if (rchild->exState) {
+          if (ks_terminatedBeforeWP.count(rchild->exState) > 0) {
+            //delete rchild;
+            //rchild = nullptr;
+            rchild->exState = nullptr;
+          }
+        } else {
+          rchild->cleanTerminatedOriginals(ks_terminatedBeforeWP);
+        }
+      }
+    }
   };
   
   //Version ID: 0 for original; 1, 2, ... for mutants

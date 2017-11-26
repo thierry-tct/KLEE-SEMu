@@ -236,47 +236,49 @@ int ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *M
 
   //Here we are sure that both have same call stack
   //> Second is the watchpoint a ret instruction?
-  if (llvm::ReturnInst *ri = llvm::dyn_cast<llvm::ReturnInst>(aPC->inst)) {
-    const char *mainFName[] = {"main", "__user_main"};
-    int noEntry_NegEntry0_1;
-    if (stack.size() == 2)
-        noEntry_NegEntry0_1 = (stack.at(1).kf->function->getName() == "__uClibc_main")? 1: -1;
-    else
-        noEntry_NegEntry0_1 = (! stack.back().caller)? 0: -1;
-    
-    if (noEntry_NegEntry0_1 >= 0) { //Entry point Function
-      if (ri->getParent()->getParent()->getName() == mainFName[noEntry_NegEntry0_1]) { //Check only return values
+  if (llvm::isa<llvm::ReturnInst>(bPC->inst)) { //make sure that both watch points are same type
+    if (llvm::ReturnInst *ri = llvm::dyn_cast<llvm::ReturnInst>(aPC->inst)) {
+      const char *mainFName[] = {"main", "__user_main"};
+      int noEntry_NegEntry0_1;
+      if (stack.size() == 2)
+          noEntry_NegEntry0_1 = (stack.at(1).kf->function->getName() == "__uClibc_main")? 1: -1;
+      else
+          noEntry_NegEntry0_1 = (! stack.back().caller)? 0: -1;
+      
+      if (noEntry_NegEntry0_1 >= 0) { //Entry point Function
+        if (ri->getParent()->getParent()->getName() == mainFName[noEntry_NegEntry0_1]) { //Check only return values
+          if (ks_lastReturnedVal.compare(b.ks_lastReturnedVal)) {
+  #ifdef ENABLE_KLEE_SEMU_DEBUG
+            llvm::errs() << "--> return Codes differ: main function.\n";
+  #endif
+            inStateDiffExp.push_back(NeExpr::create(ks_lastReturnedVal, b.ks_lastReturnedVal));
+            returnedCode |= ksRETCODE_DIFF_MAINFUNC;
+          }
+          else {
+            //return ksNO_DIFF;
+          }
+        } else {  //Check return val and globals
+          if (ks_lastReturnedVal.compare(b.ks_lastReturnedVal)) {
+  #ifdef ENABLE_KLEE_SEMU_DEBUG
+            llvm::errs() << "--> return Codes differ: other entry point function.\n";
+  #endif
+            inStateDiffExp.push_back(NeExpr::create(ks_lastReturnedVal, b.ks_lastReturnedVal));
+            returnedCode |= ksRETCODE_DIFF_ENTRYFUNC;
+          }
+          //checkLocals  = false;
+        }
+      } else {  //Check both returned val and Globals and locals
         if (ks_lastReturnedVal.compare(b.ks_lastReturnedVal)) {
-#ifdef ENABLE_KLEE_SEMU_DEBUG
-          llvm::errs() << "--> return Codes differ: main function.\n";
-#endif
+  #ifdef ENABLE_KLEE_SEMU_DEBUG
+          llvm::errs() << "--> return Codes differ: non entry point function.\n";
+  #endif
           inStateDiffExp.push_back(NeExpr::create(ks_lastReturnedVal, b.ks_lastReturnedVal));
-          returnedCode |= ksRETCODE_DIFF_MAINFUNC;
+          returnedCode |= ksRETCODE_DIFF_OTHERFUNC;
         }
-        else {
-          //return ksNO_DIFF;
-        }
-      } else {  //Check return val and globals
-        if (ks_lastReturnedVal.compare(b.ks_lastReturnedVal)) {
-#ifdef ENABLE_KLEE_SEMU_DEBUG
-          llvm::errs() << "--> return Codes differ: other entry point function.\n";
-#endif
-          inStateDiffExp.push_back(NeExpr::create(ks_lastReturnedVal, b.ks_lastReturnedVal));
-          returnedCode |= ksRETCODE_DIFF_ENTRYFUNC;
-        }
-        //checkLocals  = false;
+        //checkLocals  = true;
       }
-    } else {  //Check both returned val and Globals and locals
-      if (ks_lastReturnedVal.compare(b.ks_lastReturnedVal)) {
-#ifdef ENABLE_KLEE_SEMU_DEBUG
-        llvm::errs() << "--> return Codes differ: non entry point function.\n";
-#endif
-        inStateDiffExp.push_back(NeExpr::create(ks_lastReturnedVal, b.ks_lastReturnedVal));
-        returnedCode |= ksRETCODE_DIFF_OTHERFUNC;
-      }
-      //checkLocals  = true;
-    }
-  } 
+    } 
+  }
 
   // XXX is it even possible for these to differ? does it matter? probably
   // implies difference in object states?

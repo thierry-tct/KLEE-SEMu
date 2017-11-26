@@ -4120,6 +4120,20 @@ void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes) {
   }
 }
 
+void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
+  for (ExecutionState *ces: pes->ks_childrenStates) {
+    ks_terminateSubtreeMutants(ces);
+    if (ks_reachedWatchPoint.count(ces) > 0) {
+      ks_terminatedBeforeWP.insert(ces);
+      ks_reachedWatchPoint.erase(ces);
+    }
+  }
+  if (ks_reachedWatchPoint.count(pes) > 0) {
+    ks_terminatedBeforeWP.insert(pes);
+    ks_reachedWatchPoint.erase(pes);
+  }
+}
+
 void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates) {
   //TODO TODO: Make efficient
   std::vector<ExecutionState *> mutParentStates;
@@ -4145,6 +4159,17 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates) {
     correspOriginals.clear();
     es->ks_originalMutSisterStates->getAllStates(correspOriginals);
     assert (correspOriginals.size() > 0 && "Error: Empty original state list");
+
+    // TODO: CHECK WHY ORIGINAL FINISHES FIRST
+    //for(auto xy: correspOriginals)llvm::errs()<<" "<<xy->ks_mutantID;llvm::errs()<<" **\n";
+    //llvm::errs()<<mutParentStates.size()<<" ~~~~~~\n";
+    
+    if (correspOriginals.empty()) {
+      // No need to continue with the mutants since original finished
+      // Remove the mutants of the subtree from ks_reachedWatchPoint, add to terminated
+      ks_terminateSubtreeMutants(es);
+      continue;
+    }
     
     //compute constraint for each original (only if the previous is descendent of this). for this, if any leave is common and the the previous subtree is bigger or equal to this, then 
     if (origSuffConstr.find(correspOriginals.at(0)) == origSuffConstr.end() || correspOriginals.size() > origSuffConstr.size()) {
@@ -4185,6 +4210,15 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates) {
     }
   }
 
+  // Fix original terminated
+  if (! mutParentStates.empty()) {
+    auto *cands = mutParentStates.front();
+    auto *topParent = cands->ks_originalMutSisterStates;
+    while (topParent->parent != nullptr)
+      topParent = topParent->parent;
+    topParent->cleanTerminatedOriginals(ks_terminatedBeforeWP);
+  }
+
   //Temporary
   remainStates.clear();
   remainStates.insert(remainStates.begin(), ks_reachedWatchPoint.begin(), ks_reachedWatchPoint.end());
@@ -4218,7 +4252,9 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
       if (/*mState->pc &&*/ (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
         sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
         // XXX: we also compare states (ks_compareStateWith) here or not?
-        sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, false/*post...*/);
+
+        if (!ExecutionState::ks_isNoDiff(sDiff))
+          sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, false/*post...*/);
       } else {
         sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, true/*post...*/);
       }

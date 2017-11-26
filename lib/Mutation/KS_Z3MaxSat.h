@@ -121,7 +121,7 @@ private:
       if (negateSoftClauses) {
         for (i = 0; it != end; ++it) {
             result[i++] = (Z3_ast) temp_builder.construct(klee::NotExpr::create(*it));
-            //(*it)->dump();
+            //(klee::NotExpr::create(*it))->dump();
         }
       } else {
         for (i = 0; it != end; ++it) {
@@ -129,6 +129,7 @@ private:
             //(*it)->dump();
         }
       }
+      
       return result;
   }
 
@@ -620,11 +621,14 @@ public:
           assert(false && "Not implemented yet.");
           break;
       }
-      free_cnstr_array(hard_cnstrs);
       free_cnstr_array(soft_cnstrs);
       Z3_solver_dec_ref(ctx, s);
       *(posNegOut[outsel]) = result;
     }
+    free_cnstr_array(hard_cnstrs);
+
+    // Avoid memory explosion?
+    temp_builder.clearConstructCache();
   }
 };
 }

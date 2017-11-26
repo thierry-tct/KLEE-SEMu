@@ -541,6 +541,7 @@ public:
   bool ks_watchPointReached (ExecutionState &state, KInstruction *ki);
   
   void ks_fixTerminatedChildrenRecursive (ExecutionState *pes); 
+  void ks_terminateSubtreeMutants(ExecutionState *pes); 
   void ks_compareStates (std::vector<ExecutionState *> &remainStates);
   bool ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect, 
                           std::map<ExecutionState *, ref<Expr>> &origSuffConstr);
