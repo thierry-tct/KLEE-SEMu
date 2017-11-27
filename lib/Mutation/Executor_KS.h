@@ -518,9 +518,11 @@ private:
   
   llvm::Function * ks_entryFunction;
   
-  //Use to decide to skip watch poit (to avoid infinite loop): 
+  //Use to decide to skip watch point (to avoid infinite loop): 
   // true <=> watch the point, false <=> do not watch the point (TODO: temporary)
   bool ks_watchpoint;
+
+  unsigned long ks_watchPointID=0;
   
   //timeout to kill state with infinite loop  //TODO: make it be passed as parameter
   const double ks_loopBreakDelay = 1;
@@ -558,7 +560,7 @@ public:
   // with the conditions of equality, for each state variable, between
   // original and mutant
   void ks_checkMaxSat (ConstraintManager const &mutPathCond,
-                       ConstraintManager const &origPathCond,
+                       ExecutionState const *origState,
                        std::vector<ref<Expr>> &stateDiffExprs,
                        ExecutionState::KS_MutantIDType mutant_id, 
                        int sDiff); 
@@ -566,7 +568,8 @@ public:
                                 unsigned nSoftClauses,
                                 unsigned nMaxFeasibleDiffs,
                                 unsigned nMaxFeasibleEqs,
-                                int sDiff);  
+                                int sDiff,
+                                ExecutionState const *origState);  
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS
 };

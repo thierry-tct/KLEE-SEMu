@@ -2883,6 +2883,7 @@ void Executor::run(ExecutionState &initialState) {
       //Check if all reached and compare states
       if (ks_reachedWatchPoint.size() + ks_terminatedBeforeWP.size() >= states.size()) {   //Temporary solution here(assumed that all states reach that point). TODO
         std::vector<ExecutionState *> remainWPStates;
+        ks_watchPointID++;
         ks_compareStates(remainWPStates);
         
         //continue the execution
@@ -4287,7 +4288,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
           //return true;
         }
         if (doMaxSat) {
-          ks_checkMaxSat(mState->constraints, mSisState->constraints, inStateDiffExp, mState->ks_mutantID, sDiff);
+          ks_checkMaxSat(mState->constraints, mSisState, inStateDiffExp, mState->ks_mutantID, sDiff);
         }
       }
     } else {
@@ -4310,9 +4311,10 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
 // with the conditions of equality, for each state variable, between
 // original and mutant
 void Executor::ks_checkMaxSat (ConstraintManager const &mutPathCond,
-                                ConstraintManager const &origPathCond,
+                                ExecutionState const *origState,
                                 std::vector<ref<Expr>> &stateDiffExprs,
                                 ExecutionState::KS_MutantIDType mutant_id, int sDiff) {
+  ConstraintManager const &origPathCond = origState->constraints;
   unsigned nMaxFeasibleDiffs, nMaxFeasibleEqs, nSoftClauses;
 
   nSoftClauses = stateDiffExprs.size();
@@ -4357,24 +4359,31 @@ void Executor::ks_checkMaxSat (ConstraintManager const &mutPathCond,
   nMaxFeasibleDiffs += nTrue;
   nSoftClauses -= nFalse;
 
-  ks_writeMutantStateData (mutant_id, nSoftClauses, nMaxFeasibleDiffs, nMaxFeasibleEqs, sDiff);
+  ks_writeMutantStateData (mutant_id, nSoftClauses, nMaxFeasibleDiffs, nMaxFeasibleEqs, sDiff, origState);
 }
 
 void Executor::ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id,
                                 unsigned nSoftClauses,
                                 unsigned nMaxFeasibleDiffs,
                                 unsigned nMaxFeasibleEqs,
-                                int sDiff) {
+                                int sDiff,
+                                ExecutionState const *origState) {
   static const std::string fnPrefix("mutant-");
   static const std::string fnSuffix(".semu");
+  static std::map<ExecutionState::KS_MutantIDType, std::string> mutantID2outfile;
   //llvm::errs() << "MutantID | nSoftClauses  nMaxFeasibleDiffs  nMaxFeasibleEqs | Diff Type\n";
   //llvm::errs() << mutant_id << " | " << nSoftClauses << "  " << nMaxFeasibleDiffs << "  " << nMaxFeasibleEqs << " | " << sDiff << "\n";
-  std::string out_file_name =
-    interpreterHandler->getOutputFilename(fnPrefix+std::to_string(mutant_id)+fnSuffix);
+  std::string header;
+  std::string out_file_name = mutantID2outfile[mutant_id];
+  if (out_file_name.empty()) {
+    mutantID2outfile[mutant_id] = out_file_name = 
+           interpreterHandler->getOutputFilename(fnPrefix+std::to_string(mutant_id)+fnSuffix);
+    header.assign("MutantID,nSoftClauses,nMaxFeasibleDiffs,nMaxFeasibleEqs,Diff_Type,OrigState,WatchPointID\n");
+  }
 
   std::ofstream ofs(out_file_name, std::ofstream::out | std::ofstream::app); 
   if (ofs.is_open()) {
-    ofs << mutant_id << " " << nSoftClauses << " " << nMaxFeasibleDiffs << " " << nMaxFeasibleEqs << " " << sDiff << "\n";
+    ofs << header << mutant_id << "," << nSoftClauses << "," << nMaxFeasibleDiffs << "," << nMaxFeasibleEqs << "," << sDiff << "," << origState << "," << ks_watchPointID << "\n";
     ofs.close();
   } else {
     llvm::errs() << "Error: Unable to create info file: " << out_file_name 

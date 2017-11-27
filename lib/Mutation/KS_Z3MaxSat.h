@@ -448,12 +448,17 @@ private:
               printf("unsat\n");
               return num_soft_cnstrs - k - 1;
           }
-      m = Z3_solver_get_model(ctx, s);
+          m = Z3_solver_get_model(ctx, s);
           Z3_model_inc_ref(ctx, m);
           num_disabled = get_num_disabled_soft_constraints(ctx, m, num_soft_cnstrs, aux_vars);
           Z3_model_dec_ref(ctx, m);
           if (num_disabled > k) {
+              if (k==0 && num_disabled==1) //SEMU
+                return 0; //SEMU
+
+              printf("\nKLEE-SEMU@ERROR: BUG in Max sat class\n");
               assert(false && "BUG");
+              exit(1);
           }
           printf("sat\n");
           k = num_disabled;
@@ -498,6 +503,7 @@ private:
       
       is_sat = Z3_solver_check_assumptions(ctx, s, num_soft_cnstrs, assumptions);
       if (is_sat != Z3_L_FALSE) {
+          free(assumptions);
           return 1; // done
       }
       else {
@@ -506,6 +512,7 @@ private:
           core_size = Z3_ast_vector_size(ctx, core);
           block_vars = (Z3_ast*) malloc(sizeof(Z3_ast) * core_size);
           k = 0;
+          //printf(">> %u %u\n", num_soft_cnstrs, core_size);
           // update soft-constraints and aux_vars
           for (i = 0; i < num_soft_cnstrs; i++) {
               unsigned j;
@@ -529,6 +536,7 @@ private:
           }
           assert_at_most_one(ctx, s, k, block_vars);
           Z3_ast_vector_dec_ref(ctx, core);
+          free(assumptions);
           return 0; // not done.
       }
   }
@@ -585,13 +593,23 @@ private:
 
   klee::Z3Builder temp_builder;
 
+  unsigned long tmpboolcount=0;
+  const char * getTmpboolName() {
+    static const std::string prefix("KleeSemu_booltmp");
+    return (prefix + std::to_string(tmpboolcount++)).c_str();
+  }
+  void resetTmpBoolNameCount() {
+    tmpboolcount = 0;
+  }
+
 public:
   PartialMaxSATSolver(): temp_builder(false/*, (char *)0*/) {}
 
   // TODO: Have the solver as class property to take use of caching
   bool checkMaxSat(std::set<klee::ref<klee::Expr>> const &hardClauseExpr, std::vector<klee::ref<klee::Expr>> const &softClauses, unsigned &nPosMaxFeasible, unsigned nNegMaxFeasible) {
 
-    int approach = FU_MALIK_MAXSAT;
+    //int approach = FU_MALIK_MAXSAT;
+    int approach = NAIVE_MAXSAT;
 
     unsigned * posNegOut[2] = {&nPosMaxFeasible, &nNegMaxFeasible}; 
     unsigned num_hard_cnstrs, num_soft_cnstrs;
@@ -629,6 +647,8 @@ public:
 
     // Avoid memory explosion?
     temp_builder.clearConstructCache();
+
+    resetTmpBoolNameCount();
   }
 };
 }
