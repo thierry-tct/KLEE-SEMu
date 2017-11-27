@@ -592,6 +592,10 @@ private:
   static const int FU_MALIK_MAXSAT = 1;
 
   klee::Z3Builder temp_builder;
+  
+  Z3_params solverParameters;
+  Z3_symbol timeoutParamStrSymbol;
+  double timeout;
 
   unsigned long tmpboolcount=0;
   const char * getTmpboolName() {
@@ -603,7 +607,29 @@ private:
   }
 
 public:
-  PartialMaxSATSolver(): temp_builder(false/*, (char *)0*/) {}
+  PartialMaxSATSolver(): temp_builder(false/*, (char *)0*/), timeout(0.0) {
+    solverParameters = Z3_mk_params(temp_builder.ctx);
+    Z3_params_inc_ref(temp_builder.ctx, solverParameters);
+    timeoutParamStrSymbol = Z3_mk_string_symbol(temp_builder.ctx, "timeout");
+    setSolverTimeout(timeout);
+  }
+  
+  ~PartialMaxSATSolver() {
+    Z3_params_dec_ref(temp_builder.ctx, solverParameters);
+  }
+
+  void setSolverTimeout(double _timeout) {
+    if (timeout == _timeout)
+      return;
+    assert(_timeout >= 0.0 && "timeout must be >= 0");
+    timeout = _timeout;
+
+    unsigned int timeoutInMilliSeconds = (unsigned int)((timeout * 1000) + 0.5);
+    if (timeoutInMilliSeconds == 0)
+      timeoutInMilliSeconds = UINT_MAX;
+    Z3_params_set_uint(temp_builder.ctx, solverParameters, timeoutParamStrSymbol,
+                       timeoutInMilliSeconds);
+  }
 
   // TODO: Have the solver as class property to take use of caching
   bool checkMaxSat(std::set<klee::ref<klee::Expr>> const &hardClauseExpr, std::vector<klee::ref<klee::Expr>> const &softClauses, unsigned &nPosMaxFeasible, unsigned nNegMaxFeasible) {

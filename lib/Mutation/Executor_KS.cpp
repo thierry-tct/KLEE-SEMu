@@ -4352,6 +4352,7 @@ void Executor::ks_checkMaxSat (ConstraintManager const &mutPathCond,
     //std::vector<ref<Expr>> xxx; xxx.insert(xxx.begin(), hardClauses.begin(), hardClauses.end());
     //bool rr = coreSolver->mayBeTrue(Query(ConstraintManager(xxx), stateDiffExprs.back()), ress); 
     //llvm::errs() << rr << " " << ress<< " #\n";
+    pmaxsat_solver.setSolverTimeout(coreSolverTimeout);
     pmaxsat_solver.checkMaxSat(hardClauses, stateDiffExprs, nMaxFeasibleDiffs, nMaxFeasibleEqs);
   }
   
