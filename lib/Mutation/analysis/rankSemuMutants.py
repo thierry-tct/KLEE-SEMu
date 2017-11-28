@@ -10,13 +10,13 @@
 
 import os, sys
 import argparse
-import json
+import json, re
 
 import glob, shutil
 
 import pandas as pd
 
-class DIFF_CODES(self):
+class DIFF_CODES:
     def __init__(self):
         self.NO_DIFF = 0x00
         self.VARS_DIFF = 0x01
@@ -39,9 +39,9 @@ ks = DIFF_CODES()
 
 def loadData(indir):
     outObj = {}
-    for mutfile in glob.glob(os.path.join(indir,"mutant-*.semu"):
-        mutID = int(re.findall('\d+', os.path.basename(mutFile))[0])
-        df = pd.read_csv(mutFile)
+    for mutfile in glob.glob(os.path.join(indir,"mutant-*.semu")):
+        mutID = int(re.findall('\d+', os.path.basename(mutfile))[0])
+        df = pd.read_csv(mutfile)
         # each file should haev at least one row of data
         assert mutID == df.loc[0, 'MutantID'], "Problem with input file, Mutant id mismatch - "+mutFile
         df = df.drop('MutantID', axis=1)
@@ -56,12 +56,15 @@ def computeScores(inData):
         m_hardness = 0.0
 
         ## XXX For now, just use proportions
-        pc_diffs = 
+        #pc_diffs = 
 
         # add mutant to output
-        if m_hardness not in outData['Hardness']:
-            outData['hardness'][m_hardness] = set()
-        outData['hardness'][m_hardness].add(mutID)
+        if m_hardness == 0.0:
+            outData['Relative-Equivalent'].append(mutID)
+        else:
+            if m_hardness not in outData['Hardness']:
+                outData['Hardness'][m_hardness] = list()
+            outData['Hardness'][m_hardness].append(mutID)
     return outData
 #~ def computeScores()
 
@@ -82,7 +85,7 @@ def main():
 
     outDataObj = computeScores(inDataObj)
 
-    with open(outFile, "w") as fp:
+    with open(outFile+'.json', "w") as fp:
         json.dump(outDataObj, fp)
 
     print "# Done"

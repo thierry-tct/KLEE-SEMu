@@ -1,3 +1,4 @@
+#! /usr/bin/python
 
 # This file takes a mutant execution matrix as input, together with a file containing a subset of tests to consider
 # Then rank the mutants according to harndness to kill w.r.t the test subset. relative equivalent are automatically deduced.
@@ -22,7 +23,7 @@ def loadMatrix(matrixfile, testsfile, noKlee=False):
     p = re.compile('\s')
 
     testname2testid = {}
-    #sortedTestNameList = []
+    sortedTestNameList = []
 
     # read mutation matrix
     with open(matrixfile, 'r') as f:
@@ -30,6 +31,12 @@ def loadMatrix(matrixfile, testsfile, noKlee=False):
         tclist = p.split(f.readline().strip())
         assert tclist[0] == SM_index_string, "invalid SMdatfile: " + \
             matrixfile
+
+        testid = 0 
+        for tc in tclist[1:]:
+            testname2testid[tc] = testid
+            sortedTestNameList.append(tc)
+            testid += 1
         dataAll[tclist[0]] = [testname2testid[testname]
                               for testname in tclist[1:]]  # header (test case list)
 
@@ -57,17 +64,19 @@ def loadMatrix(matrixfile, testsfile, noKlee=False):
     if testsfile is not None:
         selectedT = set()
         with open(testsfile) as ftp:
-            for tc in ftp:
-                selectedT.add(tc)
+            for tcstr in ftp:
+                tc = tcstr.strip()
+                if tc:
+                    selectedT.add(tc)
         assert len(selectedT) > 0, "empty tests subset file given"
         delpos = []
         for pos, tc in enumerate(dataAll[SM_index_string]):
-            if tc not in selectedT:
+            if sortedTestNameList[tc] not in selectedT:
                 delpos.append(pos)
         for pos in sorted(delpos, reverse=True):
             for tcmut in dataAll:
                 del(dataAll[tcmut][pos])
-        assert selectedT == dataAll[SM_index_string], "tests mismatch..."
+        assert selectedT == set([sortedTestNameList[tcid] for tcid in dataAll[SM_index_string]]), "tests mismatch... "+str((selectedT))+" <> "+str((dataAll[SM_index_string]))
     # print " ".join([matrixfile, "Loaded"])
     return dataAll #, sortedTestNameList
 #~ def loadMatrix()
@@ -88,14 +97,19 @@ def TestsKilling(mutant, dataAll):
 def computeHardness(matrixdata):
     outData = {'Relative-Equivalent': [], 'Hardness': {}}
     nTests = len(matrixdata[SM_index_string])
-    for mutID in matrixdata:
+    for mutID in set(matrixdata) - {SM_index_string}:
         #compute hardness as proportion of tests killing the mutant
-        m_hardness = float(len(TestsKilling(mutID, matrixdata))) / nTests
-        
-        # add mutant to output
-        if m_hardness not in outData['Hardness']:
-            outData['hardness'][m_hardness] = set()
-        outData['hardness'][m_hardness].add(mutID)
+        nKill = len(TestsKilling(mutID, matrixdata))
+
+        if nKill == 0:
+            outData['Relative-Equivalent'].append(mutID)
+        else:
+            m_hardness = 1 - float(nKill) / nTests
+            
+            # add mutant to output
+            if m_hardness not in outData['Hardness']:
+                outData['Hardness'][m_hardness] = list()
+            outData['Hardness'][m_hardness].append(mutID)
     return outData
 #~ def computeHardness()
 
@@ -110,7 +124,7 @@ def main():
     testSubSetFile = args.testset
     outFile = args.outfile
 
-    assert (outFile is not None), "Must specify output file"
+    assert (outFile is not None), "Must specify output file: option -o or --outfile"
 
     print "# Starting", matrixFile, "..."
 
@@ -118,11 +132,11 @@ def main():
 
     outDataObj = computeHardness(matrixKA)
 
-    with open(outFile, "w") as fp:
+    with open(outFile+'.json', "w") as fp:
         json.dump(outDataObj, fp)
 
     print "# Done"
 #~ def main()
 
-if __name__ == "__main__:
+if __name__ == "__main__":
     main()
