@@ -27,11 +27,11 @@ def average(xarrlist, yarrlist):
 def plot4 (semuPair, classPair, randPair, refPair, title, percentage=True):
     plt.style.use('ggplot')
     plt.figure(figsize=(16,9))
-    plt.plot(semuPair[0], semuPair[1], 'b-.', linewidth=3.0, label='semu')
+    plt.plot(semuPair[0], semuPair[1], 'b-', linewidth=3.0, alpha=0.6, label='semu')
     plt.fill_between(semuPair[0], 0, semuPair[1], facecolor='blue', alpha=0.05)
-    plt.plot(classPair[0], classPair[1], 'g:', linewidth=3.0, label='classic')
+    plt.plot(classPair[0], classPair[1], 'g-.', linewidth=3.0, alpha=0.6, label='classic')
     plt.fill_between(classPair[0], 0, classPair[1], facecolor='green', alpha=0.05)
-    plt.plot(randPair[0], randPair[1], 'r-', linewidth=2.0, label='random')
+    plt.plot(randPair[0], randPair[1], 'r:', linewidth=3.0, alpha=0.6, label='random')
     plt.fill_between(randPair[0], 0, randPair[1], facecolor='red', alpha=0.05)
     plt.plot(refPair[0], refPair[1], 'r--', color='gray', alpha=0.755555, linewidth=2.0, label='ground-truth')
     #plt.fill_between(semuPair[0], 0, semuPair[1], facecolor='gray', alpha=0.05)
@@ -46,10 +46,22 @@ def plot4 (semuPair, classPair, randPair, refPair, title, percentage=True):
     plt.show()
 #~ plot3()
 
+def hardnessPlot (xlist, ylist):
+    plt.style.use('ggplot')
+    plt.figure(figsize=(16,9))
+    plt.plot(xlist, ylist, 'g-', linewidth=3.0, alpha=0.5)
+    plt.ylim(0, 1)
+    plt.xlabel("Selected Mutants percentage position")
+    plt.ylabel("Hardness")
+    plt.title("Hardness of Mutants according to Ground-Truth")
+    plt.tight_layout()
+    plt.show()
+#~ hardnessPlot()
+
 '''
     Make the subject have same points as the reference and pairwise compare
 '''
-def computePoints(subjObj, refObj, tieRandom=True, percentage=True):
+def computePoints(subjObj, refObj, refHardness=None, tieRandom=True, percentage=True):
     ss = []
     nh = []
     checkpoints = [0]
@@ -58,6 +70,18 @@ def computePoints(subjObj, refObj, tieRandom=True, percentage=True):
     for rscore in sorted(refObj, reverse=True, key=lambda x: float(x)):
         checkpoints.append(checkpoints[-1] + len(refObj[rscore]))  #right after last
         refMutsOrdered += list(refObj[rscore])
+
+    if refHardness is not None:
+        assert type(refHardness) == list, "must be list, wll have x at pos 0, y at pos 1"
+        refHardness.append(range(1, len(refMutsOrdered) + 1))
+        refHardness.append([])
+        for rscore in sorted(refObj, reverse=True, key=lambda x: float(x)):
+            refHardness[-1] += [rscore] * len(refObj[rscore])
+        assert len(refHardness[0]) == len(refHardness[1]), "Bug: x and y must have same length"
+        if percentage:
+            for i in range(len(refHardness[0])):
+                refHardness[0][i] *= 100.0 / len(refHardness[0])
+
     for sscore in sorted(subjObj, reverse=True, key=lambda x: float(x)):
         if tieRandom:
             # RandomSel to break ties
@@ -85,7 +109,7 @@ SEMU_JSON = "semu.json"
 CLASSIC_JSON = "classic.json"
 GROUNDTRUTH_JSON = "groundtruth.json"
 
-RAND_REP = 1000
+RAND_REP = 100
 
 def main():
     parser = argparse.ArgumentParser()
@@ -106,7 +130,9 @@ def main():
         classicSelSizes[r], classicNHard[r] = computePoints(classicData, groundtruthData)
     semuSelSizes, semuNHard = average(semuSelSizes, semuNHard)
     classicSelSizes, classicNHard = average(classicSelSizes, classicNHard)
-    groundtruthSelSize, groundtruthNHard = computePoints(groundtruthData, groundtruthData)
+
+    gtHardness = []
+    groundtruthSelSize, groundtruthNHard = computePoints(groundtruthData, groundtruthData, refHardness=gtHardness)
 
     randSelSizes = [None] * RAND_REP
     randNHard = [None] * RAND_REP
@@ -119,7 +145,9 @@ def main():
         randSelSizes[r], randNHard[r] = computePoints({float(pos)/len(mutsShuffled): set([mutsShuffled[pos]]) for pos in range(len(mutsShuffled))}, groundtruthData)
     randSelSizes, randNHard = average(randSelSizes, randNHard)
 
+    print "Plotting ..."
     plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected")
+    hardnessPlot(gtHardness[0], gtHardness[1])
 #~ main()
 
 if __name__ == "__main__":
