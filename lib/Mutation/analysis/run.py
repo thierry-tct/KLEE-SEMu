@@ -28,8 +28,9 @@ KleeSemuBCSuff = ".MetaMu.bc"
 WRAPPER_TEMPLATE = None
 
 def error_exit(errstr):
-    print "ERROR: "+errstr
-    exit 1
+    print "\nERROR: "+errstr
+    assert False
+    exit(1)
 
 def getTestSamples(testListFile, samplePercent, matrix):
     assert samplePercent > 0 and samplePercent <= 100, "invalid sample percent"
@@ -61,7 +62,8 @@ def runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCL
     test2outdirMap = {}
 
     # Prepare outdir and copy bc
-    assert not os.isdir(semuworkdir), "Semuworkdir already exists"
+    if os.path.isdir(semuworkdir):
+        shutil.rmtree(semuworkdir)
     os.mkdir(semuworkdir)
     kleeSemuInBC = os.path.basename(kleeSemuInBCLink) 
     shutil.copy2(kleeSemuInBCLink, os.path.join(semuworkdir, kleeSemuInBC))
@@ -69,38 +71,40 @@ def runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCL
     # Install wrapper
     wrapper_fields = {
                         "IN_TOOL_DIR": semuworkdir,
-                        "IN_TOOL_NAME": kleeSemuInBC,
+                        "IN_TOOL_NAME": kleeSemuInBC[:-3], #remove ".bc"
                         "TOTAL_MAX_TIME_": "600",
                         "SOLVER_MAX_TIME_": "60"
                      }
     ## Backup existing exe
     exePathBak = exePath+'.bak'
-    if os.isfile(exePath):
+    if os.path.isfile(exePath):
         shutil.copy2(exePath, exePathBak)
 
     ## copy wraper to exe
     assert WRAPPER_TEMPLATE is not None
-    assert os.isfile(WRAPPER_TEMPLATE)
+    assert os.path.isfile(WRAPPER_TEMPLATE)
     ### Load wrapper contain to memory
     with open(WRAPPER_TEMPLATE) as f:
         wrapContent = f.read()
     ### Replace all templates
     for t in wrapper_fields:
-        wrapContent.replace(t, wrapper_fields[t])
+        wrapContent = wrapContent.replace(t, wrapper_fields[t])
     ### Write it as exe
     with open(exePath, 'w') as f:
         f.write(wrapContent)
     if exePathBak:
         # copy stats (creation time, ...)
-        shutil.copystats(exePathBak, exePath)
+        shutil.copystat(exePathBak, exePath)
 
     # Run Semu through tests running
+    testrunlog = "> /dev/null"
     nKleeOut = len(glob.glob(os.path.join(semuworkdir, "klee-out-*")))
-    for tc in alltests:
+    for tc in unwrapped_testlist:
         # Run Semu with tests (wrapper is installed)
         print "# Running Tests", tc, "..."
-        if os.system(" ".join(["bash", runtestScript, tc, "/dev/null"])) not in [0,1]:
-            error_exit ("Test execution failed for test case "+tc)
+        retCode = os.system(" ".join(["bash", runtestScript, tc, testrunlog]))
+        if retCode not in [0,1]:
+            error_exit ("Test execution failed for test case '"+tc+"', retCode was: "+str(retCode))
         nNew = len(glob.glob(os.path.join(semuworkdir, "klee-out-*")))
         assert nNew > nKleeOut, "Test was not run: "+tc
         for kleetid, devtid in enumerate(range(nKleeOut, nNew)):
@@ -108,6 +112,8 @@ def runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCL
             wrapTestName = os.path.join(tc.replace('/', '_'), "Dev-out-"+str(devtid), "devtest.ktest")
 
             test2outdirMap[wrapTestName] = kleeoutdir
+    for wtc in alltests:
+        assert wtc in test2outdirMap, "test not int Test2SemuoutdirMap: "+wtc
     return test2outdirMap
 #~ def runSemu()
 
@@ -144,7 +150,8 @@ def analysis_plot(thisOut):
 
 
 def main():
-    WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(argv[0]), "wrapper-call-semu-concolic.in"))
+    global WRAPPER_TEMPLATE 
+    WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "wrapper-call-semu-concolic.in"))
     parser = argparse.ArgumentParser()
     parser.add_argument("outTopDir", help="topDir for output (required)")
     parser.add_argument("--exepath", type=str, default=None, help="The path to executable in project")
@@ -169,10 +176,15 @@ def main():
     martOut = os.path.abspath(martOut) if martOut is not None else None 
     matrix = os.path.abspath(matrix) if matrix is not None else None
 
+    # Create outdir if absent
+    if not os.path.isdir(outDir):
+        os.mkdir(outDir)
+
     # We need to set size fraction of test samples
     testSamplePercent = 20
 
     # Get all test samples before starting experiment
+    print "# Getting Test Samples .."
     testSamples, alltests, unwrapped_testlist = getTestSamples(testList, testSamplePercent, matrix) 
 
     # get Semu for all tests
