@@ -5,10 +5,10 @@ set -u
 # TODO: path to 'tee' is hard-coded to avoid problems with binutils
 
 # This script is invoked by the test suite. Don't rely on the wd.
-TOOL_DIR="IN_TOOL_DIR"
-TOOL_NAME="IN_TOOL_NAME"
-maxTime=${SEMU_MAX_TIME:-600}
-solvermaxtime=${SEMU_MAX_SOLVER_TIME:-60}
+#TOOL_DIR="IN_TOOL_DIR"
+#TOOL_NAME="IN_TOOL_NAME"
+maxTime=${SEMU_MAX_TIME:-TOTAL_MAX_TIME_}
+solvermaxtime=${SEMU_MAX_SOLVER_TIME:-SOLVER_MAX_TIME_}
 semuout="semu.out"
 
 # Concolic

@@ -25,6 +25,11 @@ import analyse
 
 OutFolder = "OUTPUT"
 KleeSemuBCSuff = ".MetaMu.bc"
+WRAPPER_TEMPLATE = None
+
+def error_exit(errstr):
+    print "ERROR: "+errstr
+    exit 1
 
 def getTestSamples(testListFile, samplePercent, matrix):
     assert samplePercent > 0 and samplePercent <= 100, "invalid sample percent"
@@ -52,13 +57,57 @@ def processMatrix (matrix, testSample, outname, thisOutDir):
     matrixHardness.libMain(matrix, testSample, outFilePath)
 #~ def processMatrix()
 
-def runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBC, kleeSemuInBCPath, semuworkdir):
-    # TODO: 1) Install wrapper, 2) run Semu with all tests 3)
+def runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCLink, semuworkdir):
     test2outdirMap = {}
 
+    # Prepare outdir and copy bc
+    assert not os.isdir(semuworkdir), "Semuworkdir already exists"
+    os.mkdir(semuworkdir)
+    kleeSemuInBC = os.path.basename(kleeSemuInBCLink) 
+    shutil.copy2(kleeSemuInBCLink, os.path.join(semuworkdir, kleeSemuInBC))
+
+    # Install wrapper
+    wrapper_fields = {
+                        "IN_TOOL_DIR": semuworkdir,
+                        "IN_TOOL_NAME": kleeSemuInBC,
+                        "TOTAL_MAX_TIME_": "600",
+                        "SOLVER_MAX_TIME_": "60"
+                     }
+    ## Backup existing exe
+    exePathBak = exePath+'.bak'
+    if os.isfile(exePath):
+        shutil.copy2(exePath, exePathBak)
+
+    ## copy wraper to exe
+    assert WRAPPER_TEMPLATE is not None
+    assert os.isfile(WRAPPER_TEMPLATE)
+    ### Load wrapper contain to memory
+    with open(WRAPPER_TEMPLATE) as f:
+        wrapContent = f.read()
+    ### Replace all templates
+    for t in wrapper_fields:
+        wrapContent.replace(t, wrapper_fields[t])
+    ### Write it as exe
+    with open(exePath, 'w') as f:
+        f.write(wrapContent)
+    if exePathBak:
+        # copy stats (creation time, ...)
+        shutil.copystats(exePathBak, exePath)
+
+    # Run Semu through tests running
+    nKleeOut = len(glob.glob(os.path.join(semuworkdir, "klee-out-*")))
     for tc in alltests:
-        #TODO
-        test2outdirMap[tc] = kleeoutdir
+        # Run Semu with tests (wrapper is installed)
+        print "# Running Tests", tc, "..."
+        if os.system(" ".join(["bash", runtestScript, tc, "/dev/null"])) not in [0,1]:
+            error_exit ("Test execution failed for test case "+tc)
+        nNew = len(glob.glob(os.path.join(semuworkdir, "klee-out-*")))
+        assert nNew > nKleeOut, "Test was not run: "+tc
+        for kleetid, devtid in enumerate(range(nKleeOut, nNew)):
+            kleeoutdir = os.path.join(semuworkdir, 'klee-out-'+str(kleetid))
+            wrapTestName = os.path.join(tc.replace('/', '_'), "Dev-out-"+str(devtid), "devtest.ktest")
+
+            test2outdirMap[wrapTestName] = kleeoutdir
     return test2outdirMap
 #~ def runSemu()
 
@@ -95,6 +144,7 @@ def analysis_plot(thisOut):
 
 
 def main():
+    WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(argv[0]), "wrapper-call-semu-concolic.in"))
     parser = argparse.ArgumentParser()
     parser.add_argument("outTopDir", help="topDir for output (required)")
     parser.add_argument("--exepath", type=str, default=None, help="The path to executable in project")
@@ -127,13 +177,16 @@ def main():
 
     # get Semu for all tests
     if martOut is not None:
+        print "# Running Semu..."
         kleeSemuInBC = os.path.basename(exePath) + KleeSemuBCSuff
-        kleeSemuInBCPath = os.path.join(martOut, kleeSemuInBC)
+        kleeSemuInBCLink = os.path.join(martOut, kleeSemuInBC)
         semuworkdir = os.path.join(outDir, "SemuWorkDir")
-        test2semudirMap = runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBC, kleeSemuInBCPath, semuworkdir)
+        test2semudirMap = runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCLink, semuworkdir)
 
     # processfor each test Sample
     for ts_size in testSamples:
+        print "# Procesing for test size", ts_size, "..."
+
         # Make temporary outdir for test sample size
         thisOut = os.path.join(outDir, "out_testsize_"+str(ts_size))
 
