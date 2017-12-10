@@ -24,7 +24,7 @@ def average(xarrlist, yarrlist):
     return xarrlist[0], y
 #~ average()
 
-def plot4 (semuPair, classPair, randPair, refPair, title, percentage=True):
+def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, percentage=True):
     plt.style.use('ggplot')
     plt.figure(figsize=(16,9))
     plt.plot(semuPair[0], semuPair[1], 'b-', linewidth=3.0, alpha=0.6, label='semu')
@@ -43,10 +43,13 @@ def plot4 (semuPair, classPair, randPair, refPair, title, percentage=True):
     plt.tight_layout()
     #plt.autoscale(enable=True, axis='x', tight=True)
     #plt.autoscale(enable=True, axis='y', tight=True)
-    plt.show()
-#~ plot3()
+    if figfilename is not None:
+        pls.save_fig(figfilename+".png")
+    else:
+        plt.show()
+#~ plot4()
 
-def hardnessPlot (xlist, ylist):
+def hardnessPlot (xlist, ylist, filename=None):
     plt.style.use('ggplot')
     plt.figure(figsize=(16,9))
     plt.plot(xlist, ylist, 'g-', linewidth=3.0, alpha=0.5)
@@ -55,7 +58,10 @@ def hardnessPlot (xlist, ylist):
     plt.ylabel("Hardness")
     plt.title("Hardness of Mutants according to Ground-Truth")
     plt.tight_layout()
-    plt.show()
+    if figfilename is not None:
+        pls.save_fig(figfilename+".png")
+    else:
+        plt.show()
 #~ hardnessPlot()
 
 '''
@@ -146,8 +152,8 @@ def main():
     randSelSizes, randNHard = average(randSelSizes, randNHard)
 
     print "Plotting ..."
-    plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected")
-    hardnessPlot(gtHardness[0], gtHardness[1])
+    plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected", "comparison")
+    hardnessPlot(gtHardness[0], gtHardness[1], "hardness")
 #~ main()
 
 if __name__ == "__main__":
