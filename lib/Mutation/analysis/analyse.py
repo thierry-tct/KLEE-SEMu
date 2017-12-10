@@ -44,22 +44,22 @@ def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, perc
     #plt.autoscale(enable=True, axis='x', tight=True)
     #plt.autoscale(enable=True, axis='y', tight=True)
     if figfilename is not None:
-        pls.save_fig(figfilename+".png")
+        plt.savefig(figfilename+".png")
     else:
         plt.show()
 #~ plot4()
 
-def hardnessPlot (xlist, ylist, filename=None):
+def hardnessPlot (xlist, ylist, figfilename=None):
     plt.style.use('ggplot')
     plt.figure(figsize=(16,9))
-    plt.plot(xlist, ylist, 'g-', linewidth=3.0, alpha=0.5)
-    plt.ylim(0, 1)
+    plt.plot(xlist, ylist, '-', color='xkcd:dark', linewidth=3.0, alpha=0.5)
+    plt.ylim(-0.06, 1)
     plt.xlabel("Selected Mutants percentage position")
     plt.ylabel("Hardness")
     plt.title("Hardness of Mutants according to Ground-Truth")
     plt.tight_layout()
     if figfilename is not None:
-        pls.save_fig(figfilename+".png")
+        plt.savefig(figfilename+".png")
     else:
         plt.show()
 #~ hardnessPlot()
@@ -82,7 +82,7 @@ def computePoints(subjObj, refObj, refHardness=None, tieRandom=True, percentage=
         refHardness.append(range(1, len(refMutsOrdered) + 1))
         refHardness.append([])
         for rscore in sorted(refObj, reverse=True, key=lambda x: float(x)):
-            refHardness[-1] += [rscore] * len(refObj[rscore])
+            refHardness[-1] += [float(rscore)] * len(refObj[rscore])
         assert len(refHardness[0]) == len(refHardness[1]), "Bug: x and y must have same length"
         if percentage:
             for i in range(len(refHardness[0])):
@@ -117,14 +117,10 @@ GROUNDTRUTH_JSON = "groundtruth.json"
 
 RAND_REP = 100
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("jsonsdir", help="directory Containing both Json files")
-    args = parser.parse_args()
-
-    semuData = loadJson(os.path.join(args.jsonsdir, SEMU_JSON))['Hardness']
-    classicData = loadJson(os.path.join(args.jsonsdir, CLASSIC_JSON))['Hardness']
-    groundtruthData = loadJson(os.path.join(args.jsonsdir, GROUNDTRUTH_JSON))['Hardness']
+def libMain(jsonsdir):
+    semuData = loadJson(os.path.join(jsonsdir, SEMU_JSON))['Hardness']
+    classicData = loadJson(os.path.join(jsonsdir, CLASSIC_JSON))['Hardness']
+    groundtruthData = loadJson(os.path.join(jsonsdir, GROUNDTRUTH_JSON))['Hardness']
 
     semuSelSizes = [None] * RAND_REP
     semuNHard = [None] * RAND_REP
@@ -152,8 +148,18 @@ def main():
     randSelSizes, randNHard = average(randSelSizes, randNHard)
 
     print "Plotting ..."
-    plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected", "comparison")
-    hardnessPlot(gtHardness[0], gtHardness[1], "hardness")
+    figDir = jsonsdir
+    plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected", os.path.join(figDir, "comparison"))
+    hardnessPlot(gtHardness[0], gtHardness[1], os.path.join(figDir, "hardness"))
+    
+#~ libMain()
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("jsonsdir", help="directory Containing both Json files")
+    args = parser.parse_args()
+
+    libMain(args.jsonsdir)
 #~ main()
 
 if __name__ == "__main__":

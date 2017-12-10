@@ -9,7 +9,7 @@
 # - The path to executable in project
 # - topDir for output (required)
 ########################
-## TODO: (1) implement libMain for all three libs, (2) implement runSemu
+## TODO: implement runSemu
 
 import os, sys
 import json, re

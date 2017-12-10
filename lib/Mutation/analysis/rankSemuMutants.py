@@ -125,6 +125,21 @@ def computeScores(inData):
     return outData
 #~ def computeScores()
 
+def libMain(semuOutDir, outFilename):
+    assert (outFilename is not None), "Must specify output file"
+
+    print "# Starting", semuOutDir, "..."
+
+    inDataObj = loadData(semuOutDir)
+
+    outDataObj = computeScores(inDataObj)
+
+    with open(outFilename+'.json', "w") as fp:
+        json.dump(outDataObj, fp)
+
+    print "# Done"
+#~ libMain()
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("indir", help="SEMU's output directory (klee-last), containing mutant difference data")
@@ -134,18 +149,7 @@ def main():
     outFile = args.outfile
     inDir = args.indir
 
-    assert (outFile is not None), "Must specify output file"
-
-    print "# Starting", inDir, "..."
-
-    inDataObj = loadData(inDir)
-
-    outDataObj = computeScores(inDataObj)
-
-    with open(outFile+'.json', "w") as fp:
-        json.dump(outDataObj, fp)
-
-    print "# Done"
+    libMain(inDir, outFile)
 #~ def main()
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ PASS = ["0"]
 FAIL = ["1"]
 SM_index_string = "ktestSM"
 
-def loadMatrix(matrixfile, testsfile, noKlee=False):
+def loadMatrix(matrixfile, selectedT, noKlee=False):
     dataAll = {}
 
     p = re.compile('\s')
@@ -61,13 +61,7 @@ def loadMatrix(matrixfile, testsfile, noKlee=False):
             for tcmut in dataAll:
                 del(dataAll[tcmut][pos])
 
-    if testsfile is not None:
-        selectedT = set()
-        with open(testsfile) as ftp:
-            for tcstr in ftp:
-                tc = tcstr.strip()
-                if tc:
-                    selectedT.add(tc)
+    if selectedT is not None:
         assert len(selectedT) > 0, "empty tests subset file given"
         delpos = []
         for pos, tc in enumerate(dataAll[SM_index_string]):
@@ -113,6 +107,17 @@ def computeHardness(matrixdata):
     return outData
 #~ def computeHardness()
 
+def libMain(mutantMatrixFile, testset, outfile):
+    matrixKA = loadMatrix (mutantMatrixFile, testset)
+
+    outDataObj = computeHardness(matrixKA)
+
+    with open(outfile+'.json', "w") as fp:
+        json.dump(outDataObj, fp)
+
+    print "# Done"
+#~ libMain()
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mutantMatrix", help="input file of mutant execution as matrix (tests as column, mutants as rorw)")
@@ -128,14 +133,14 @@ def main():
 
     print "# Starting", matrixFile, "..."
 
-    matrixKA = loadMatrix (matrixFile, testSubSetFile)
+    selectedT = set()
+    with open(testSubSetFile) as ftp:
+        for tcstr in ftp:
+            tc = tcstr.strip()
+            if tc:
+                selectedT.add(tc)
 
-    outDataObj = computeHardness(matrixKA)
-
-    with open(outFile+'.json', "w") as fp:
-        json.dump(outDataObj, fp)
-
-    print "# Done"
+    libMain(matrixFile, selectedT, outFile)
 #~ def main()
 
 if __name__ == "__main__":
