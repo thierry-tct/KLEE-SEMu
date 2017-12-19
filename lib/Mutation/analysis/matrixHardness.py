@@ -70,7 +70,7 @@ def loadMatrix(matrixfile, selectedT, noKlee=False):
         for pos in sorted(delpos, reverse=True):
             for tcmut in dataAll:
                 del(dataAll[tcmut][pos])
-        assert selectedT == set([sortedTestNameList[tcid] for tcid in dataAll[SM_index_string]]), "tests mismatch... "+str((selectedT))+" <> "+str((dataAll[SM_index_string]))
+        assert selectedT == set([sortedTestNameList[tcid] for tcid in dataAll[SM_index_string]]), "tests mismatch... "+str((selectedT))+" <> "+str((set([sortedTestNameList[tcid] for tcid in dataAll[SM_index_string]])))
     # print " ".join([matrixfile, "Loaded"])
     return dataAll #, sortedTestNameList
 #~ def loadMatrix()
@@ -108,7 +108,7 @@ def computeHardness(matrixdata):
 #~ def computeHardness()
 
 def libMain(mutantMatrixFile, testset, outfile):
-    matrixKA = loadMatrix (mutantMatrixFile, testset)
+    matrixKA = loadMatrix (mutantMatrixFile, set(testset))
 
     outDataObj = computeHardness(matrixKA)
 

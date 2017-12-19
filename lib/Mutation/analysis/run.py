@@ -32,6 +32,10 @@ def error_exit(errstr):
     assert False
     exit(1)
 
+def dumpJson (data, filename):
+    with open(filename, 'w') as f:
+        json.dump(data, f)
+
 def getTestSamples(testListFile, samplePercent, matrix):
     assert samplePercent > 0 and samplePercent <= 100, "invalid sample percent"
     samples = {}
@@ -99,28 +103,33 @@ def runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCL
     # Run Semu through tests running
     testrunlog = "> /dev/null"
     nKleeOut = len(glob.glob(os.path.join(semuworkdir, "klee-out-*")))
+    assert nKleeOut == 0, "Must be no klee out in the begining"
     for tc in unwrapped_testlist:
         # Run Semu with tests (wrapper is installed)
         print "# Running Tests", tc, "..."
         retCode = os.system(" ".join(["bash", runtestScript, tc, testrunlog]))
-        if retCode not in [0,1]:
-            error_exit ("Test execution failed for test case '"+tc+"', retCode was: "+str(retCode))
         nNew = len(glob.glob(os.path.join(semuworkdir, "klee-out-*")))
+        if nNew == nKleeOut:
+            error_exit ("Test execution failed for test case '"+tc+"', retCode was: "+str(retCode))
         assert nNew > nKleeOut, "Test was not run: "+tc
-        for kleetid, devtid in enumerate(range(nKleeOut, nNew)):
+        for devtid, kleetid in enumerate(range(nKleeOut, nNew)):
             kleeoutdir = os.path.join(semuworkdir, 'klee-out-'+str(kleetid))
-            wrapTestName = os.path.join(tc.replace('/', '_'), "Dev-out-"+str(devtid), "devtest.ktest")
+            wrapTestName = os.path.join(tc.replace('/', '_') + "-out", "Dev-out-"+str(devtid), "devtest.ktest")
 
             test2outdirMap[wrapTestName] = kleeoutdir
+        # update
+        nKleeOut = nNew
     for wtc in alltests:
-        assert wtc in test2outdirMap, "test not int Test2SemuoutdirMap: "+wtc
+        assert wtc in test2outdirMap, "test not in Test2SemuoutdirMap: \nMap: "+str(test2outdirMap)+"\nTest: "+wtc
     return test2outdirMap
 #~ def runSemu()
 
-def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOut):
+def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir):
     outFilePath = os.path.join(thisOutDir, outname)
     tmpdir = semuworkdir+".tmp"
-    assert not os.path.isdir(tmpdir), "For Semu temporary dir already exists: "+tmpdir
+    #assert not os.path.isdir(tmpdir), "For Semu temporary dir already exists: "+tmpdir
+    if os.path.isdir(tmpdir):
+        shutil.rmtree(tmpdir)
 
     # aggregated for the sample tests
     os.mkdir(tmpdir)
@@ -136,7 +145,7 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOut):
                 mutDataframes[mutFile] = pd.concat([mutDataframes[mutFile], tmpdf])
     for mutFile in mutDataframes:
         aggrmutfilepath = os.path.join(tmpdir, mutFile)
-        pd.to_csv(aggrmutfilepath, index=False)
+        mutDataframes[mutFile].to_csv(aggrmutfilepath, index=False)
 
     # extract for Semu accordinc to sample
     rankSemuMutants.libMain(tmpdir, outFilePath)
@@ -177,8 +186,10 @@ def main():
     matrix = os.path.abspath(matrix) if matrix is not None else None
 
     # Create outdir if absent
+    cacheDir = os.path.join(outDir, "caches")
     if not os.path.isdir(outDir):
         os.mkdir(outDir)
+        os.mkdir(cacheDir)
 
     # We need to set size fraction of test samples
     testSamplePercent = 20
@@ -186,6 +197,7 @@ def main():
     # Get all test samples before starting experiment
     print "# Getting Test Samples .."
     testSamples, alltests, unwrapped_testlist = getTestSamples(testList, testSamplePercent, matrix) 
+    dumpJson([testSamples, alltests, unwrapped_testlist], os.path.join(cacheDir, "testsamples.json"))
 
     # get Semu for all tests
     if martOut is not None:
@@ -194,6 +206,7 @@ def main():
         kleeSemuInBCLink = os.path.join(martOut, kleeSemuInBC)
         semuworkdir = os.path.join(outDir, "SemuWorkDir")
         test2semudirMap = runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCLink, semuworkdir)
+        dumpJson(test2semudirMap, os.path.join(cacheDir, "test2semudirMap.json"))
 
     # processfor each test Sample
     for ts_size in testSamples:
@@ -202,10 +215,15 @@ def main():
         # Make temporary outdir for test sample size
         thisOut = os.path.join(outDir, "out_testsize_"+str(ts_size))
 
+        if martOut is not None or matrix is not None:
+            if os.path.isdir(thisOut):
+                shutil.rmtree(thisOut)
+            os.mkdir(thisOut)
+
         # process for matrix
         if matrix is not None:
-            processMatrix (matrix, alltests, thisOut, 'groundtruth') 
-            processMatrix (matrix, testSamples[ts_size], thisOut, 'classic') 
+            processMatrix (matrix, alltests, 'groundtruth', thisOut) 
+            processMatrix (matrix, testSamples[ts_size], 'classic', thisOut) 
 
         # process for SEMU
         if martOut is not None:
