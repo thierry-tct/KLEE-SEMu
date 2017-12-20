@@ -26,6 +26,11 @@
 
 
 #include "ExecutionState_KS.h"
+
+#include "expr/Lexer.h"
+#include "expr/Parser.h"
+#include "klee/ExprBuilder.h"
+#include "llvm/Support/MemoryBuffer.h"
 //~KS
 
 #include "klee/Expr.h"
@@ -115,6 +120,20 @@ using namespace klee;
 
 
 
+// @KLEE_SEMu
+namespace {
+// Optional file containing the precondition of symbolic execution, maybe extracted from existing test using Zesti
+cl::list<std::string> semuPrecondFiles("semu-precondition-file", 
+                                        cl::desc("precondition for bounded semu (use this many times for multiple files)"));
+
+// optional watch point max depth to leverage mutant state explosion
+// When not semuMaxDepthWP value v != 0, we check all mutants when the depth is k*v ans destroy all mutant states seen so far
+// TODO: Add this to checkWatchpointreached
+cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork", 
+                                 cl::init(0), 
+                                 cl::desc("Maximum number of length of mutant path condition from mutation point (number of fork locations since mutation point)"));
+}
+//~ KS
 
 
 namespace {
@@ -2842,6 +2861,19 @@ void Executor::run(ExecutionState &initialState) {
   //const double ks_loopBreakDelay = 1; //5s
   double ks_initTime = util::getWallTime();
   ExecutionState *ks_prevState = nullptr;  
+  ks_watchPointID = 0;
+  ks_maxDepthID = 1;
+  
+  // Precondition (bounded) symb ex for scalability, existing TC precond
+  // TODO FIXME: merge multiple conditions from different tests properly
+  ConstraintManager symbexPrecondition;
+  ks_loadKQueryConstraints(symbexPrecondition);
+  for (auto *as: states) {
+    for (auto cit=symbexPrecondition.begin(); cit != symbexPrecondition.end();++cit) {
+      as->constraints.addConstraint(*cit);
+      //(*cit)->dump();
+    }
+  }
   //~KS
   
   while (!states.empty() && !haltExecution) {
@@ -2871,28 +2903,56 @@ void Executor::run(ExecutionState &initialState) {
     checkMemoryUsage();
 
     // @KLEE-SEMu
+    // // FIXME: We just checked memory and some states will be killed if exeeded and we will have some problem in comparison
+    // // FIXME: For now we assume that the memory limitmust not be exceeded, need to find a way to handle this later
+    if (atMemoryLimit) {
+      klee_error("SEMU@ERROR: Must not reach memory limit and kill states. increase memory limit or restrict symbex");
+      exit(1);
+    }
+
+    bool ks_terminated = (ks_terminatedPrevSize < ks_terminatedBeforeWP.size());
+    bool ks_OutEnvReached = ks_nextIsOutEnv (state);
     bool ks_WPReached = ks_watchPointReached (state, ki);
-    if (ks_WPReached || ks_terminatedPrevSize < ks_terminatedBeforeWP.size()) {   //(ks_terminatedBeforeWP.count(&state) == 1)
+    if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&state) == 1)
       //remove from searcher
       searcher->update(&state, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&state}));
       
-      //add to ks_reachedWatchPoint if so
-      if (ks_WPReached && ks_terminatedPrevSize == ks_terminatedBeforeWP.size())
-        ks_reachedWatchPoint.insert(&state);
+      if (! ks_terminated) {
+        //add to ks_reachedWatchPoint if so
+        if (ks_OutEnvReached)
+          ks_reachedOutEnv.insert(&state);
+        else // ! ks_OutEnvReached and ks_WPReached
+          ks_reachedWatchPoint.insert(&state);
+      } 
       
       //Check if all reached and compare states
-      if (ks_reachedWatchPoint.size() + ks_terminatedBeforeWP.size() >= states.size()) {   //Temporary solution here(assumed that all states reach that point). TODO
+      if (ks_reachedOutEnv.size() + 
+          ks_reachedWatchPoint.size() + 
+          ks_terminatedBeforeWP.size() >= states.size()) {   //Temporary solution here(assumed that all states reach that point). TODO
         std::vector<ExecutionState *> remainWPStates;
         ks_watchPointID++;
-        ks_compareStates(remainWPStates);
+        ks_compareStates(remainWPStates, !ks_reachedOutEnv.empty()/*outEnvOnly*/);
         
         //continue the execution
         addedStates.insert(addedStates.end(), remainWPStates.begin(), remainWPStates.end());
-        for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
-              ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
-          terminateState (**it);
+        
+        // If outenv is empty, it means that every state reached checkpoint,
+        // We can then termintate crash states and clear the term and WP sets
+        if (ks_reachedOutEnv.empty()) {
+          for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
+                ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
+            terminateState (**it);
+          }
+          ks_terminatedBeforeWP.clear();
+          ks_maxDepthID++;
+        } else { // there should be no terminated state
+          if (ks_reachedOutEnv.size() != remainWPStates.size()) {
+            klee_error("SEMU@ERROR: BUG, state reaching outenv different after comparestates");
+            exit(1);
+          }
+          ks_reachedOutEnv.clear();
         }
-        ks_terminatedBeforeWP.clear();
+
         updateStates(0);
       }
       
@@ -2905,7 +2965,16 @@ void Executor::run(ExecutionState &initialState) {
 
   delete searcher;
   searcher = 0;
-
+  
+  // @KLEE_SEMu
+  // In case there was timeout, compare the states that already reached watchpoint
+  std::vector<ExecutionState *> remainWPStates;
+  ks_watchPointID++;
+  ks_compareStates(remainWPStates); // TODO TODO: modify comparestates to take account of the fact that some states may not have reached the watchpoint
+  for (auto *s: remainWPStates)
+    terminateState (*s);
+  if(false) // do not dumpSates
+  //~KS
   doDumpStates();
 }
 
@@ -4079,27 +4148,57 @@ inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const Executio
   return false;
 }
   
-inline bool Executor::ks_isOutEnvCall (CallInst *ci) {
+// If there is already an env call on the stack (previously checked) 
+// Do not check anymore
+// XXX this is checked befor KLEE executes the corresponding call instruction
+inline bool Executor::ks_isOutEnvCall (CallInst *ci, ExecutionState *state) {
   static std::set<std::string> outEnvFuncs = {"printf", "vprintf" "puts", "putchar", "putc", "fprintf", "vfprintf", "fwrite", "fputs", "fputc", "perror", "assert"};
   Function *f = ci->getCalledFunction();  //TODO: consider indirect, maybe getCalledValue is better
+  // Out env must be declaration only
   if (f && f->isDeclaration() && f->getIntrinsicID() == Intrinsic::not_intrinsic) {
     if (outEnvFuncs.count(f->getName()))
+      // XXX this if if not needed since outenv call must be declaration
+      //if (state && state->ks_stackHasAnyFunctionOf(outEnvFuncs))
+      //  return false;
       return true;
   }
   return false;
 }
 
-inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction *ki) {
-  if (ks_watchpoint) {
-    if (ki->inst->getOpcode() == Instruction::Ret) {
-      //ks_watchpoint = false;
+// In the case of call, check the next to execute instruction, which should be state.pc
+inline bool Executor::ks_nextIsOutEnv (ExecutionState &state) {
+  //is the next instruction to execute an external call that change output
+  if (state.pc->inst->getOpcode() == Instruction::Call) { 
+    if (ks_isOutEnvCall(dyn_cast<CallInst>(state.pc->inst), &state)) {
       return true;
-    } else if (state.pc->inst->getOpcode() == Instruction::Call) { //is the next instruction to execute an external call that change output
-      if (ks_isOutEnvCall(dyn_cast<CallInst>(state.pc->inst)))
-        return true;
     }
   }
   return false;
+}
+
+inline bool Executor::ks_reachedCheckMaxDepth(ExecutionState &state) {
+  if (semuMaxDepthWP && (state.depth > ks_maxDepthID * semuMaxDepthWP))
+    return true;
+  return false;
+}
+
+// XXX: For now, watch point instructions are return and external calls.
+// This function must be called after 'stepInstruction' and 'executeInstruction' function call, which respectively
+// have set state.pc to next instruction to execute and state.prevPC to the to the just executed instruction 'ki'
+// - In the case of return, 'ki' is used and should be the return instruction (checked after return instruction execution)
+// ** We also have the option of limiting symbiloc exec depth for mutants and tsuch depth would be a watchpoint.
+inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction *ki) {
+  // No need to check return of non entry func.
+  // Change this to enable/disable intermediate return
+  const bool noIntermediateRet = true; 
+
+  if (ki->inst->getOpcode() == Instruction::Ret) {
+    //ks_watchpoint = false;
+    if (! (noIntermediateRet && state.ks_checkRetFunctionEntry01NonEntryNeg() < 0))
+      return true;
+    return false;
+  } 
+  return ks_reachedCheckMaxDepth(state);
 }
 ///
 
@@ -4135,9 +4234,13 @@ void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
   }
 }
 
-void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates) {
+void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly) {
   //TODO TODO: Make efficient
   std::vector<ExecutionState *> mutParentStates;
+  for(ExecutionState *es: ks_reachedOutEnv) {
+    if (es->ks_originalMutSisterStates != nullptr)
+      mutParentStates.push_back(es);
+  }
   for(ExecutionState *es: ks_reachedWatchPoint) {
     if (es->ks_originalMutSisterStates != nullptr)
       mutParentStates.push_back(es);
@@ -4184,7 +4287,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates) {
         origSuffConstr.insert(std::pair<ExecutionState *, ref<Expr>>(tmpes, sconstr));
       }
     }
-    if (ks_compareRecursive (es, correspOriginals, origSuffConstr)) {
+    if (ks_compareRecursive (es, correspOriginals, origSuffConstr, outEnvOnly)) {
       // terminate all the states of this mutant by removing them from ks_reachedWatchPoint and adding them to ks_terminatedBeforeWP
       // XXX: For a mutant do we need to generate test for all difference with original or only one (mutant forked from different original have different test generated)?
       // TODO improve this
@@ -4196,111 +4299,125 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates) {
       }*/
     }
 
-    // Remove mutants states that are terminated form their parent's 'children set'
-    ks_fixTerminatedChildrenRecursive (es);
+    if (!outEnvOnly) {
+      // Remove mutants states that are terminated form their parent's 'children set'
+      ks_fixTerminatedChildrenRecursive (es);
 
-    // let a child mutant state be the new parent of the group in case this parent terminated
-    // XXX at this point, all terminated children are removed from its chindren set
-    if (ks_terminatedBeforeWP.count(es) > 0 && !es->ks_childrenStates.empty()) {
-      auto *newParent = *(es->ks_childrenStates.begin());
-      es->ks_childrenStates.erase(newParent);
-      
-      newParent->ks_childrenStates.insert(es->ks_childrenStates.begin(), es->ks_childrenStates.end());
-      assert (newParent->ks_originalMutSisterStates == nullptr);
-      newParent->ks_originalMutSisterStates = es->ks_originalMutSisterStates;
+      // let a child mutant state be the new parent of the group in case this parent terminated
+      // XXX at this point, all terminated children are removed from its chindren set
+      if (ks_terminatedBeforeWP.count(es) > 0 && !es->ks_childrenStates.empty()) {
+        auto *newParent = *(es->ks_childrenStates.begin());
+        es->ks_childrenStates.erase(newParent);
+        
+        newParent->ks_childrenStates.insert(es->ks_childrenStates.begin(), es->ks_childrenStates.end());
+        assert (newParent->ks_originalMutSisterStates == nullptr);
+        newParent->ks_originalMutSisterStates = es->ks_originalMutSisterStates;
+      }
     }
   }
 
-  // Fix original terminated
-  if (! mutParentStates.empty()) {
-    auto *cands = mutParentStates.front();
-    auto *topParent = cands->ks_originalMutSisterStates;
-    while (topParent->parent != nullptr)
-      topParent = topParent->parent;
-    topParent->cleanTerminatedOriginals(ks_terminatedBeforeWP);
+  if (!outEnvOnly) {
+    // Fix original terminated
+    if (! mutParentStates.empty()) {
+      auto *cands = mutParentStates.front();
+      auto *topParent = cands->ks_originalMutSisterStates;
+      while (topParent->parent != nullptr)
+        topParent = topParent->parent;
+      topParent->cleanTerminatedOriginals(ks_terminatedBeforeWP);
+    }
   }
 
   //Temporary
   remainStates.clear();
-  remainStates.insert(remainStates.begin(), ks_reachedWatchPoint.begin(), ks_reachedWatchPoint.end());
-  ks_reachedWatchPoint.clear();
-  
+  remainStates.insert(remainStates.begin(), ks_reachedOutEnv.begin(), ks_reachedOutEnv.end());
+  if (!outEnvOnly) {
+    // We reached Checkpoint, terminate all mutant states so far and keep originals
+    for (auto *s: ks_reachedWatchPoint)
+      if (s->ks_mutantID == 0)
+        remainStates.push_back(s);
+      else
+        ks_terminatedBeforeWP.insert(s);
+
+    ks_reachedWatchPoint.clear();
+  }
   //ks_watchpoint = false;  //temporary
 }
 
 //return true if there is a strong difference (the mutant is killed, stop it)
 //XXX: For a mutant do we need to generate test for all difference with original or only one?
 bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect,
-                                           std::map<ExecutionState *, ref<Expr>> &origSuffConstr) {
+                                           std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly) {
   static const bool outputTestCases = false;
   static const bool doMaxSat = true;
 
   std::vector<ref<Expr>> inStateDiffExp;
   bool diffFound = false;
 
-  for (auto mSisState: mSisStatesVect) {
-    bool result;
-    bool success = solver->mayBeTrue(*mState, origSuffConstr.at(mSisState), result);
-    assert(success && "KS: Unhandled solver failure");
-    (void) success;
-    if (result) {
-      // Clear diff expr list
-      inStateDiffExp.clear();
+  if (!outEnvOnly || ks_reachedOutEnv.count(mState) > 0) {
+    for (auto mSisState: mSisStatesVect) {
+      bool result;
+      bool success = solver->mayBeTrue(*mState, origSuffConstr.at(mSisState), result);
+      assert(success && "KS: Unhandled solver failure");
+      (void) success;
+      if (result) {
+        // Clear diff expr list
+        inStateDiffExp.clear();
 
-      // compare these
-      int sDiff = ExecutionState::KS_StateDiff_t::ksNO_DIFF; 
+        // compare these
+        int sDiff = ExecutionState::KS_StateDiff_t::ksNO_DIFF; 
 
-      if (/*mState->pc &&*/ (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
-        sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
-        // XXX: we also compare states (ks_compareStateWith) here or not?
+        if (/*mState->pc &&*/ (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
+          sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
+          // XXX: we also compare states (ks_compareStateWith) here or not?
 
-        if (!ExecutionState::ks_isNoDiff(sDiff))
-          sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, false/*post...*/);
-      } else {
-        sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, true/*post...*/);
-      }
-      
-      // make sure that the sDiff is not having an error. If error, abort
-      ExecutionState::ks_checkNoDiffError(sDiff, mState->ks_mutantID);
+          if (!ExecutionState::ks_isNoDiff(sDiff))
+            sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, false/*post...*/);
+        } else {
+          sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, true/*post...*/);
+        }
+        
+        // make sure that the sDiff is not having an error. If error, abort
+        ExecutionState::ks_checkNoDiffError(sDiff, mState->ks_mutantID);
 
-      if (ExecutionState::ks_isNoDiff(sDiff)) {
-#ifdef ENABLE_KLEE_SEMU_DEBUG
-        llvm::errs() << "<==> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Equivalent.\n\n";
-#endif
-      } else {
-#ifdef ENABLE_KLEE_SEMU_DEBUG
-        llvm::errs() << "<!=> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Different.\n\n";
-#endif
-        if (outputTestCases && ExecutionState::ks_isCriticalDiff(sDiff)) {
-          // generate test case of this difference.
-          ref<Expr> insdiff = origSuffConstr.at(mSisState);
-          // TODO: improve this so the test constraint is smaller: remove condition for variable
-          // that are not of the output (not returned nor printed)
-          for (auto &expr: inStateDiffExp) 
-            insdiff = AndExpr::create(insdiff, expr);
-          size_t clen = mState->constraints.size();
-          mState->addConstraint (insdiff); //TODO TODO
-          interpreterHandler->processTestCase(*mState, "", std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
-          if (mState->constraints.size() > clen) {
-            mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
-          } 
+        if (ExecutionState::ks_isNoDiff(sDiff)) {
+  #ifdef ENABLE_KLEE_SEMU_DEBUG
+          llvm::errs() << "<==> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Equivalent.\n\n";
+  #endif
+        } else {
+  #ifdef ENABLE_KLEE_SEMU_DEBUG
+          llvm::errs() << "<!=> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Different.\n\n";
+  #endif
+          if (outputTestCases && ExecutionState::ks_isCriticalDiff(sDiff)) {
+            // generate test case of this difference.
+            ref<Expr> insdiff = origSuffConstr.at(mSisState);
+            // TODO: improve this so the test constraint is smaller: remove condition for variable
+            // that are not of the output (not returned nor printed)
+            for (auto &expr: inStateDiffExp) 
+              insdiff = AndExpr::create(insdiff, expr);
+            size_t clen = mState->constraints.size();
+            mState->addConstraint (insdiff); //TODO TODO
+            interpreterHandler->processTestCase(*mState, "", std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
+            if (mState->constraints.size() > clen) {
+              mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
+            } 
+            //return true;
+          }
           diffFound = true;
-          //return true;
+          if (doMaxSat) {
+            ks_checkMaxSat(mState->constraints, mSisState, inStateDiffExp, mState->ks_mutantID, sDiff);
+          }
         }
-        if (doMaxSat) {
-          ks_checkMaxSat(mState->constraints, mSisState, inStateDiffExp, mState->ks_mutantID, sDiff);
-        }
+      } else {
+  #ifdef ENABLE_KLEE_SEMU_DEBUG
+        llvm::errs() << "# Infesible differential between an original and a Mutant-" << mState->ks_mutantID <<".\n\n";
+  #endif
       }
-    } else {
-#ifdef ENABLE_KLEE_SEMU_DEBUG
-      llvm::errs() << "# Infesible differential between an original and a Mutant-" << mState->ks_mutantID <<".\n\n";
-#endif
     }
   }
   
   //compare children as well
   for (ExecutionState *es: mState->ks_childrenStates) {
-    diffFound |= ks_compareRecursive (es, mSisStatesVect, origSuffConstr);
+    diffFound |= ks_compareRecursive (es, mSisStatesVect, origSuffConstr, outEnvOnly);
   }
   
   return diffFound;
@@ -4352,8 +4469,11 @@ void Executor::ks_checkMaxSat (ConstraintManager const &mutPathCond,
     //std::vector<ref<Expr>> xxx; xxx.insert(xxx.begin(), hardClauses.begin(), hardClauses.end());
     //bool rr = coreSolver->mayBeTrue(Query(ConstraintManager(xxx), stateDiffExprs.back()), ress); 
     //llvm::errs() << rr << " " << ress<< " #\n";
+
     pmaxsat_solver.setSolverTimeout(coreSolverTimeout);
-    pmaxsat_solver.checkMaxSat(hardClauses, stateDiffExprs, nMaxFeasibleDiffs, nMaxFeasibleEqs);
+    nMaxFeasibleDiffs = stateDiffExprs.size();
+    // TODO fix z3 maxsat and uncoment bellow
+    //pmaxsat_solver.checkMaxSat(hardClauses, stateDiffExprs, nMaxFeasibleDiffs, nMaxFeasibleEqs);
   }
   
   // update using nTrue and nFalse
@@ -4395,6 +4515,71 @@ void Executor::ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id
 
   
 
+}
+
+
+void Executor::ks_loadKQueryConstraints(ConstraintManager &outConstraints) {
+  for (auto it=semuPrecondFiles.begin(), ie=semuPrecondFiles.end(); it != ie; ++it) {
+    std::string kqFilename = *it;
+    std::string ErrorStr;
+  
+#if LLVM_VERSION_CODE < LLVM_VERSION(3,5)
+    OwningPtr<MemoryBuffer> MB;
+    error_code ec=MemoryBuffer::getFile(kqFilename.c_str(), MB);
+    if (ec) {
+      llvm::errs() << "Loading Constraints from File '" << kqFilename << "': error: " << ec.message() << "\n";
+      exit(1);
+    }
+#else
+    auto MBResult = MemoryBuffer::getFile(kqFilename.c_str());
+    if (!MBResult) {
+      llvm::errs() << "Loading Constraints from File '" << kqFilename << "': error: " << MBResult.getError().message()
+                   << "\n";
+      exit(1);
+    }
+    std::unique_ptr<MemoryBuffer> &MB = *MBResult;
+#endif
+  
+    ExprBuilder *Builder = createDefaultExprBuilder();
+    Builder = createConstantFoldingExprBuilder(Builder);
+    Builder = createSimplifyingExprBuilder(Builder);
+
+    std::vector<expr::Decl*> Decls;
+    expr::Parser *P = expr::Parser::Create(kqFilename, MB.get(), Builder, /*ClearArrayAfterQuery*/false);
+    P->SetMaxErrors(20);
+    while (expr::Decl *D = P->ParseTopLevelDecl())
+    {
+      Decls.push_back(D);
+    }
+
+    bool success = true;
+    if (unsigned N = P->GetNumErrors())
+    {
+      llvm::errs() << kqFilename << ": parse failure: "
+             << N << " errors.\n";
+      success = false;
+    }
+
+    if (!success)
+      exit(1);
+
+    //Loop over the declarations
+    for (std::vector<expr::Decl*>::iterator it = Decls.begin(), ie = Decls.end(); it != ie; ++it)
+    {
+      expr::Decl *D = *it;
+      if (expr::QueryCommand *QC = dyn_cast<expr::QueryCommand>(D))
+      {
+        ConstraintManager constraintM(QC->Constraints);
+        for (auto it=constraintM.begin(), ie=constraintM.end(); it != ie; ++it)
+          outConstraints.addConstraint(*it);
+      }
+    }
+    //Clean up - Cancelled because we will still use it
+    /*for (std::vector<expr::Decl*>::iterator it = Decls.begin(),
+        ie = Decls.end(); it != ie; ++it)
+      delete *it;
+    delete P;*/
+  }
 }
 
 /**/

@@ -515,6 +515,7 @@ private:
   llvm::Function *ks_mutantIDSelectorGlobal_Func;
   llvm::SmallPtrSet<ExecutionState *, 5> ks_reachedWatchPoint;
   llvm::SmallPtrSet<ExecutionState *, 5> ks_terminatedBeforeWP;
+  llvm::SmallPtrSet<ExecutionState *, 5> ks_reachedOutEnv;
   
   llvm::Function * ks_entryFunction;
   
@@ -523,6 +524,7 @@ private:
   bool ks_watchpoint;
 
   unsigned long ks_watchPointID=0;
+  unsigned long ks_maxDepthID=1;
   
   //timeout to kill state with infinite loop  //TODO: make it be passed as parameter
   const double ks_loopBreakDelay = 1;
@@ -539,14 +541,17 @@ public:
   void ks_mutationPointBranching(ExecutionState &state, 
               std::vector<uint64_t> &mut_IDs);
   
+  bool ks_nextIsOutEnv (ExecutionState &state);
+  bool ks_reachedCheckMaxDepth(ExecutionState &state);
+
   // Test wheather we reached the point to compare the states
   bool ks_watchPointReached (ExecutionState &state, KInstruction *ki);
   
   void ks_fixTerminatedChildrenRecursive (ExecutionState *pes); 
   void ks_terminateSubtreeMutants(ExecutionState *pes); 
-  void ks_compareStates (std::vector<ExecutionState *> &remainStates);
+  void ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly=false);
   bool ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect, 
-                          std::map<ExecutionState *, ref<Expr>> &origSuffConstr);
+                          std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly);
   
   void ks_setInitialSymbolics (llvm::Module &module, llvm::Function &Func);
   
@@ -554,7 +559,7 @@ public:
   
   bool ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp);
   
-  bool ks_isOutEnvCall (llvm::CallInst *ci);
+  bool ks_isOutEnvCall (llvm::CallInst *ci, ExecutionState *state=nullptr);
 
   // This take the path condition common to a mutant and original, together 
   // with the conditions of equality, for each state variable, between
@@ -570,6 +575,9 @@ public:
                                 unsigned nMaxFeasibleEqs,
                                 int sDiff,
                                 ExecutionState const *origState);  
+
+  void ks_loadKQueryConstraints(ConstraintManager &outConstraint);
+
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS
 };

@@ -646,6 +646,9 @@ public:
 
     hard_cnstrs = get_constraints<>(hardClauseExpr.begin(), hardClauseExpr.end(), num_hard_cnstrs, false/*Negate each clause*/);
 
+    // TODO  remove this tmp
+    //(*posNegOut[0]) = num_soft_cnstrs; return true;
+
     for (int outsel=0; outsel<2; ++outsel) {
       Z3_context ctx;
       Z3_solver s;
@@ -675,6 +678,7 @@ public:
     temp_builder.clearConstructCache();
 
     resetTmpBoolNameCount();
+    return true;
   }
 };
 }

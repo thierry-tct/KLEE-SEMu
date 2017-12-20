@@ -145,7 +145,9 @@ ExecutionState::ExecutionState(const ExecutionState& state):
 
 // @KLEE-SEMu
 ExecutionState *ExecutionState::ks_branchMut() {
-  depth++;
+  // Do not increase depth since this is not KLEE's normal fork
+  // control mutant state explosion
+  //depth++;  
 
   ExecutionState *falseState = new ExecutionState(*this);
   falseState->coveredNew = false;
@@ -155,6 +157,24 @@ ExecutionState *ExecutionState::ks_branchMut() {
   falseState->weight -= weight;
 
   return falseState;
+}
+
+
+// This function help to know whetehr the function that is returning is 
+// an entry point function (return 0 if 'main' and 1 if '__user_main') 
+// or not(return negative number)
+int ExecutionState::ks_checkRetFunctionEntry01NonEntryNeg() {
+  if (stack.size() == 2)
+    return (stack.at(1).kf->function->getName() == "__uClibc_main")? 1: -1;
+  else
+    return (! stack.back().caller)? 0: -1;
+}
+  
+bool ExecutionState::ks_stackHasAnyFunctionOf(std::set<std::string> &funcnames) {
+  for (auto &sf: stack)
+    if (funcnames.count(sf.kf->function->getName()) > 0)
+      return true;
+  return false;
 }
 
 int ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, std::vector<ref<Expr>> &inStateDiffExp, bool postExec, bool checkRegs/*=false*/) {
@@ -239,11 +259,7 @@ int ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *M
   if (llvm::isa<llvm::ReturnInst>(bPC->inst)) { //make sure that both watch points are same type
     if (llvm::ReturnInst *ri = llvm::dyn_cast<llvm::ReturnInst>(aPC->inst)) {
       const char *mainFName[] = {"main", "__user_main"};
-      int noEntry_NegEntry0_1;
-      if (stack.size() == 2)
-          noEntry_NegEntry0_1 = (stack.at(1).kf->function->getName() == "__uClibc_main")? 1: -1;
-      else
-          noEntry_NegEntry0_1 = (! stack.back().caller)? 0: -1;
+      int noEntry_NegEntry0_1 = ks_checkRetFunctionEntry01NonEntryNeg();
       
       if (noEntry_NegEntry0_1 >= 0) { //Entry point Function
         if (ri->getParent()->getParent()->getName() == mainFName[noEntry_NegEntry0_1]) { //Check only return values

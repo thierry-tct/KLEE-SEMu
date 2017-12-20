@@ -165,6 +165,13 @@ public:
   
   ExecutionState *ks_branchMut();
   
+  // This function help to know whetehr the function that is returning is 
+  // an entry point function (return 0 if 'main' and 1 if '__user_main') 
+  // or not(return negative number)
+  int ks_checkRetFunctionEntry01NonEntryNeg();
+
+  bool ks_stackHasAnyFunctionOf(std::set<std::string> &funcnames);
+
   // Post exec say whether the comparison is done after the chekpoint instruction execution
   int ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, std::vector<ref<Expr>> &inStateDiffExp, bool postExec=true, bool checkRegs=false);
   
