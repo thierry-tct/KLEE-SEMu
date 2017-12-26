@@ -2,6 +2,7 @@
 
 set -u 
 
+# Assuming that klee zesti is already on the path
 PATH=$PATH:/media/thierry/TestMutants/KLEE-MART/klee-semu/build/bin/
 intopdir=`pwd`/inputs
 outtopdir=`pwd`

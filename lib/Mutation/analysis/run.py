@@ -9,7 +9,7 @@
 # - The path to executable in project
 # - topDir for output (required)
 ########################
-## TODO: implement runSemu
+## TODO: implement runZesti
 
 import os, sys
 import json, re
@@ -25,10 +25,14 @@ import analyse
 
 OutFolder = "OUTPUT"
 KleeSemuBCSuff = ".MetaMu.bc"
+ZestiBCSuff = ".Zesti.bc"
 WRAPPER_TEMPLATE = None
+SEMU_CONCOLIC_WRAPPER = "wrapper-call-semu-concolic.in"
+ZESTI_CONCOLIC_WRAPPER = "wrapper-call-zesti-concolic.in"
+MY_SCANF = None
 
 def error_exit(errstr):
-    print "\nERROR: "+errstr
+    print "\nERROR: "+errstr+'\n'
     assert False
     exit(1)
 
@@ -62,20 +66,30 @@ def processMatrix (matrix, testSample, outname, thisOutDir):
     matrixHardness.libMain(matrix, testSample, outFilePath)
 #~ def processMatrix()
 
-def runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCLink, semuworkdir):
+def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, kleeZestiSemuInBCLink, semuworkdir, mode="zesti+symbex"):
     test2outdirMap = {}
 
     # Prepare outdir and copy bc
     if os.path.isdir(semuworkdir):
         shutil.rmtree(semuworkdir)
     os.mkdir(semuworkdir)
-    kleeSemuInBC = os.path.basename(kleeSemuInBCLink) 
-    shutil.copy2(kleeSemuInBCLink, os.path.join(semuworkdir, kleeSemuInBC))
+    kleeZestiSemuInBC = os.path.basename(kleeZestiSemuInBCLink) 
+    if mode == "zesti+symbex":
+        cmd = "llvm-gcc -c -std=c89 -emit-llvm "+MY_SCANF+" -o "+MY_SCANF+".bc"
+        ec = os.system(cmd)
+        if ec != 0:
+            error_exit("Error: failed to compile my_scanf to llvm for Zesti. Returned "+str(ec)+".\n >> Command: "+cmd)
+        ec = os.system("llvm-link "+kleeZestiSemuInBCLink+" "+MY_SCANF+".bc -o "+os.path.join(semuworkdir, kleeZestiSemuInBC))
+        if ec != 0:
+            error_exit("Error: failed to link myscanf and zesti bc. Returned "+str(ec))
+        os.remove(MY_SCANF+".bc")
+    else:
+        shutil.copy2(kleeZestiSemuInBCLink, os.path.join(semuworkdir, kleeZestiSemuInBC))
 
     # Install wrapper
     wrapper_fields = {
                         "IN_TOOL_DIR": semuworkdir,
-                        "IN_TOOL_NAME": kleeSemuInBC[:-3], #remove ".bc"
+                        "IN_TOOL_NAME": kleeZestiSemuInBC[:-3], #remove ".bc"
                         "TOTAL_MAX_TIME_": "600",
                         "SOLVER_MAX_TIME_": "60"
                      }
@@ -122,30 +136,49 @@ def runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCL
     for wtc in alltests:
         assert wtc in test2outdirMap, "test not in Test2SemuoutdirMap: \nMap: "+str(test2outdirMap)+"\nTest: "+wtc
     return test2outdirMap
-#~ def runSemu()
+#~ def runZestiOrSemuTC()
 
-def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir):
+# put information from concolic run for the passed test set into a temporary dir, then possibly
+# Compute SEMU symbex and rank according to SEMU. outpout in outFilePath
+def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, mode="zesti+symbex"):
     outFilePath = os.path.join(thisOutDir, outname)
     tmpdir = semuworkdir+".tmp"
     #assert not os.path.isdir(tmpdir), "For Semu temporary dir already exists: "+tmpdir
     if os.path.isdir(tmpdir):
         shutil.rmtree(tmpdir)
 
-    # aggregated for the sample tests
-    os.mkdir(tmpdir)
-    mutDataframes = {}
-    for tc in testSample:
-        tcdir = test2semudirMap[tc]
-        for mutFilePath in glob.glob(os.path.join(tcdir, "mutant-*.semu")):
-            mutFile = os.path.basename(mutFilePath)
-            tmpdf = pd.read_csv(mutFilePath)
-            if mutFile not in mutDataframes:
-                mutDataframes[mutFile] = tmpdf
-            else:
-                mutDataframes[mutFile] = pd.concat([mutDataframes[mutFile], tmpdf])
-    for mutFile in mutDataframes:
-        aggrmutfilepath = os.path.join(tmpdir, mutFile)
-        mutDataframes[mutFile].to_csv(aggrmutfilepath, index=False)
+    # aggregated for the sample tests (semuTC mode)
+    if mode == "zesti+symbex":
+        symbexPreconditions = []
+        for tc in testSample:
+            tcdir = test2semudirMap[tc]
+            for pathcondfile in glob.glob(os.path.join(tcdir, "*.pc")):
+                symbexPreconditions.append(pathcondfile)
+        # use the collected preconditions and run semy in symbolic mode
+        kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=z3 -max-time=12000 -max-memory=7000 --max-solver-time=60"
+        kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -watchdog -use-cex-cache"
+        kleeArgs += " --output-dir="+tmpdir
+        semuArgs = " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions]+["-semu-mutant-max-fork=2"])
+        symArgs = "--sym-stdin 2"
+        symArgs += " --sym-args 0 1 10 --sym-args 0 2 2 --sym-files 1 8 --sym-stdout"
+        sretcode = os.system(" ".join(["klee-semu", kleeArgs, semuArgs, metaMutantBC, symArgs, "> /dev/null"]))
+        if sretcode != 0:
+            error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
+    else:
+        os.mkdir(tmpdir)
+        mutDataframes = {}
+        for tc in testSample:
+            tcdir = test2semudirMap[tc]
+            for mutFilePath in glob.glob(os.path.join(tcdir, "mutant-*.semu")):
+                mutFile = os.path.basename(mutFilePath)
+                tmpdf = pd.read_csv(mutFilePath)
+                if mutFile not in mutDataframes:
+                    mutDataframes[mutFile] = tmpdf
+                else:
+                    mutDataframes[mutFile] = pd.concat([mutDataframes[mutFile], tmpdf])
+        for mutFile in mutDataframes:
+            aggrmutfilepath = os.path.join(tmpdir, mutFile)
+            mutDataframes[mutFile].to_csv(aggrmutfilepath, index=False)
 
     # extract for Semu accordinc to sample
     rankSemuMutants.libMain(tmpdir, outFilePath)
@@ -160,7 +193,13 @@ def analysis_plot(thisOut):
 
 def main():
     global WRAPPER_TEMPLATE 
-    WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "wrapper-call-semu-concolic.in"))
+    global MY_SCANF
+    runMode = "zesti+symbex" #semuTC
+    if runMode == "zesti+symbex":
+        WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ZESTI_CONCOLIC_WRAPPER))
+        MY_SCANF = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "FixScanfForShadow/my_scanf.c"))
+    else:
+        WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), SEMU_CONCOLIC_WRAPPER))
     parser = argparse.ArgumentParser()
     parser.add_argument("outTopDir", help="topDir for output (required)")
     parser.add_argument("--exepath", type=str, default=None, help="The path to executable in project")
@@ -192,7 +231,7 @@ def main():
         os.mkdir(cacheDir)
 
     # We need to set size fraction of test samples
-    testSamplePercent = 20
+    testSamplePercent = 100#20
 
     # Get all test samples before starting experiment
     print "# Getting Test Samples .."
@@ -202,10 +241,13 @@ def main():
     # get Semu for all tests
     if martOut is not None:
         print "# Running Semu..."
+        zestiInBC = os.path.basename(exePath) + ZestiBCSuff
+        zestiInBCLink = os.path.join(martOut, zestiInBC)
         kleeSemuInBC = os.path.basename(exePath) + KleeSemuBCSuff
         kleeSemuInBCLink = os.path.join(martOut, kleeSemuInBC)
         semuworkdir = os.path.join(outDir, "SemuWorkDir")
-        test2semudirMap = runSemu (unwrapped_testlist, alltests, exePath, runtestScript, kleeSemuInBCLink, semuworkdir)
+        inBCFilePath = zestiInBCLink if runMode == "zesti+symbex" else kleeSemuInBCLink
+        test2semudirMap = runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, inBCFilePath, semuworkdir, mode=runMode) #mode can also be "semuTC"
         dumpJson(test2semudirMap, os.path.join(cacheDir, "test2semudirMap.json"))
 
     # processfor each test Sample
@@ -227,7 +269,7 @@ def main():
 
         # process for SEMU
         if martOut is not None:
-            processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut) 
+            processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut, kleeSemuInBCLink, mode=runMode) 
 
         # Make final Analysis and plot
         if martOut is not None and matrix is not None:

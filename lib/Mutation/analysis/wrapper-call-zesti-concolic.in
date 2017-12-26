@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -u
+
+# TODO: path to 'tee' is hard-coded to avoid problems with binutils
+
+# This script is invoked by the test suite. Don't rely on the wd.
+#TOOL_DIR="IN_TOOL_DIR"
+#TOOL_NAME="IN_TOOL_NAME"
+maxTime=${SEMU_MAX_TIME:-TOTAL_MAX_TIME_}
+solvermaxtime=${SEMU_MAX_SOLVER_TIME:-SOLVER_MAX_TIME_}
+semuout="semu.out"
+
+# Concolic
+(klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1)
+
+
+# Symbolic
+
+
+
+# Provoke "unbound variable" if KLEE fails
+# Preserve the KLEE exit code
+exit $EXIT_CODE

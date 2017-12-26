@@ -41,7 +41,7 @@
     #define MY_MAXLN 10000
 #endif
 
-//#include <pmon.h>
+/*#include <pmon.h>*/
 
 /*
  * ** fscanf --\    sscanf --\

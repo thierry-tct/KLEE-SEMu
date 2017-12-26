@@ -48,10 +48,11 @@ def loadData(indir):
         tmpRowList = df.to_dict("records")
         outObj[mutID] = {}
         for row in tmpRowList:
-            pc = os.path.join(str(row['OrigState']), str(row['WatchPointID']))
+            pc = os.path.join(str(row['OrigState']), str(row['MaxDepthID']), str(row['WatchPointID']))
             if pc not in outObj[mutID]:
                 outObj[mutID][pc] = []
             del row['OrigState']
+            del row['MaxDepthID']
             del row['WatchPointID']
             outObj[mutID][pc].append(row)
 

@@ -33,7 +33,7 @@
 
 #include <sys/types.h>
 #include <string.h>
-//#include <pmon.h>
+/*#include <pmon.h>*/
 
 static char * _getbase __P((char *, int *));
 #ifdef HAVE_QUAD
@@ -108,23 +108,23 @@ _atob (unsigned long *vp, char *p, int base)
 	}
 
 	value = *vp = 0;
-	for (; *p; p++) {//printf("> %s\n",p);if (*p >= '0'){*vp=p[0];printf("##@@@\n"); return 1;}//TTT
-//*vp=p[0];printf("@@@\n");return 1;
-		//if ((*p >= '0') && (*p <= '9'))
-		//	digit = *p - '0';
-		/*else if (*p >= 'a' && *p <= 'f')
+	for (; *p; p++) {/*printf("> %s\n",p);if (*p >= '0'){*vp=p[0];printf("##@@@\n"); return 1;}//TTT
+*vp=p[0];printf("@@@\n");return 1;
+		if ((*p >= '0') && (*p <= '9'))
+			digit = *p - '0';
+		else if (*p >= 'a' && *p <= 'f')
 			digit = *p - 'a' + 10;
 		else if (*p >= 'A' && *p <= 'F')
 			digit = *p - 'A' + 10;
 		else
 			return (0);
-*///TCT
+//TCT */
 		digit = (*p - '0')*((*p >= '0') & (*p <= '9')) +
 			(*p - 'a' + 10)*((*p >= 'a') & (*p <= 'f')) +
-			(*p - 'A' + 10)*((*p >= 'A') & (*p <= 'F')); //TCT
+			(*p - 'A' + 10)*((*p >= 'A') & (*p <= 'F')); /*/TCT 
 			//+ (digit)*((!(*p >= '0') | !(*p <= '9'))
                         //          & (!(*p >= 'a') | !(*p <= 'f'))
-                        //          & (!(*p >= 'A') | !(*p <= 'F'))); //TCT
+                        //          & (!(*p >= 'A') | !(*p <= 'F'))); //TCT */
 
 		if (digit >= base)
 			return (0);
