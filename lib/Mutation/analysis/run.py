@@ -90,8 +90,8 @@ def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, klee
     wrapper_fields = {
                         "IN_TOOL_DIR": semuworkdir,
                         "IN_TOOL_NAME": kleeZestiSemuInBC[:-3], #remove ".bc"
-                        "TOTAL_MAX_TIME_": "600",
-                        "SOLVER_MAX_TIME_": "60"
+                        "TOTAL_MAX_TIME_": "7200.0", #600
+                        "SOLVER_MAX_TIME_": "240.0"    #60
                      }
     ## Backup existing exe
     exePathBak = exePath+'.bak'
@@ -138,6 +138,30 @@ def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, klee
     return test2outdirMap
 #~ def runZestiOrSemuTC()
 
+def getSymArgsFromKtests (pathCondFilesList, program='Expr'):
+    if program == 'Expr':
+        symArgs = "--sym-args 0 1 10 --sym-args 0 3 2 --sym-stdout"
+    else:
+        symArgs = "--sym-stdin 2"
+        symArgs += " --sym-args 0 1 10 --sym-args 0 2 2 --sym-files 1 8 --sym-stdout"
+
+    # TODO implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions
+    if False:
+        for pcfile in pathCondFilesList:
+            ktestfile = os.path.splitext(pcfile)[0] + '.ktest'
+            ktesttoolfile = ktestfile + '.ktesttool'
+            if os.system(" ".join(['ktest-tool --write-ints', ktestfile, ">", ktesttoolfile])) != 0:
+                error_exit ("Failed to create ktesttool file for ktest file '"+ktestfile+"'")
+            with open(ktesttoolfile) as fp:
+                # TODO Extrac klee test information
+                pass
+            
+            os.remove(ktesttoolfile)
+        
+        symArgs += '--sym-stdout'
+    return symArgs
+#~ getSymArgsFromKtests()
+
 # put information from concolic run for the passed test set into a temporary dir, then possibly
 # Compute SEMU symbex and rank according to SEMU. outpout in outFilePath
 def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, mode="zesti+symbex"):
@@ -155,14 +179,13 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
             for pathcondfile in glob.glob(os.path.join(tcdir, "*.pc")):
                 symbexPreconditions.append(pathcondfile)
         # use the collected preconditions and run semy in symbolic mode
-        kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=z3 -max-time=12000 -max-memory=7000 --max-solver-time=60"
+        kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp -max-time=30000 -max-memory=9000 --max-solver-time=300"
         kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -watchdog -use-cex-cache"
         kleeArgs += " --output-dir="+tmpdir
-        semuArgs = " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions]+["-semu-mutant-max-fork=2"])
-        symArgs = "--sym-stdin 2"
-        symArgs += " --sym-args 0 1 10 --sym-args 0 2 2 --sym-files 1 8 --sym-stdout"
+        semuArgs = " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions]+["-semu-mutant-max-fork=4"])
+        symArgs = getSymArgsFromKtests (symbexPreconditions, program="Expr") #TODO : change program here
         sretcode = os.system(" ".join(["klee-semu", kleeArgs, semuArgs, metaMutantBC, symArgs, "> /dev/null"]))
-        if sretcode != 0:
+        if sretcode != 0 and sretcode != 256: # 256 for tieout
             error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
     else:
         os.mkdir(tmpdir)
@@ -194,7 +217,8 @@ def analysis_plot(thisOut):
 def main():
     global WRAPPER_TEMPLATE 
     global MY_SCANF
-    runMode = "zesti+symbex" #semuTC
+    #runMode = "zesti+symbex" #semuTC
+    runMode = "semuTC"
     if runMode == "zesti+symbex":
         WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ZESTI_CONCOLIC_WRAPPER))
         MY_SCANF = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "FixScanfForShadow/my_scanf.c"))
@@ -231,7 +255,7 @@ def main():
         os.mkdir(cacheDir)
 
     # We need to set size fraction of test samples
-    testSamplePercent = 100#20
+    testSamplePercent = 10
 
     # Get all test samples before starting experiment
     print "# Getting Test Samples .."
