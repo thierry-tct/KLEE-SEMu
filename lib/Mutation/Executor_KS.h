@@ -526,9 +526,6 @@ private:
   unsigned long ks_watchPointID=0;
   unsigned long ks_maxDepthID=1;
   
-  //timeout to kill state with infinite loop  //TODO: make it be passed as parameter
-  const double ks_loopBreakDelay = 1;
-
   // Partial Max Sat Solver
   // Make this with cache
   ks::PartialMaxSATSolver pmaxsat_solver;
@@ -553,6 +550,8 @@ public:
   bool ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect, 
                           std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly);
   
+  void ks_FilterMutants (llvm::Module *module);
+
   void ks_setInitialSymbolics (llvm::Module &module, llvm::Function &Func);
   
   inline llvm::Instruction * ks_makeArgSym (llvm::Module &module, llvm::GlobalVariable * &emptyStrAddr, llvm::Instruction *insAfter, llvm::Value *memAddr, llvm::Type *valtype);
@@ -576,7 +575,7 @@ public:
                                 int sDiff,
                                 ExecutionState const *origState);  
 
-  void ks_loadKQueryConstraints(ConstraintManager &outConstraint);
+  void ks_loadKQueryConstraints(std::vector<ConstraintManager> &outConstraintsList);
 
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS

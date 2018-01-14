@@ -126,12 +126,31 @@ namespace {
 cl::list<std::string> semuPrecondFiles("semu-precondition-file", 
                                         cl::desc("precondition for bounded semu (use this many times for multiple files)"));
 
+// Optionally set the list of mutants to consider, the remaining will be removed from meta module
+cl::opt<std::string> semuCandidateMutantsFile("candidate-mutants-list-file", 
+                                        cl::init(""),
+                                        cl::desc("File containing the subset  list of mutants to consider in the analysis"));
+
 // optional watch point max depth to leverage mutant state explosion
 // When not semuMaxDepthWP value v != 0, we check all mutants when the depth is k*v ans destroy all mutant states seen so far
 // TODO: Add this to checkWatchpointreached
 cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork", 
                                  cl::init(0), 
                                  cl::desc("Maximum number of length of mutant path condition from mutation point (number of fork locations since mutation point)"));
+
+// TODO, actually detect loop and limit the number of iterations. For now just limit the time. set this time large enough to capture loop, not simple instructions
+cl::opt<double> semuLoopBreakDelay("semu-loop-break-delay", 
+                                 cl::init(120.0), 
+                                 cl::desc("Set the maximum time in seconds that the same state is executed without stop"));
+
+cl::opt<unsigned> semuPreconditionLength("semu-precondition-length", 
+                                 cl::init(6), 
+                                 cl::desc("Set number of conditions that will be taken from the test cases path conditions and used are precondition"));
+
+// Automatically set the arguments of the entry function symbolic
+cl::opt<bool> semuSetEntryFuncArgsSymbolic("semu-set-entyfunction-args-symbolic", 
+                                          cl::init(false), 
+                                          cl::desc("Enable automatically set the parameters of the entry point symbolic"));
 }
 //~ KS
 
@@ -422,8 +441,23 @@ const Module *Executor::setModule(llvm::Module *module,
   assert(!kmodule && module && "can only register one module"); // XXX gross
   
   // @KLEE-SEMu
-  ks_entryFunction = module->getFunction(opts.EntryPoint);
-  ks_setInitialSymbolics (*module, *ks_entryFunction);   
+  if (semuSetEntryFuncArgsSymbolic) {
+    ks_entryFunction = module->getFunction(opts.EntryPoint);
+    ks_setInitialSymbolics (*module, *ks_entryFunction);   
+  }
+  ks_mutantIDSelectorGlobal = module->getNamedGlobal(ks_mutantIDSelectorName);
+  assert (ks_mutantIDSelectorGlobal && 
+    "@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
+  //Make sure that the value of the mutIDSelector global variable is 0 (original)
+  assert (ks_mutantIDSelectorGlobal->hasInitializer() 
+          && ks_mutantIDSelectorGlobal->getInitializer()->isNullValue()
+          && "@KLEE-SEMu - ERROR: mutant ID selector Must be initialized to 0!");
+          
+  ks_mutantIDSelectorGlobal_Func = module->getFunction(ks_mutantIDSelectorName_Func);
+  assert (ks_mutantIDSelectorGlobal_Func && ks_mutantIDSelectorGlobal_Func->arg_size() == 2 &&
+    "@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
+
+  ks_FilterMutants(module);
   //~KS
   
   kmodule = new KModule(module);
@@ -451,6 +485,7 @@ const Module *Executor::setModule(llvm::Module *module,
   }
   
   // @KLEE-SEMu
+  // Reverify since module was changed
   ks_mutantIDSelectorGlobal = module->getNamedGlobal(ks_mutantIDSelectorName);
   assert (ks_mutantIDSelectorGlobal && 
     "@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
@@ -2858,7 +2893,7 @@ void Executor::run(ExecutionState &initialState) {
   
   // @KLEE-SEMu         //Temporary TODO
   ks_watchpoint = true;
-  //const double ks_loopBreakDelay = 1; //5s
+
   double ks_initTime = util::getWallTime();
   ExecutionState *ks_prevState = nullptr;  
   ks_watchPointID = 0;
@@ -2866,13 +2901,25 @@ void Executor::run(ExecutionState &initialState) {
   
   // Precondition (bounded) symb ex for scalability, existing TC precond
   // TODO FIXME: merge multiple conditions from different tests properly
-  ConstraintManager symbexPrecondition;
-  ks_loadKQueryConstraints(symbexPrecondition);
-  for (auto *as: states) {
-    for (auto cit=symbexPrecondition.begin(); cit != symbexPrecondition.end();++cit) {
-      as->constraints.addConstraint(*cit);
-      //(*cit)->dump();
+  std::vector<ConstraintManager> symbexPreconditionsList;
+  ks_loadKQueryConstraints(symbexPreconditionsList);
+  // Make precondition Expression
+  unsigned nSelectedConds = semuPreconditionLength;
+  ref<Expr> mergedPrecond = ConstantExpr::alloc(0, Expr::Bool);  //False
+  for (auto &testcasePC: symbexPreconditionsList) {
+    ref<Expr> tcPCCond = ConstantExpr::alloc(1, Expr::Bool); //True
+    unsigned condcount = 0;
+    for (auto cit=testcasePC.begin(); cit != testcasePC.end();++cit) {
+      if (condcount++ >= nSelectedConds)
+        break;
+      tcPCCond = AndExpr::create(tcPCCond, *cit);
     }
+    mergedPrecond = OrExpr::create(mergedPrecond, tcPCCond);
+  }
+  // add precondition  
+  for (auto *as: states) {
+    as->constraints.addConstraint(mergedPrecond);
+      //(mergedPrecond)->dump();
   }
   //~KS
   
@@ -2884,15 +2931,20 @@ void Executor::run(ExecutionState &initialState) {
     //Size before executing instruction (help to know whether the state was terminated)
     unsigned ks_terminatedPrevSize = ks_terminatedBeforeWP.size();
     
-    //Handle infinite loop
+    //Handle infinite loop, This requires BFS search strategy XXX
+//#ifdef SEMU_INFINITE_LOOP_BREAK
     if(state.ks_mutantID > 0) {   //TODO: how about when we reach watch point
       if (ks_prevState != &state) {
         ks_prevState = &state;
         ks_initTime = util::getWallTime();
-      } else if (ks_loopBreakDelay < util::getWallTime() - ks_initTime) {
+      } else if (semuLoopBreakDelay < util::getWallTime() - ks_initTime) {
+        klee_message((std::string("SEMU@WARNING: Loop Break Delay reached for mutant ")+std::to_string(state.ks_mutantID)).c_str());
         terminateStateEarly(state, "infinite loop"); //Terminate mutant
+        // XXX Will be removed from searcher and processed bellow
+        //continue;
       }
     }
+//#endif
     //~KS
     
     stepInstruction(state);
@@ -2931,14 +2983,17 @@ void Executor::run(ExecutionState &initialState) {
           ks_terminatedBeforeWP.size() >= states.size()) {   //Temporary solution here(assumed that all states reach that point). TODO
         std::vector<ExecutionState *> remainWPStates;
         ks_watchPointID++;
-        ks_compareStates(remainWPStates, !ks_reachedOutEnv.empty()/*outEnvOnly*/);
+        llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() << " States.\n";
+        bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
+        ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/);
+        llvm::errs() << "# SEMU@Status: State Comparison Done!\n";
         
         //continue the execution
         addedStates.insert(addedStates.end(), remainWPStates.begin(), remainWPStates.end());
         
         // If outenv is empty, it means that every state reached checkpoint,
         // We can then termintate crash states and clear the term and WP sets
-        if (ks_reachedOutEnv.empty()) {
+        if (!ks_hasOutEnv) {
           for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
                 ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
             terminateState (**it);
@@ -4065,6 +4120,99 @@ void Executor::ks_setInitialSymbolics (/*ExecutionState &state, */Module &module
   }
 }
 
+// get the list of mutants to use in the execution from semuCandidateMutantsFile 
+// If the filename is not the empty string, get the mutants list and remove the mutant not in the list from module
+void Executor::ks_FilterMutants (llvm::Module *module) {
+  std::set<ExecutionState::KS_MutantIDType> cand_mut_ids;
+  if (!semuCandidateMutantsFile.empty()) {
+    std::ifstream ifs(semuCandidateMutantsFile); 
+    if (ifs.is_open()) {
+      ExecutionState::KS_MutantIDType tmpid;
+      ifs >> tmpid;
+      while (ifs.good()) {
+        cand_mut_ids.insert(tmpid);
+        ifs >> tmpid;
+      }
+      ifs.close();
+    } else {
+      llvm::errs() << "Error: Unable to open Mutants Candidate file: " << semuCandidateMutantsFile << "\n";
+      assert(false);
+      exit(1);
+    }
+  }
+
+  if (cand_mut_ids.empty())
+    return;
+  
+  // XXX Fix both the mutant fork function for ID range and the switch
+  for (auto &Func: *module) {
+    for (auto &BB: Func) {
+      for (auto iit = BB.begin(), iie = BB.end(); iit != iie;) {
+        llvm::Instruction *Instp = &*(iit++);
+        if (auto *calli = llvm::dyn_cast<llvm::CallInst>(Instp)) {
+          llvm::Function *f = calli->getCalledFunction();
+          if (f == ks_mutantIDSelectorGlobal_Func) {
+            uint64_t fromMID = dyn_cast<ConstantInt>(calli->getArgOperand(0))->getZExtValue();
+            uint64_t toMID = dyn_cast<ConstantInt>(calli->getArgOperand(1))->getZExtValue();
+            assert (fromMID <= toMID && "Invalid mutant range");
+            
+            std::vector<ExecutionState::KS_MutantIDType> fromsCandIds;
+            std::vector<ExecutionState::KS_MutantIDType> tosCandIds;
+            bool lastIsCand = false;
+            for (ExecutionState::KS_MutantIDType mIds = fromMID; mIds <= toMID; mIds++) {
+              if (cand_mut_ids.count(mIds) > 0) {
+                if (lastIsCand) {
+                  tosCandIds[tosCandIds.size() - 1] = mIds;
+                } else {
+                  fromsCandIds.push_back(mIds);
+                  tosCandIds.push_back(mIds);
+                  lastIsCand = true;
+                }
+              } else {
+                lastIsCand = false;
+              }
+            }
+
+            // modify the range and split by cloning and modifying
+            // - Case when all mutants are not canditate: Delete the call instruction
+            if (fromsCandIds.size() == 0) {
+              calli->eraseFromParent();
+            } else { 
+              // - Case when at least one non candidate. make clones of call inst for other ranges
+              for (auto i = 0u; i < fromsCandIds.size() - 1; ++i) {
+                auto *clonei = llvm::dyn_cast<llvm::CallInst>(calli->clone());
+                clonei->insertBefore(calli);
+                clonei->setArgOperand(0, llvm::ConstantInt::get(clonei->getArgOperand(0)->getType(), fromsCandIds[i]));
+                clonei->setArgOperand(1, llvm::ConstantInt::get(clonei->getArgOperand(1)->getType(), tosCandIds[i]));
+              }
+              calli->setArgOperand(0, llvm::ConstantInt::get(calli->getArgOperand(0)->getType(), fromsCandIds[fromsCandIds.size() - 1]));
+              calli->setArgOperand(1, llvm::ConstantInt::get(calli->getArgOperand(1)->getType(), tosCandIds[tosCandIds.size() - 1]));
+            }
+              
+          }
+        } else if (auto *switchi = llvm::dyn_cast<llvm::SwitchInst>(Instp)) {
+          if (auto *ld = llvm::dyn_cast<llvm::LoadInst>(switchi->getCondition())) {
+            if (ld->getOperand(0) == ks_mutantIDSelectorGlobal) {
+              std::vector<llvm::ConstantInt *> noncand_cases;
+              for (llvm::SwitchInst::CaseIt i = switchi->case_begin(),
+                                            e = switchi->case_end();
+                   i != e; ++i) {
+                auto *mutIDConstInt = i.getCaseValue();
+                if (cand_mut_ids.count(mutIDConstInt->getZExtValue()) == 0)
+                  noncand_cases.push_back(mutIDConstInt);  // to be removed later
+              }
+              for (auto *caseval : noncand_cases) {
+                llvm::SwitchInst::CaseIt cit = switchi->findCaseValue(caseval);
+                switchi->removeCase(cit);
+              }
+            }
+          }
+        } 
+      } // For Inst ...
+    } // For BB ...
+  } // For Func ...
+}
+
 void Executor::ks_mutationPointBranching(ExecutionState &state, 
               std::vector<uint64_t> &mut_IDs) {
   TimerStatIncrementer timer(stats::forkTime);
@@ -4152,10 +4300,15 @@ inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const Executio
 // Do not check anymore
 // XXX this is checked befor KLEE executes the corresponding call instruction
 inline bool Executor::ks_isOutEnvCall (CallInst *ci, ExecutionState *state) {
-  static std::set<std::string> outEnvFuncs = {"printf", "vprintf" "puts", "putchar", "putc", "fprintf", "vfprintf", "fwrite", "fputs", "fputc", "perror", "assert"};
+  static std::set<std::string> outEnvFuncs = {"printf", "vprintf" "puts", "putchar", "putc", "fprintf", "vfprintf", "write", "fwrite", "fputs", "fputs_unlocked", "putchar_unlocked", "fputc", "fflush", "perror", "assert", "exit", "_exit", "syscall"};
   Function *f = ci->getCalledFunction();  //TODO: consider indirect, maybe getCalledValue is better
   // Out env must be declaration only
+  /*static std::set<std::string> tmpextern; //DBG*/
   if (f && f->isDeclaration() && f->getIntrinsicID() == Intrinsic::not_intrinsic) {
+    /*if (tmpextern.count(f->getName()) == 0) { //DBG
+      tmpextern.insert(f->getName());   //DBG
+      llvm::outs()<<"@@@"<<f->getName()<<"\n"; //DBG
+    }  //DBG*/
     if (outEnvFuncs.count(f->getName()))
       // XXX this if if not needed since outenv call must be declaration
       //if (state && state->ks_stackHasAnyFunctionOf(outEnvFuncs))
@@ -4177,7 +4330,7 @@ inline bool Executor::ks_nextIsOutEnv (ExecutionState &state) {
 }
 
 inline bool Executor::ks_reachedCheckMaxDepth(ExecutionState &state) {
-  if (semuMaxDepthWP && (state.depth > ks_maxDepthID * semuMaxDepthWP))
+  if (semuMaxDepthWP > 0 && (state.depth > ks_maxDepthID * semuMaxDepthWP))
     return true;
   return false;
 }
@@ -4499,12 +4652,13 @@ void Executor::ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id
   if (out_file_name.empty()) {
     mutantID2outfile[mutant_id] = out_file_name = 
            interpreterHandler->getOutputFilename(fnPrefix+std::to_string(mutant_id)+fnSuffix);
-    header.assign("MutantID,nSoftClauses,nMaxFeasibleDiffs,nMaxFeasibleEqs,Diff_Type,OrigState,WatchPointID\n");
+    header.assign("MutantID,nSoftClauses,nMaxFeasibleDiffs,nMaxFeasibleEqs,Diff_Type,OrigState,WatchPointID,MaxDepthID\n");
   }
 
   std::ofstream ofs(out_file_name, std::ofstream::out | std::ofstream::app); 
   if (ofs.is_open()) {
-    ofs << header << mutant_id << "," << nSoftClauses << "," << nMaxFeasibleDiffs << "," << nMaxFeasibleEqs << "," << sDiff << "," << origState << "," << ks_watchPointID << "\n";
+    ofs << header << mutant_id << "," << nSoftClauses << "," << nMaxFeasibleDiffs << "," << nMaxFeasibleEqs 
+        << "," << sDiff << "," << origState << "," << ks_watchPointID << "," << ks_maxDepthID <<"\n";
     ofs.close();
   } else {
     llvm::errs() << "Error: Unable to create info file: " << out_file_name 
@@ -4512,13 +4666,10 @@ void Executor::ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id
     assert(false);
     exit(1);
   }
-
-  
-
 }
 
 
-void Executor::ks_loadKQueryConstraints(ConstraintManager &outConstraints) {
+void Executor::ks_loadKQueryConstraints(std::vector<ConstraintManager> &outConstraintsList) {
   for (auto it=semuPrecondFiles.begin(), ie=semuPrecondFiles.end(); it != ie; ++it) {
     std::string kqFilename = *it;
     std::string ErrorStr;
@@ -4570,8 +4721,9 @@ void Executor::ks_loadKQueryConstraints(ConstraintManager &outConstraints) {
       if (expr::QueryCommand *QC = dyn_cast<expr::QueryCommand>(D))
       {
         ConstraintManager constraintM(QC->Constraints);
-        for (auto it=constraintM.begin(), ie=constraintM.end(); it != ie; ++it)
-          outConstraints.addConstraint(*it);
+        outConstraintsList.push_back(constraintM);
+        //for (auto it=constraintM.begin(), ie=constraintM.end(); it != ie; ++it)
+        //  outConstraints.addConstraint(*it);
       }
     }
     //Clean up - Cancelled because we will still use it

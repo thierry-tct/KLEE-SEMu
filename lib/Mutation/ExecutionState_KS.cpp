@@ -161,11 +161,13 @@ ExecutionState *ExecutionState::ks_branchMut() {
 
 
 // This function help to know whetehr the function that is returning is 
-// an entry point function (return 0 if 'main' and 1 if '__user_main') 
+// an entry point function (return 0 if 'main' and 1 if '__user_main' [which just returned and was removed from stack]) 
 // or not(return negative number)
 int ExecutionState::ks_checkRetFunctionEntry01NonEntryNeg() {
   if (stack.size() == 2)
-    return (stack.at(1).kf->function->getName() == "__uClibc_main")? 1: -1;
+    return (stack.at(1).kf->function->getName() == "__uClibc_main"
+            && prevPC->inst->getParent()->getParent()->getName() == "__user_main")
+            ? 1: -1;
   else
     return (! stack.back().caller)? 0: -1;
 }
