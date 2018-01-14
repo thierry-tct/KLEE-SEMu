@@ -26,13 +26,14 @@ def average(xarrlist, yarrlist):
 
 def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, percentage=True):
     plt.style.use('ggplot')
-    plt.figure(figsize=(16,9))
+    plt.figure(figsize=(10,6)) #(16,9)
     plt.plot(semuPair[0], semuPair[1], 'b-', linewidth=3.0, alpha=0.6, label='semu')
     plt.fill_between(semuPair[0], 0, semuPair[1], facecolor='blue', alpha=0.05)
     plt.plot(classPair[0], classPair[1], 'g-.', linewidth=3.0, alpha=0.6, label='classic')
     plt.fill_between(classPair[0], 0, classPair[1], facecolor='green', alpha=0.05)
-    plt.plot(randPair[0], randPair[1], 'r:', linewidth=3.0, alpha=0.6, label='random')
-    plt.fill_between(randPair[0], 0, randPair[1], facecolor='red', alpha=0.05)
+    if randPair[0] is not None and randPair[1] is not None:
+        plt.plot(randPair[0], randPair[1], 'r:', linewidth=3.0, alpha=0.6, label='random')
+        plt.fill_between(randPair[0], 0, randPair[1], facecolor='red', alpha=0.05)
     plt.plot(refPair[0], refPair[1], 'r--', color='gray', alpha=0.755555, linewidth=2.0, label='ground-truth')
     #plt.fill_between(semuPair[0], 0, semuPair[1], facecolor='gray', alpha=0.05)
     plt.legend(loc='upper center', ncol=1, fontsize='x-large')
@@ -51,7 +52,7 @@ def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, perc
 
 def hardnessPlot (xlist, ylist, figfilename=None):
     plt.style.use('ggplot')
-    plt.figure(figsize=(16,9))
+    plt.figure(figsize=(10,6)) #(16,9)
     plt.plot(xlist, ylist, '-', color='xkcd:dark', linewidth=3.0, alpha=0.5)
     plt.ylim(-0.06, 1)
     plt.xlabel("Selected Mutants percentage position")
@@ -117,7 +118,7 @@ GROUNDTRUTH_JSON = "groundtruth.json"
 
 RAND_REP = 100
 
-def libMain(jsonsdir):
+def libMain(jsonsdir, mutantInfoFile=None):
     semuData = loadJson(os.path.join(jsonsdir, SEMU_JSON))['Hardness']
     classicData = loadJson(os.path.join(jsonsdir, CLASSIC_JSON))['Hardness']
     groundtruthData = loadJson(os.path.join(jsonsdir, GROUNDTRUTH_JSON))['Hardness']
@@ -136,16 +137,20 @@ def libMain(jsonsdir):
     gtHardness = []
     groundtruthSelSize, groundtruthNHard = computePoints(groundtruthData, groundtruthData, refHardness=gtHardness)
 
-    randSelSizes = [None] * RAND_REP
-    randNHard = [None] * RAND_REP
-    mutsShuffled = []
-    print "Processing Semu and Random..."
-    for i in groundtruthData:
-        mutsShuffled += list(groundtruthData[i])
-    for r in range(RAND_REP):
-        random.shuffle(mutsShuffled)
-        randSelSizes[r], randNHard[r] = computePoints({float(pos)/len(mutsShuffled): set([mutsShuffled[pos]]) for pos in range(len(mutsShuffled))}, groundtruthData)
-    randSelSizes, randNHard = average(randSelSizes, randNHard)
+    if mutantInfoFile is not None:
+        randSelSizes = [None] * RAND_REP
+        randNHard = [None] * RAND_REP
+        mutsShuffled = [int(m) for m in loadJson(mutantInfoFile).keys()]
+        print "Processing Semu and Random..."
+        #for i in groundtruthData:
+        #    mutsShuffled += list(groundtruthData[i])
+        for r in range(RAND_REP):
+            random.shuffle(mutsShuffled)
+            randSelSizes[r], randNHard[r] = computePoints({float(pos)/len(mutsShuffled): set([mutsShuffled[pos]]) for pos in range(len(mutsShuffled))}, groundtruthData)
+        randSelSizes, randNHard = average(randSelSizes, randNHard)
+    else:
+        randSelSizes = None
+        randNHard = None
 
     print "Plotting ..."
     figDir = jsonsdir
@@ -157,9 +162,10 @@ def libMain(jsonsdir):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("jsonsdir", help="directory Containing both Json files")
+    parser.add_argument("--mutantsinfofile", type=str, default=None, help="Pass the mutant info fie so that random selection can be executed")
     args = parser.parse_args()
 
-    libMain(args.jsonsdir)
+    libMain(args.jsonsdir, mutantInfoFile=args.mutantsinfofile)
 #~ main()
 
 if __name__ == "__main__":

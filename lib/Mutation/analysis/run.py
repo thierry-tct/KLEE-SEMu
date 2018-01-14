@@ -22,6 +22,7 @@ import pandas as pd
 import matrixHardness
 import rankSemuMutants
 import analyse
+import ktest_tool
 
 OutFolder = "OUTPUT"
 KleeSemuBCSuff = ".MetaMu.bc"
@@ -30,6 +31,7 @@ WRAPPER_TEMPLATE = None
 SEMU_CONCOLIC_WRAPPER = "wrapper-call-semu-concolic.in"
 ZESTI_CONCOLIC_WRAPPER = "wrapper-call-zesti-concolic.in"
 MY_SCANF = None
+mutantInfoFile = "mutantsInfos.json"
 
 def error_exit(errstr):
     print "\nERROR: "+errstr+'\n'
@@ -75,6 +77,7 @@ def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, klee
     os.mkdir(semuworkdir)
     kleeZestiSemuInBC = os.path.basename(kleeZestiSemuInBCLink) 
     if mode == "zesti+symbex":
+        print "# Extracting tests Infos with ZESTI\n"
         cmd = "llvm-gcc -c -std=c89 -emit-llvm "+MY_SCANF+" -o "+MY_SCANF+".bc"
         ec = os.system(cmd)
         if ec != 0:
@@ -84,6 +87,7 @@ def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, klee
             error_exit("Error: failed to link myscanf and zesti bc. Returned "+str(ec))
         os.remove(MY_SCANF+".bc")
     else:
+        print "# Running SEMU Concretely\n"
         shutil.copy2(kleeZestiSemuInBCLink, os.path.join(semuworkdir, kleeZestiSemuInBC))
 
     # Install wrapper
@@ -138,28 +142,157 @@ def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, klee
     return test2outdirMap
 #~ def runZestiOrSemuTC()
 
-def getSymArgsFromKtests (pathCondFilesList, program='Expr'):
-    if program == 'Expr':
-        symArgs = "--sym-args 0 1 10 --sym-args 0 3 2 --sym-stdout"
-    else:
-        symArgs = "--sym-stdin 2"
-        symArgs += " --sym-args 0 1 10 --sym-args 0 2 2 --sym-files 1 8 --sym-stdout"
+'''
+    return a list representing the ordered list of argument 
+    where each argument is represented by a pair of argtype (argv or file or stdin and the corresponding size)
+'''
+def parseTextKtest(filename):
+    datalist = []
+    b = ktest_tool.KTest.fromfile(filename)
+    # get the object one ate the time and obtain its stuffs
+    seenFileStatsPos = set()
+    stdin = None
+    for i,(name,data) in enumerate(b.objects):
+        if i in seenFileStatsPos:
+            continue
+        if i == 0:
+            if name != "model_version":
+                error_exit("The first argument in the ktest must be 'model_version'")
+        else:
+            # File passed
+            if name in b.args:  # filename not in args, just verify that size is 0 (data is empty)
+                if len(data) > 0:
+                    error_exit ("object name in args but not a file")
+                # seach for its stat
+                found = False
+                for si,(sname,sdata) in enumerate(b.objects):
+                    if sname == name+"-stat":
+                        datalist.append(('FILE', len(sdata))) #XXX
+                        seenFileStatsPos.add(si)
+                        found = True
+                        break
+                if not found:
+                    error_exit("File is not having stat in ktest")
+            elif name == "stdin-stat": #case of stdin
+                stdin = ('STDIN', len(data)) #XXX 
+            else: #ARGV
+                datalist.append(('ARGV', len(data))) #XXX
+    if stdin is not None:
+        datalist.append(stdin)
+    return datalist
+#~ def parseTextKtest()
 
-    # TODO implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions
-    if False:
-        for pcfile in pathCondFilesList:
-            ktestfile = os.path.splitext(pcfile)[0] + '.ktest'
-            ktesttoolfile = ktestfile + '.ktesttool'
-            if os.system(" ".join(['ktest-tool --write-ints', ktestfile, ">", ktesttoolfile])) != 0:
-                error_exit ("Failed to create ktesttool file for ktest file '"+ktestfile+"'")
-            with open(ktesttoolfile) as fp:
-                # TODO Extrac klee test information
-                pass
-            
-            os.remove(ktesttoolfile)
-        
-        symArgs += '--sym-stdout'
-    return symArgs
+def bestFit(outMaxVals, outNonTaken, inVals):
+    assert len(inVals) <= len(outMaxVals)
+    if len(inVals) == 0:
+        return
+    for i in range(len(inVals)):
+        outMaxVals[i] = max(outMaxVals[i], inVals[i])
+    for i in range(len(inVals), len(outMaxVals)):
+        outNonTaken[i] = True
+#~ def bestFit()
+
+def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
+    #if program == 'Expr':
+    #    symArgs = "--sym-args 0 1 10 --sym-args 0 3 2 --sym-stdout"
+    #else:
+    #    symArgs = "--sym-stdin 2"
+    #    symArgs += " --sym-args 0 1 10 --sym-args 0 2 2 --sym-files 1 8 --sym-stdout"
+
+    # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions
+    listTestArgs = []
+    for pcfile in pathCondFilesList:
+        ktestfile = os.path.splitext(pcfile)[0] + '.ktest'
+        # XXX Zesti do not generate valid Ktest file when an argument is the empty string. Example tests 'basic_s18' of EXPR which is: expr "" "|" ""
+        # The reson is that when writing ktest file, klee want the name to be non empty thus it fail (I think). 
+        # Thus, we skip such tests here
+        if os.system(" ".join(['ktest-tool ', ktestfile, "> /dev/null 2>&1"])) != 0:
+            print "@WARNING: Skipping test because Zesti generated invalid KTEST file:", ktestfile
+            continue
+
+        # sed because Zesti give argv, argv_1... while sym args gives arg0, arg1,...
+        testArgs = parseTextKtest(ktestfile)
+        listTestArgs.append(testArgs)
+    if len(listTestArgs) <= 0:
+        print "Err: no ktest data, ktest PCs:", pathCondFilesList
+        error_exit ("No ktest data could be extracted from ktests.")
+
+    # Make a general form out of listTestArgs by inserting what is needed with size 0
+    # Make use of the sym-args param that can unset a param (klee care about param order)
+    # Split each test args according to the FILE type (STDIN is always last), as follow: ARGV ARGV FILE ARGV FILE ...
+    # then use -sym-args to flexibly set the number of enables argvs. First process the case before the first FILE, then between 1st and 2nd
+    commonArgs = []
+    while (True):
+        testsCurFilePos = [0 for i in range(len(listTestArgs))]
+        testsNumArgvs = [0 for i in range(len(listTestArgs))]
+        # Find the next non ARGV argument for all tests
+        for t in range(len(testsNumArgvs)):
+            nonargvfound = False
+            for a in range(testsCurFilePos[t], len(listTestArgs[t])):
+                if listTestArgs[t][a][0] != "ARGV":
+                    testsNumArgvs[t] = a - testsCurFilePos[t]
+                    nonargvfound = True
+                    break
+            if not nonargvfound:
+                testsNumArgvs[t] = len(listTestArgs[t]) - testsCurFilePos[t]
+        # Rank test by num of ARGV args at this point
+        indexes = range(len(testsNumArgvs))
+        indexes.sort(reverse=True, key=lambda x: testsNumArgvs[x])
+        maxArgNum = testsNumArgvs[indexes[0]]
+        maxlens = [0 for i in range(maxArgNum)]
+        canDisable = [False for i in range(maxArgNum)]
+        if maxArgNum > 0:
+            for tid in indexes:
+                if testsNumArgvs[tid] == maxArgNum:
+                    for pos,aid in enumerate(range(testsCurFilePos[tid], testsCurFilePos[tid] + testsNumArgvs[tid])):
+                        maxlens[pos] = max(maxlens[pos], listTestArgs[tid][aid][1])
+                else:
+                    # make the best fit on existing sizes
+                    bestFit(maxlens, canDisable, [listTestArgs[tid][aid][1] for aid in range(testsCurFilePos[tid], testsCurFilePos[tid] + testsNumArgvs[tid])]) 
+            for i in range(len(maxlens)):
+                if canDisable[i]:
+                    arg = " ".join(["-sym-args 0 1", str(maxlens[i])])
+                else:
+                    arg = " ".join(["-sym-arg", str(maxlens[i])])
+                # if previous is "-sym-args 0 <max-num> <size>" and arg is also "-sym-args 0 1 <size>", with same <size>, just update the previous
+                if len(commonArgs) > 0 and commonArgs[-1].startswith("-sym-args 0 ") and commonArgs[-1].endswith(" "+str(maxlens[i])):
+                    tmpsplit = commonArgs[-1].split(' ')
+                    assert len(tmpsplit) == 4
+                    tmpsplit[2] = str(int(tmpsplit[2]) + 1)
+                    commonArgs[-1] = " ".join(tmpsplit)
+                else:
+                    commonArgs.append(arg)
+
+            # Update
+            for t in range(len(testsNumArgvs)):
+                testsCurFilePos[t] += testsNumArgvs[t]
+
+        # Process non ARGV argument stdin or file argument
+        fileMaxSize = -1
+        stdinMaxSize = -1
+        for t in range(len(testsNumArgvs)):
+            # if the last arg was ARGV do nothing
+            if testsCurFilePos[t] >= len(listTestArgs[t]):
+                continue
+            # If next is FILE
+            if listTestArgs[t][testsCurFilePos[t]][0] == "FILE":
+                fileMaxSize = max(fileMaxSize, listTestArgs[t][testsCurFilePos[t]][0])
+                testsCurFilePos[t] += 1
+            # If nex is STDIN (last)
+            elif listTestArgs[t][testsCurFilePos[t]][0] == "STDIN":
+                stdinMaxSize = max(stdinMaxSize, listTestArgs[t][testsCurFilePos[t]][0])
+                #testsCurFilePos[t] += 1  # XXX Not needed since stdin is the last arg
+            else:
+                error_exit("unexpected arg type here: Neither FILE nor STDIN (type is "+listTestArgs[t][testsCurFilePos[t]][0]+")")
+        if fileMaxSize >= 0:
+            commonArgs.append(" ".join(["-sym-files 1", str(fileMaxSize)]))
+        else:
+            if stdinMaxSize >= 0:
+                commonArgs.append(" ".join(["-sym-stdin", str(stdinMaxSize)]))
+            break
+
+    commonArgs.append('--sym-stdout')
+    return commonArgs
 #~ getSymArgsFromKtests()
 
 # put information from concolic run for the passed test set into a temporary dir, then possibly
@@ -178,13 +311,16 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
             tcdir = test2semudirMap[tc]
             for pathcondfile in glob.glob(os.path.join(tcdir, "*.pc")):
                 symbexPreconditions.append(pathcondfile)
+                # In th parth condition file, replace argv with arg: XXX temporary, DBG
+                os.system(" ".join(["sed -i'' 's/argv_/arg/g; s/argv/arg0/g'", pathcondfile])) #DBG
         # use the collected preconditions and run semy in symbolic mode
         kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp -max-time=30000 -max-memory=9000 --max-solver-time=300"
         kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -watchdog -use-cex-cache"
         kleeArgs += " --output-dir="+tmpdir
         semuArgs = " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions]+["-semu-mutant-max-fork=4"])
-        symArgs = getSymArgsFromKtests (symbexPreconditions, program="Expr") #TODO : change program here
-        sretcode = os.system(" ".join(["klee-semu", kleeArgs, semuArgs, metaMutantBC, symArgs, "> /dev/null"]))
+        symArgs = getSymArgsFromKtests (symbexPreconditions) #, program="Expr") #TODO : change program here
+        #print "\nSYM ARGS:\n", symArgs,"\n\n"
+        sretcode = os.system(" ".join(["klee-semu", kleeArgs, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"]))
         if sretcode != 0 and sretcode != 256: # 256 for tieout
             error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
     else:
@@ -209,16 +345,16 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
     shutil.rmtree(tmpdir)
 #~ def processSemu()
 
-def analysis_plot(thisOut):
-    analyse.libMain(thisOut)
+def analysis_plot(thisOut, mutantInfoFile):
+    analyse.libMain(thisOut, mutantInfoFile)
 #~ def analysis_plot()
 
 
 def main():
     global WRAPPER_TEMPLATE 
     global MY_SCANF
-    #runMode = "zesti+symbex" #semuTC
-    runMode = "semuTC"
+    runMode = "zesti+symbex" #semuTC
+    #runMode = "semuTC"
     if runMode == "zesti+symbex":
         WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ZESTI_CONCOLIC_WRAPPER))
         MY_SCANF = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "FixScanfForShadow/my_scanf.c"))
@@ -297,7 +433,7 @@ def main():
 
         # Make final Analysis and plot
         if martOut is not None and matrix is not None:
-            analysis_plot(thisOut) 
+            analysis_plot(thisOut, os.path.join(martOut, mutantInfoFile)) 
 
 #~ def main()
 
