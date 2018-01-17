@@ -88,6 +88,15 @@ def TestsKilling(mutant, dataAll):
     return list(tests)
 #~ def TestsKilling()
 
+def getKillableMutants(matrixFile):
+    M = loadMatrix(matrixFile, None)
+    killablesMuts = []
+    for mid in  set(M) - {SM_index_string}:
+        if len(TestsKilling(mid, M)) > 0:
+            killablesMuts.append(mid)
+    return killablesMuts
+#~ def getKillableMutants()
+
 def computeHardness(matrixdata):
     outData = {'Relative-Equivalent': [], 'Hardness': {}}
     nTests = len(matrixdata[SM_index_string])

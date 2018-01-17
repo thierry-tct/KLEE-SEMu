@@ -525,6 +525,9 @@ private:
 
   unsigned long ks_watchPointID=0;
   unsigned long ks_maxDepthID=1;
+
+  enum KS_Mode {SEMU_MODE=0x0, TESTGEN_MODE=0x1};
+  KS_Mode ks_mode;
   
   // Partial Max Sat Solver
   // Make this with cache

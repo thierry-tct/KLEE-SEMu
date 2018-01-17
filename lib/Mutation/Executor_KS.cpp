@@ -127,7 +127,7 @@ cl::list<std::string> semuPrecondFiles("semu-precondition-file",
                                         cl::desc("precondition for bounded semu (use this many times for multiple files)"));
 
 // Optionally set the list of mutants to consider, the remaining will be removed from meta module
-cl::opt<std::string> semuCandidateMutantsFile("candidate-mutants-list-file", 
+cl::opt<std::string> semuCandidateMutantsFile("semu-candidate-mutants-list-file", 
                                         cl::init(""),
                                         cl::desc("File containing the subset  list of mutants to consider in the analysis"));
 
@@ -146,6 +146,11 @@ cl::opt<double> semuLoopBreakDelay("semu-loop-break-delay",
 cl::opt<unsigned> semuPreconditionLength("semu-precondition-length", 
                                  cl::init(6), 
                                  cl::desc("Set number of conditions that will be taken from the test cases path conditions and used are precondition"));
+
+// Use shadow test case generation for mutants ()
+cl::opt<bool> semuShadowTestGeneration("semu-test-gen", 
+                                          cl::init(false), 
+                                          cl::desc("Enable Test generation using the shadow SE based approach"));
 
 // Automatically set the arguments of the entry function symbolic
 cl::opt<bool> semuSetEntryFuncArgsSymbolic("semu-set-entyfunction-args-symbolic", 
@@ -441,6 +446,7 @@ const Module *Executor::setModule(llvm::Module *module,
   assert(!kmodule && module && "can only register one module"); // XXX gross
   
   // @KLEE-SEMu
+  ks_mode = semuShadowTestGeneration ? KS_Mode::TESTGEN_MODE: KS_Mode::SEMU_MODE;
   if (semuSetEntryFuncArgsSymbolic) {
     ks_entryFunction = module->getFunction(opts.EntryPoint);
     ks_setInitialSymbolics (*module, *ks_entryFunction);   

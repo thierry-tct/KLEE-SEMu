@@ -118,7 +118,7 @@ GROUNDTRUTH_JSON = "groundtruth.json"
 
 RAND_REP = 100
 
-def libMain(jsonsdir, mutantInfoFile=None):
+def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
     semuData = loadJson(os.path.join(jsonsdir, SEMU_JSON))['Hardness']
     classicData = loadJson(os.path.join(jsonsdir, CLASSIC_JSON))['Hardness']
     groundtruthData = loadJson(os.path.join(jsonsdir, GROUNDTRUTH_JSON))['Hardness']
@@ -137,10 +137,14 @@ def libMain(jsonsdir, mutantInfoFile=None):
     gtHardness = []
     groundtruthSelSize, groundtruthNHard = computePoints(groundtruthData, groundtruthData, refHardness=gtHardness)
 
+    mutsShuffled = None
     if mutantInfoFile is not None:
+        mutsShuffled = [int(m) for m in loadJson(mutantInfoFile).keys()]
+    if mutantListForRandom is not None:
+        mutsShuffled = list(mutantListForRandom)
+    if mutsShuffled is not None:
         randSelSizes = [None] * RAND_REP
         randNHard = [None] * RAND_REP
-        mutsShuffled = [int(m) for m in loadJson(mutantInfoFile).keys()]
         print "Processing Semu and Random..."
         #for i in groundtruthData:
         #    mutsShuffled += list(groundtruthData[i])
@@ -163,9 +167,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("jsonsdir", help="directory Containing both Json files")
     parser.add_argument("--mutantsinfofile", type=str, default=None, help="Pass the mutant info fie so that random selection can be executed")
+    parser.add_argument("--mutantlistforrandom", type=str, default=None, help="Pass the candidate mutants list so that random selection can be executed")
     args = parser.parse_args()
+    
+    candMutsList = None
+    if args.mutantlistforrandom is not None:
+        candMutsList = []
+        with open(args.mutantlistforrandom) as f:
+            for midstr in f:
+                if len(midstr.strip()) > 0:
+                    candMutsList.append(int(midstr.strip()))
 
-    libMain(args.jsonsdir, mutantInfoFile=args.mutantsinfofile)
+    libMain(args.jsonsdir, mutantListForRandom=candMutsList, mutantInfoFile=args.mutantsinfofile)
 #~ main()
 
 if __name__ == "__main__":

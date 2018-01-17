@@ -17,6 +17,7 @@ import shutil, glob
 import argparse
 import random
 import pandas as pd
+import struct
 
 # Other files
 import matrixHardness
@@ -143,6 +144,32 @@ def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, klee
 #~ def runZestiOrSemuTC()
 
 '''
+    serialize the ktest data(ktest_tool.KTest type) into a ktest file
+'''
+def ktestToFile(ktestData, outfilename):
+    with open(outfilename, "wb") as f:
+        f.write(b'KTEST')
+        f.write(struct.pack('>i', ktestData.version))
+        
+        f.write(struct.pack('>i', len(ktestData.args)))
+        for i in range(len(ktestData.args)):
+            f.write(struct.pack('>i', len(ktestData.args[i])))
+            f.write(ktestData.args[i].encode(encoding="ascii"))
+        
+        if ktestData.version > 2:
+            f.write(struct.pack('>i', ktestData.symArgvs))
+            f.write(struct.pack('>i', ktestData.symArgvLen))
+        
+        f.write(struct.pack('>i', len(ktestData.objects)))
+        for i in range(len(ktestData.objects)):
+            f.write(struct.pack('>i', len(ktestData.objects[i][0]))) #name length
+            f.write(ktestData.objects[i][0])
+            f.write(struct.pack('>i', len(ktestData.objects[i][1]))) #name length
+            f.write(ktestData.objects[i][1])
+    #print "Done ktest!"       
+#~ def ktestToFile()
+
+'''
     return a list representing the ordered list of argument 
     where each argument is represented by a pair of argtype (argv or file or stdin and the corresponding size)
 '''
@@ -152,17 +179,20 @@ def parseTextKtest(filename):
     # get the object one ate the time and obtain its stuffs
     seenFileStatsPos = set()
     stdin = None
+    model_version_pos = -1
     for i,(name,data) in enumerate(b.objects):
         if i in seenFileStatsPos:
             continue
         if i == 0:
             if name != "model_version":
                 error_exit("The first argument in the ktest must be 'model_version'")
+            else:
+                model_version_pos = i
         else:
             # File passed
             if name in b.args:  # filename not in args, just verify that size is 0 (data is empty)
                 if len(data) > 0:
-                    error_exit ("object name in args but not a file")
+                    error_exit ("object name in args but not a file: "+name) # beware of argument with value 'argv'
                 # seach for its stat
                 found = False
                 for si,(sname,sdata) in enumerate(b.objects):
@@ -179,17 +209,24 @@ def parseTextKtest(filename):
                 datalist.append(('ARGV', len(data))) #XXX
     if stdin is not None:
         datalist.append(stdin)
-    return datalist
+
+    # put 'model_version' last
+    assert model_version_pos >= 0, "'model_version' not found in ktest file: "+filename
+    b.objects.append(b.objects[model_version_pos])
+    del b.objects[model_version_pos]
+
+    return b, datalist
 #~ def parseTextKtest()
 
 def bestFit(outMaxVals, outNonTaken, inVals):
     assert len(inVals) <= len(outMaxVals)
-    if len(inVals) == 0:
-        return
+    enabledArgs = [True] * len(outMaxVals)
     for i in range(len(inVals)):
         outMaxVals[i] = max(outMaxVals[i], inVals[i])
     for i in range(len(inVals), len(outMaxVals)):
         outNonTaken[i] = True
+        enabledArgs[i] = False
+    return enabledArgs
 #~ def bestFit()
 
 def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
@@ -201,6 +238,7 @@ def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
 
     # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions
     listTestArgs = []
+    ktestContains = {"FILENAME":[], "KTEST-OBJ":[]}
     for pcfile in pathCondFilesList:
         ktestfile = os.path.splitext(pcfile)[0] + '.ktest'
         # XXX Zesti do not generate valid Ktest file when an argument is the empty string. Example tests 'basic_s18' of EXPR which is: expr "" "|" ""
@@ -211,8 +249,10 @@ def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
             continue
 
         # sed because Zesti give argv, argv_1... while sym args gives arg0, arg1,...
-        testArgs = parseTextKtest(ktestfile)
+        ktestdat, testArgs = parseTextKtest(ktestfile)
         listTestArgs.append(testArgs)
+        ktestContains["FILENAME"].append(ktestfile)
+        ktestContains["KTEST-OBJ"].append(ktestdat)
     if len(listTestArgs) <= 0:
         print "Err: no ktest data, ktest PCs:", pathCondFilesList
         error_exit ("No ktest data could be extracted from ktests.")
@@ -222,6 +262,7 @@ def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
     # Split each test args according to the FILE type (STDIN is always last), as follow: ARGV ARGV FILE ARGV FILE ...
     # then use -sym-args to flexibly set the number of enables argvs. First process the case before the first FILE, then between 1st and 2nd
     commonArgs = []
+    commonArgsNumPerTest = {t: [] for t in range(len(listTestArgs))}
     while (True):
         testsCurFilePos = [0 for i in range(len(listTestArgs))]
         testsNumArgvs = [0 for i in range(len(listTestArgs))]
@@ -242,13 +283,22 @@ def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
         maxlens = [0 for i in range(maxArgNum)]
         canDisable = [False for i in range(maxArgNum)]
         if maxArgNum > 0:
+            enabledArgs = {t: None for t in range(len(testsNumArgvs))}
             for tid in indexes:
                 if testsNumArgvs[tid] == maxArgNum:
                     for pos,aid in enumerate(range(testsCurFilePos[tid], testsCurFilePos[tid] + testsNumArgvs[tid])):
                         maxlens[pos] = max(maxlens[pos], listTestArgs[tid][aid][1])
+                    enabledArgs[tid] = [True] * maxArgNum
                 else:
                     # make the best fit on existing sizes
-                    bestFit(maxlens, canDisable, [listTestArgs[tid][aid][1] for aid in range(testsCurFilePos[tid], testsCurFilePos[tid] + testsNumArgvs[tid])]) 
+                    enabledArgs[tid] = bestFit(maxlens, canDisable, [listTestArgs[tid][aid][1] for aid in range(testsCurFilePos[tid], testsCurFilePos[tid] + testsNumArgvs[tid])]) 
+            
+            # File related argument not cared about
+            catchupS = len(commonArgs) - len(commonArgsNumPerTest[0])
+            if catchupS > 0:
+                for t in commonArgsNumPerTest:
+                    commonArgsNumPerTest[t] += [None] * catchupS
+
             for i in range(len(maxlens)):
                 if canDisable[i]:
                     arg = " ".join(["-sym-args 0 1", str(maxlens[i])])
@@ -260,8 +310,12 @@ def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
                     assert len(tmpsplit) == 4
                     tmpsplit[2] = str(int(tmpsplit[2]) + 1)
                     commonArgs[-1] = " ".join(tmpsplit)
+                    for t in commonArgsNumPerTest:
+                        commonArgsNumPerTest[t][-1] += int(enabledArgs[t][i])
                 else:
                     commonArgs.append(arg)
+                    for t in commonArgsNumPerTest:
+                        commonArgsNumPerTest[t].append(int(enabledArgs[t][i]))
 
             # Update
             for t in range(len(testsNumArgvs)):
@@ -292,12 +346,55 @@ def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
             break
 
     commonArgs.append('--sym-stdout')
+
+    # TODO: UPDATE KTEST CONTAINS WITH NEW ARGUMENT LIST AND INSERT THE "n_args" FOR '-sym-args'. ALSO PLACE 'model_version' AT THE END
+    # For each Test, Change ktestContains args, go through common args and compute the different "n_args" using 'listTestArgs'  and stdin stdout default.
+    # Then write out the new KTEST that will be used to generate tests for mutants.
+    
+    # XXX; The objects are ordered here in a way they the ARGV come firts, then we have files, and finally model_version
+    # File related argument not cared about
+    catchupS = len(commonArgs) - len(commonArgsNumPerTest[0])
+    if catchupS > 0:
+        for t in commonArgsNumPerTest:
+            commonArgsNumPerTest[t] += [None] * catchupS
+    for t in commonArgsNumPerTest:
+        objpos = 0
+        for apos in range(len(commonArgsNumPerTest[t])):
+            if commonArgs[apos].startswith("-sym-args "):
+                assert commonArgsNumPerTest[t][apos] is not None
+                if commonArgsNumPerTest[t][apos] > 0 and not ktestContains["KTEST-OBJ"][t].objects[objpos][0].startswith("argv"):
+                    print "\nCommonArgs:", commonArgs
+                    print "CommonArgsNumPerTest:", commonArgsNumPerTest[t]
+                    print "Args:", ktestContains["KTEST-OBJ"][t].args[1:]
+                    print "Objects:", ktestContains["KTEST-OBJ"][t].objects
+                    error_exit("must be argv, but found: "+ktestContains["KTEST-OBJ"][t].objects[objpos][0])  # the name must be argv...
+
+                # Insert n_args
+                ktestContains["KTEST-OBJ"][t].objects.insert(objpos, ("n_args", str(commonArgsNumPerTest[t][apos])))       
+                objpos += 1 #pass just added 'n_args'
+
+                if commonArgsNumPerTest[t][apos] > 0: #Else no object for this, no need to advance this (will be done bellow)
+                    objpos += commonArgsNumPerTest[t][apos]
+            elif commonArgsNumPerTest[t][apos] is not None:  # is an ARGV non file
+                if not ktestContains["KTEST-OBJ"][t].objects[objpos][0].startswith("argv"):
+                    print "\nCommonArgs:", commonArgs
+                    print "CommonArgsNumPerTest:", commonArgsNumPerTest[t]
+                    print "Args:", ktestContains["KTEST-OBJ"][t].args[1:]
+                    print "Objects:", ktestContains["KTEST-OBJ"][t].objects
+                    error_exit("must be argv, but found: "+ktestContains["KTEST-OBJ"][t].objects[objpos][0])  # the name must be argv...
+                objpos += 1
+
+    # Write the new ktest files
+    for i in range(len(ktestContains["FILENAME"])):
+        shutil.move(ktestContains["FILENAME"][i], ktestContains["FILENAME"][i]+".bak")
+        ktestToFile(ktestContains["KTEST-OBJ"][i], ktestContains["FILENAME"][i])
+
     return commonArgs
 #~ getSymArgsFromKtests()
 
 # put information from concolic run for the passed test set into a temporary dir, then possibly
 # Compute SEMU symbex and rank according to SEMU. outpout in outFilePath
-def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, mode="zesti+symbex"):
+def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, candidateMutantsFile,  mode="zesti+symbex"):
     outFilePath = os.path.join(thisOutDir, outname)
     tmpdir = semuworkdir+".tmp"
     #assert not os.path.isdir(tmpdir), "For Semu temporary dir already exists: "+tmpdir
@@ -318,8 +415,11 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
         kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -watchdog -use-cex-cache"
         kleeArgs += " --output-dir="+tmpdir
         semuArgs = " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions]+["-semu-mutant-max-fork=4"])
+        if candidateMutantsFile is not None:
+            semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
         symArgs = getSymArgsFromKtests (symbexPreconditions) #, program="Expr") #TODO : change program here
-        #print "\nSYM ARGS:\n", symArgs,"\n\n"
+        print "\nSYM ARGS:\n", symArgs,"\n\n"
+        exit(1)
         sretcode = os.system(" ".join(["klee-semu", kleeArgs, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"]))
         if sretcode != 0 and sretcode != 256: # 256 for tieout
             error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
@@ -345,8 +445,8 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
     shutil.rmtree(tmpdir)
 #~ def processSemu()
 
-def analysis_plot(thisOut, mutantInfoFile):
-    analyse.libMain(thisOut, mutantInfoFile)
+def analysis_plot(thisOut, groundKilledMutants):
+    analyse.libMain(thisOut, mutantListForRandom=groundKilledMutants)
 #~ def analysis_plot()
 
 
@@ -398,6 +498,15 @@ def main():
     testSamples, alltests, unwrapped_testlist = getTestSamples(testList, testSamplePercent, matrix) 
     dumpJson([testSamples, alltests, unwrapped_testlist], os.path.join(cacheDir, "testsamples.json"))
 
+    candidateMutantsFile = None
+    groundKilledMutants = None
+    if matrix is not None:
+        groundKilledMutants = matrixHardness.getKillableMutants(matrix) 
+        candidateMutantsFile = os.path.join(cacheDir, "candidateMutants.list")
+        with open(candidateMutantsFile, "w") as f:
+            for mid in groundKilledMutants:
+                f.write(str(mid)+"\n")
+
     # get Semu for all tests
     if martOut is not None:
         print "# Running Semu..."
@@ -429,11 +538,11 @@ def main():
 
         # process for SEMU
         if martOut is not None:
-            processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut, kleeSemuInBCLink, mode=runMode) 
+            processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut, kleeSemuInBCLink, candidateMutantsFile, mode=runMode) 
 
         # Make final Analysis and plot
         if martOut is not None and matrix is not None:
-            analysis_plot(thisOut, os.path.join(martOut, mutantInfoFile)) 
+            analysis_plot(thisOut, groundKilledMutants) 
 
 #~ def main()
 
