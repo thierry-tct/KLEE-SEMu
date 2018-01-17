@@ -418,8 +418,8 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
         if candidateMutantsFile is not None:
             semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
         symArgs = getSymArgsFromKtests (symbexPreconditions) #, program="Expr") #TODO : change program here
-        print "\nSYM ARGS:\n", symArgs,"\n\n"
-        exit(1)
+        #print "\nSYM ARGS:\n", symArgs,"\n\n"  #DBG
+        #exit(1)  #DBG
         sretcode = os.system(" ".join(["klee-semu", kleeArgs, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"]))
         if sretcode != 0 and sretcode != 256: # 256 for tieout
             error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
