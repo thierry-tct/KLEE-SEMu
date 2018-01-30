@@ -144,6 +144,9 @@ ExecutionState::ExecutionState(const ExecutionState& state):
 }
 
 // @KLEE-SEMu
+ExecutionState::KS_Mode ExecutionState::ks_mode = ExecutionState::KS_Mode::SEMU_MODE;
+
+// Generate mutant state from Original
 ExecutionState *ExecutionState::ks_branchMut() {
   // Do not increase depth since this is not KLEE's normal fork
   // control mutant state explosion
@@ -416,16 +419,31 @@ ExecutionState *ExecutionState::branch() {
   
   // @KLEE-SEMu
   if (ks_mutantID == 0) {
-    assert(ks_curBranchTreeNode->lchild == 0 && ks_curBranchTreeNode->rchild == 0 && ks_curBranchTreeNode->exState == this && "Left child and right child should be NULL here");
-    ks_curBranchTreeNode->lchild = new KS_OrigBranchTreeNode(ks_curBranchTreeNode, ks_curBranchTreeNode->exState);
-    ks_curBranchTreeNode->rchild = new KS_OrigBranchTreeNode(ks_curBranchTreeNode, falseState);
-    falseState->ks_curBranchTreeNode = ks_curBranchTreeNode->rchild;
-    ks_curBranchTreeNode->exState = nullptr;
-    ks_curBranchTreeNode = ks_curBranchTreeNode->lchild;
-    
-    falseState->ks_VisitedMutPointsSet = ks_VisitedMutPointsSet;    //when branching original, copy this so that children no that what was already mutated
+    if (ks_getMode() == KS_Mode::SEMU_MODE) {
+      assert(ks_curBranchTreeNode->lchild == 0 && ks_curBranchTreeNode->rchild == 0 && ks_curBranchTreeNode->exState == this && "Left child and right child should be NULL here");
+      ks_curBranchTreeNode->lchild = new KS_OrigBranchTreeNode(ks_curBranchTreeNode, ks_curBranchTreeNode->exState);
+      ks_curBranchTreeNode->rchild = new KS_OrigBranchTreeNode(ks_curBranchTreeNode, falseState);
+      falseState->ks_curBranchTreeNode = ks_curBranchTreeNode->rchild;
+      ks_curBranchTreeNode->exState = nullptr;
+      ks_curBranchTreeNode = ks_curBranchTreeNode->lchild;
+      
+      //when branching original, copy this so that children know that what was already mutated
+      falseState->ks_VisitedMutPointsSet = ks_VisitedMutPointsSet;    
+    } else {
+      // KS_Mode::TESTGEN_MODE
+      // just add falseState to children so that we can do 4 way fork with mutants
+      ks_childrenStates.insert(falseState);
+    }
   } else {
-    ks_childrenStates.insert(falseState);
+    if (ks_getMode() == KS_Mode::SEMU_MODE) {
+      ks_childrenStates.insert(falseState);
+    } else {
+      // KS_Mode::TESTGEN_MODE
+      falseState->isTestGenMutSeeding = isTestGenMutSeeding;
+      // if not seeding no need t add child, since normal symbex of the mutant
+      if (isTestGenMutSeeding)
+        ks_childrenStates.insert(falseState);
+    }
   }
   //~KS
 

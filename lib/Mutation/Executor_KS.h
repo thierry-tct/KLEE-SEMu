@@ -521,14 +521,11 @@ private:
   
   //Use to decide to skip watch point (to avoid infinite loop): 
   // true <=> watch the point, false <=> do not watch the point (TODO: temporary)
-  bool ks_watchpoint;
+  //bool ks_watchpoint;
 
   unsigned long ks_watchPointID=0;
   unsigned long ks_maxDepthID=1;
 
-  enum KS_Mode {SEMU_MODE=0x0, TESTGEN_MODE=0x1};
-  KS_Mode ks_mode;
-  
   // Partial Max Sat Solver
   // Make this with cache
   ks::PartialMaxSATSolver pmaxsat_solver;
@@ -543,6 +540,12 @@ public:
   
   bool ks_nextIsOutEnv (ExecutionState &state);
   bool ks_reachedCheckMaxDepth(ExecutionState &state);
+
+  // Check whether we the last instruction forked - in seed Mode Test Generation (TG)
+  bool ks_hasJustForkedTG (ExecutionState &state, KInstruction *ki);
+
+  // make shadow's four way fork to execute the mutants with bounded symbex (for TG)
+  void ks_fourWayForksTG();
 
   // Test wheather we reached the point to compare the states
   bool ks_watchPointReached (ExecutionState &state, KInstruction *ki);
@@ -579,6 +582,10 @@ public:
                                 ExecutionState const *origState);  
 
   void ks_loadKQueryConstraints(std::vector<ConstraintManager> &outConstraintsList);
+
+  inline void ks_CheckAndBreakInfinitLoop(ExecutionState &curState, ExecutionState *&prevState, double &initTime);
+
+  inline bool ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size);
 
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS

@@ -120,7 +120,7 @@ using namespace klee;
 
 
 
-// @KLEE_SEMu
+// @KLEE-SEMu
 namespace {
 // Optional file containing the precondition of symbolic execution, maybe extracted from existing test using Zesti
 cl::list<std::string> semuPrecondFiles("semu-precondition-file", 
@@ -446,7 +446,7 @@ const Module *Executor::setModule(llvm::Module *module,
   assert(!kmodule && module && "can only register one module"); // XXX gross
   
   // @KLEE-SEMu
-  ks_mode = semuShadowTestGeneration ? KS_Mode::TESTGEN_MODE: KS_Mode::SEMU_MODE;
+  ExecutionState::ks_setMode(semuShadowTestGeneration ? ExecutionState::KS_Mode::TESTGEN_MODE: ExecutionState::KS_Mode::SEMU_MODE);
   if (semuSetEntryFuncArgsSymbolic) {
     ks_entryFunction = module->getFunction(opts.EntryPoint);
     ks_setInitialSymbolics (*module, *ks_entryFunction);   
@@ -2801,6 +2801,18 @@ void Executor::checkMemoryUsage() {
 }
 
 void Executor::doDumpStates() {
+  // @KLEE-SEMu
+  if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+    // In case there was timeout, compare the states that already reached watchpoint
+    std::vector<ExecutionState *> remainWPStates;
+    ks_watchPointID++;
+    ks_compareStates(remainWPStates); // TODO TODO: modify comparestates to take account of the fact that some states may not have reached the watchpoint
+    for (auto *s: remainWPStates)
+      terminateState (*s);
+    return; // do not do the real dumpStates
+  }
+  //~KS
+
   if (!DumpStatesOnHalt || states.empty())
     return;
   klee_message("halting execution, dumping remaining states");
@@ -2823,6 +2835,41 @@ void Executor::run(ExecutionState &initialState) {
 
   states.insert(&initialState);
 
+  // @KLEE-SEMu         //Temporary TODO
+  if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+    // Must not be only seed mode XXX: need to check this, but should be okay
+    //if (OnlySeed)
+    //  klee_error("SEMU@ERROR: OnlySeed must not be enabled in SEMU mode");
+
+    ks_watchPointID = 0;
+    ks_maxDepthID = 1;
+    
+    // In SEMU mode set optional user specified precondition, before any seeding
+    // Precondition (bounded) symb ex for scalability, existing TC precond
+    // XXX: in case want to specify precondition instead of using seeds
+    std::vector<ConstraintManager> symbexPreconditionsList;
+    ks_loadKQueryConstraints(symbexPreconditionsList);
+    // Make precondition Expression
+    unsigned nSelectedConds = semuPreconditionLength;
+    ref<Expr> mergedPrecond = ConstantExpr::alloc(0, Expr::Bool);  //False
+    for (auto &testcasePC: symbexPreconditionsList) {
+      ref<Expr> tcPCCond = ConstantExpr::alloc(1, Expr::Bool); //True
+      unsigned condcount = 0;
+      for (auto cit=testcasePC.begin(); cit != testcasePC.end();++cit) {
+        if (condcount++ >= nSelectedConds)
+          break;
+        tcPCCond = AndExpr::create(tcPCCond, *cit);
+      }
+      mergedPrecond = OrExpr::create(mergedPrecond, tcPCCond);
+    }
+    // add precondition  
+    for (auto *as: states) {
+      as->constraints.addConstraint(mergedPrecond);
+        //(mergedPrecond)->dump();
+    }
+  }
+  //~KS
+
   if (usingSeeds) {
     std::vector<SeedInfo> &v = seedMap[&initialState];
     
@@ -2833,6 +2880,13 @@ void Executor::run(ExecutionState &initialState) {
     int lastNumSeeds = usingSeeds->size()+10;
     double lastTime, startTime = lastTime = util::getWallTime();
     ExecutionState *lastState = 0;
+
+    // @KLEE-SEMu         //Temporary TODO
+    //ks_watchpoint = true;
+    double ks_initTime = util::getWallTime();
+    ExecutionState *ks_prevState = nullptr;  
+    //~KS
+
     while (!seedMap.empty()) {
       if (haltExecution) {
         doDumpStates();
@@ -2847,10 +2901,37 @@ void Executor::run(ExecutionState &initialState) {
       unsigned numSeeds = it->second.size();
       ExecutionState &state = *lastState;
       KInstruction *ki = state.pc;
+
+      // @KLEE-SEMu
+      //Size before executing instruction (help to know whether the state was terminated)
+      unsigned ks_terminatedPrevSize = ks_terminatedBeforeWP.size();
+      
+      if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+        // remove from seedMap the last state if depth exceeded the precondition length
+        if (state.depth >= semuPreconditionLength) {
+          seedMap.erase(it);
+          continue;
+        }
+
+      //Handle infinite loop, TODO: Check whether it fits the search strategy of seedMap (next elem) 
+  //#ifdef SEMU_INFINITE_LOOP_BREAK
+        ks_CheckAndBreakInfinitLoop(state, ks_prevState, ks_initTime);
+  //#endif
+      }
+      //~KS
+
       stepInstruction(state);
 
       executeInstruction(state, ki);
       processTimers(&state, MaxInstructionTime * numSeeds);
+
+      // @KLEE-SEMu
+      if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+        if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize))
+          continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
+      }
+      //~KS
+
       updateStates(&state);
 
       if ((stats::instructions % 1000) == 0) {
@@ -2898,35 +2979,9 @@ void Executor::run(ExecutionState &initialState) {
   searcher->update(0, newStates, std::vector<ExecutionState *>());
   
   // @KLEE-SEMu         //Temporary TODO
-  ks_watchpoint = true;
-
+  //ks_watchpoint = true;
   double ks_initTime = util::getWallTime();
   ExecutionState *ks_prevState = nullptr;  
-  ks_watchPointID = 0;
-  ks_maxDepthID = 1;
-  
-  // Precondition (bounded) symb ex for scalability, existing TC precond
-  // TODO FIXME: merge multiple conditions from different tests properly
-  std::vector<ConstraintManager> symbexPreconditionsList;
-  ks_loadKQueryConstraints(symbexPreconditionsList);
-  // Make precondition Expression
-  unsigned nSelectedConds = semuPreconditionLength;
-  ref<Expr> mergedPrecond = ConstantExpr::alloc(0, Expr::Bool);  //False
-  for (auto &testcasePC: symbexPreconditionsList) {
-    ref<Expr> tcPCCond = ConstantExpr::alloc(1, Expr::Bool); //True
-    unsigned condcount = 0;
-    for (auto cit=testcasePC.begin(); cit != testcasePC.end();++cit) {
-      if (condcount++ >= nSelectedConds)
-        break;
-      tcPCCond = AndExpr::create(tcPCCond, *cit);
-    }
-    mergedPrecond = OrExpr::create(mergedPrecond, tcPCCond);
-  }
-  // add precondition  
-  for (auto *as: states) {
-    as->constraints.addConstraint(mergedPrecond);
-      //(mergedPrecond)->dump();
-  }
   //~KS
   
   while (!states.empty() && !haltExecution) {
@@ -2939,16 +2994,8 @@ void Executor::run(ExecutionState &initialState) {
     
     //Handle infinite loop, This requires BFS search strategy XXX
 //#ifdef SEMU_INFINITE_LOOP_BREAK
-    if(state.ks_mutantID > 0) {   //TODO: how about when we reach watch point
-      if (ks_prevState != &state) {
-        ks_prevState = &state;
-        ks_initTime = util::getWallTime();
-      } else if (semuLoopBreakDelay < util::getWallTime() - ks_initTime) {
-        klee_message((std::string("SEMU@WARNING: Loop Break Delay reached for mutant ")+std::to_string(state.ks_mutantID)).c_str());
-        terminateStateEarly(state, "infinite loop"); //Terminate mutant
-        // XXX Will be removed from searcher and processed bellow
-        //continue;
-      }
+    if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+      ks_CheckAndBreakInfinitLoop(state, ks_prevState, ks_initTime);
     }
 //#endif
     //~KS
@@ -2961,63 +3008,9 @@ void Executor::run(ExecutionState &initialState) {
     checkMemoryUsage();
 
     // @KLEE-SEMu
-    // // FIXME: We just checked memory and some states will be killed if exeeded and we will have some problem in comparison
-    // // FIXME: For now we assume that the memory limitmust not be exceeded, need to find a way to handle this later
-    if (atMemoryLimit) {
-      klee_error("SEMU@ERROR: Must not reach memory limit and kill states. increase memory limit or restrict symbex");
-      exit(1);
-    }
-
-    bool ks_terminated = (ks_terminatedPrevSize < ks_terminatedBeforeWP.size());
-    bool ks_OutEnvReached = ks_nextIsOutEnv (state);
-    bool ks_WPReached = ks_watchPointReached (state, ki);
-    if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&state) == 1)
-      //remove from searcher
-      searcher->update(&state, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&state}));
-      
-      if (! ks_terminated) {
-        //add to ks_reachedWatchPoint if so
-        if (ks_OutEnvReached)
-          ks_reachedOutEnv.insert(&state);
-        else // ! ks_OutEnvReached and ks_WPReached
-          ks_reachedWatchPoint.insert(&state);
-      } 
-      
-      //Check if all reached and compare states
-      if (ks_reachedOutEnv.size() + 
-          ks_reachedWatchPoint.size() + 
-          ks_terminatedBeforeWP.size() >= states.size()) {   //Temporary solution here(assumed that all states reach that point). TODO
-        std::vector<ExecutionState *> remainWPStates;
-        ks_watchPointID++;
-        llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() << " States.\n";
-        bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
-        ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/);
-        llvm::errs() << "# SEMU@Status: State Comparison Done!\n";
-        
-        //continue the execution
-        addedStates.insert(addedStates.end(), remainWPStates.begin(), remainWPStates.end());
-        
-        // If outenv is empty, it means that every state reached checkpoint,
-        // We can then termintate crash states and clear the term and WP sets
-        if (!ks_hasOutEnv) {
-          for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
-                ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
-            terminateState (**it);
-          }
-          ks_terminatedBeforeWP.clear();
-          ks_maxDepthID++;
-        } else { // there should be no terminated state
-          if (ks_reachedOutEnv.size() != remainWPStates.size()) {
-            klee_error("SEMU@ERROR: BUG, state reaching outenv different after comparestates");
-            exit(1);
-          }
-          ks_reachedOutEnv.clear();
-        }
-
-        updateStates(0);
-      }
-      
-      continue;
+    if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+      if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize))
+        continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
     }
     //~KS
 
@@ -3027,15 +3020,6 @@ void Executor::run(ExecutionState &initialState) {
   delete searcher;
   searcher = 0;
   
-  // @KLEE_SEMu
-  // In case there was timeout, compare the states that already reached watchpoint
-  std::vector<ExecutionState *> remainWPStates;
-  ks_watchPointID++;
-  ks_compareStates(remainWPStates); // TODO TODO: modify comparestates to take account of the fact that some states may not have reached the watchpoint
-  for (auto *s: remainWPStates)
-    terminateState (*s);
-  if(false) // do not dumpSates
-  //~KS
   doDumpStates();
 }
 
@@ -3118,31 +3102,44 @@ void Executor::terminateState(ExecutionState &state) {
 void Executor::terminateStateEarly(ExecutionState &state, 
                                    const Twine &message) {
   // @KLEE-SEMu
-  if (false) //~KS
+  if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+    ks_terminatedBeforeWP.insert(&state);
+    return;
+  }
+  if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::TESTGEN_MODE) {
+    // Do not generate test for seeding mutant, the original will have it
+    if (state.ks_mutantID > 0 && state.isTestGenMutSeeding) {
+      terminateState(state);
+      return;
+    }
+  }
+  //~KS
+
   if (!OnlyOutputStatesCoveringNew || state.coveredNew ||
       (AlwaysOutputSeeds && seedMap.count(&state)))
     interpreterHandler->processTestCase(state, (message + "\n").str().c_str(),
                                         "early");
-  
-  // @KLEE-SEMu
-  ks_terminatedBeforeWP.insert(&state);
-  return;
-  //~KS
   
   terminateState(state);
 }
 
 void Executor::terminateStateOnExit(ExecutionState &state) {
   // @KLEE-SEMu
-  if (false) //~KS
+  if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+    ks_terminatedBeforeWP.insert(&state);
+    return;
+  }
+  if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::TESTGEN_MODE) {
+    // Do not generate test for seeding mutant, the original will have it
+    if (state.ks_mutantID > 0 && state.isTestGenMutSeeding) {
+      terminateState(state);
+      return;
+    }
+  }
+  //~KS
   if (!OnlyOutputStatesCoveringNew || state.coveredNew || 
       (AlwaysOutputSeeds && seedMap.count(&state)))
     interpreterHandler->processTestCase(state, 0, 0);
-  
-  // @KLEE-SEMu
-  ks_terminatedBeforeWP.insert(&state);
-  return;
-  //~KS
   
   terminateState(state);
 }
@@ -3244,14 +3241,20 @@ void Executor::terminateStateOnError(ExecutionState &state,
     }
 
     // @KLEE-SEMu
-    if (false) //~KS
-    interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
+    if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) 
+      ; //do nothing
+    else // process test case only for original or bounded symbex mutants in test gen mode
+      if (!(ExecutionState::ks_getMode() == ExecutionState::KS_Mode::TESTGEN_MODE && state.ks_mutantID > 0 && state.isTestGenMutSeeding)) 
+    //~KS
+        interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
   }
   
   // @KLEE-SEMu
-  if (!shouldExitOn(termReason)) {
-    ks_terminatedBeforeWP.insert(&state);
-    return;
+  if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+    if (!shouldExitOn(termReason)) {
+      ks_terminatedBeforeWP.insert(&state);
+      return;
+    }
   }
   //~KS
     
@@ -4261,6 +4264,11 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
       ns->ks_mutantID = *it;
       
       ns->ks_originalMutSisterStates = state.ks_curBranchTreeNode;
+
+      // On test generation mode, the newly seen mutant is shadowing original
+      // Thus is in seed mode
+      if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::TESTGEN_MODE)
+        ns->isTestGenMutSeeding = true;
     }
   }
 }
@@ -4482,7 +4490,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       auto *topParent = cands->ks_originalMutSisterStates;
       while (topParent->parent != nullptr)
         topParent = topParent->parent;
-      topParent->cleanTerminatedOriginals(ks_terminatedBeforeWP);
+      topParent->ks_cleanTerminatedOriginals(ks_terminatedBeforeWP);
     }
   }
 
@@ -4740,11 +4748,105 @@ void Executor::ks_loadKQueryConstraints(std::vector<ConstraintManager> &outConst
   }
 }
 
+/**
+ * In Test Generation (TG) mode, check whether the last instruction lead to fork or branch
+ **/
+bool Executor::ks_hasJustForkedTG (ExecutionState &state, KInstruction *ki) {
+  if (!state.ks_childrenStates.empty()) {
+    return true;
+  }
+  return false;
+}
+
+void Executor::ks_fourWayForksTG() {
+  // TODO implement this
+  // TODO XXX Clear the ks_childrenStates of every state
+}
+
+
+/// Avoid infinite loop mutant to run indefinitely: simple fix
+inline void Executor::ks_CheckAndBreakInfinitLoop(ExecutionState &curState, ExecutionState *&prevState, double &initTime) {
+  if(curState.ks_mutantID > 0) {   //TODO: how about when we reach watch point
+    if (prevState != &curState) {
+      prevState = &curState;
+      initTime = util::getWallTime();
+    } else if (semuLoopBreakDelay < util::getWallTime() - initTime) {
+      klee_message((std::string("SEMU@WARNING: Loop Break Delay reached for mutant ")+std::to_string(curState.ks_mutantID)).c_str());
+      terminateStateEarly(curState, "infinite loop"); //Terminate mutant
+      // XXX Will be removed from searcher and processed bellow
+      //continue;
+    }
+  }
+}
+
+/// Return true if the check actually happened, false otherwise
+inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size) {
+  // // FIXME: We just checked memory and some states will be killed if exeeded and we will have some problem in comparison
+  // // FIXME: For now we assume that the memory limitmust not be exceeded, need to find a way to handle this later
+  if (atMemoryLimit) {
+    klee_error("SEMU@ERROR: Must not reach memory limit and kill states. increase memory limit or restrict symbex");
+    exit(1);
+  }
+
+  bool ks_terminated = (terminated_prev_size < ks_terminatedBeforeWP.size());
+  bool ks_OutEnvReached = ks_nextIsOutEnv (curState);
+  bool ks_WPReached = ks_watchPointReached (curState, ki);
+  if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
+    //remove from searcher
+    searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
+    
+    if (! ks_terminated) {
+      //add to ks_reachedWatchPoint if so
+      if (ks_OutEnvReached)
+        ks_reachedOutEnv.insert(&curState);
+      else // ! ks_OutEnvReached and ks_WPReached
+        ks_reachedWatchPoint.insert(&curState);
+    } 
+    
+    //Check if all reached and compare states
+    if (ks_reachedOutEnv.size() + 
+        ks_reachedWatchPoint.size() + 
+        ks_terminatedBeforeWP.size() >= states.size()) {   //Temporary solution here(assumed that all states reach that point). TODO
+      std::vector<ExecutionState *> remainWPStates;
+      ks_watchPointID++;
+      llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() << " States.\n";
+      bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
+      ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/);
+      llvm::errs() << "# SEMU@Status: State Comparison Done!\n";
+      
+      //continue the execution
+      addedStates.insert(addedStates.end(), remainWPStates.begin(), remainWPStates.end());
+      
+      // If outenv is empty, it means that every state reached checkpoint,
+      // We can then termintate crash states and clear the term and WP sets
+      if (!ks_hasOutEnv) {
+        for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
+              ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
+          terminateState (**it);
+        }
+        ks_terminatedBeforeWP.clear();
+        ks_maxDepthID++;
+      } else { // there should be no terminated state
+        if (ks_reachedOutEnv.size() != remainWPStates.size()) {
+          klee_error("SEMU@ERROR: BUG, state reaching outenv different after comparestates");
+          exit(1);
+        }
+        ks_reachedOutEnv.clear();
+      }
+
+      updateStates(0);
+    }
+    
+    return true;
+  }
+  return false;
+}
+
 /**/
 // This function is called when running Under Const
 bool Executor::ks_lazyInitialize (ExecutionState &state, KInstruction *ki) {
-  
-  return true;
+
+return true;
 }
 
 //~KS
@@ -4752,6 +4854,6 @@ bool Executor::ks_lazyInitialize (ExecutionState &state, KInstruction *ki) {
 ///
 
 Interpreter *Interpreter::create(const InterpreterOptions &opts,
-                                 InterpreterHandler *ih) {
-  return new Executor(opts, ih);
+                           InterpreterHandler *ih) {
+return new Executor(opts, ih);
 }

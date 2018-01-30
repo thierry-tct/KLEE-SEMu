@@ -73,6 +73,8 @@ public:
   
 // @KLEE-SEMu Fields KS
 public:
+  enum KS_Mode {SEMU_MODE=0x0, TESTGEN_MODE=0x1};
+
   typedef unsigned KS_MutantIDType;
   
   enum KS_StateDiff_t {ksNO_DIFF=0x00, ksVARS_DIFF=0x01, ksRETCODE_DIFF_OTHERFUNC=0x02, ksRETCODE_DIFF_ENTRYFUNC=0x04, ksRETCODE_DIFF_MAINFUNC=0x08, ksOUTENV_DIFF=0x10, ksSYMBOLICS_DIFF=0x20, ksPC_DIFF=0x40, ksFAILURE_BUG=0x80/*A bug in program*/};
@@ -114,7 +116,7 @@ public:
       }
     }
     // TODO: implements this and call it. return true if fine (not terminated)
-    bool cleanTerminatedOriginals(llvm::SmallPtrSet<ExecutionState *, 5> const &ks_terminatedBeforeWP) {
+    bool ks_cleanTerminatedOriginals(llvm::SmallPtrSet<ExecutionState *, 5> const &ks_terminatedBeforeWP) {
       if (exState && ks_terminatedBeforeWP.count(exState) > 0)
         exState = nullptr;
       if (lchild) {
@@ -125,7 +127,7 @@ public:
             lchild->exState = nullptr;
           }  
         } else {
-          lchild->cleanTerminatedOriginals(ks_terminatedBeforeWP);
+          lchild->ks_cleanTerminatedOriginals(ks_terminatedBeforeWP);
         }
       }
       if (rchild) {
@@ -136,17 +138,27 @@ public:
             rchild->exState = nullptr;
           }
         } else {
-          rchild->cleanTerminatedOriginals(ks_terminatedBeforeWP);
+          rchild->ks_cleanTerminatedOriginals(ks_terminatedBeforeWP);
         }
       }
     }
   };
   
+  // Mode of execution
+  static KS_Mode ks_mode;
+  static inline void ks_setMode(KS_Mode mode) {ks_mode = mode;}
+  static inline KS_Mode ks_getMode() {return ks_mode;}
+
   //Version ID: 0 for original; 1, 2, ... for mutants
   KS_MutantIDType ks_mutantID;
   
   //The last returned value: Help compare states when the watch point is end of the function
   ref<Expr> ks_lastReturnedVal;
+
+  // On the test generation mode (Shadow based), is the mutant state seeding(shadowing originale)
+  // Or executing bounded symbolic execution. True for seeding, false for bounded symbex
+  // XXX changed in functions branch() and ks_branchMut()'s caller
+  bool isTestGenMutSeeding;
   
   // pointer to the original state Sp from where this state Sm was 
   // originated (PathCondition of Sp includes PathCondition of Sm)
