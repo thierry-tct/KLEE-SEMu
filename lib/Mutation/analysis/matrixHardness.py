@@ -16,8 +16,10 @@ def error_exit(errstr):
 PASS = ["0"]
 FAIL = ["1"]
 SM_index_string = "ktestSM"
+WM_index_string = "ktestWM"
+COVM_index_string = "ktestCOVM"
 
-def loadMatrix(matrixfile, selectedT, noKlee=False):
+def loadMatrix(matrixfile, selectedT, X_index_string=SM_index_string, noKlee=False):
     dataAll = {}
 
     p = re.compile('\s')
@@ -29,7 +31,7 @@ def loadMatrix(matrixfile, selectedT, noKlee=False):
     with open(matrixfile, 'r') as f:
         # read header
         tclist = p.split(f.readline().strip())
-        assert tclist[0] == SM_index_string, "invalid SMdatfile: " + \
+        assert tclist[0] == X_index_string, "invalid SMdatfile: " + \
             matrixfile
 
         testid = 0 
@@ -54,7 +56,7 @@ def loadMatrix(matrixfile, selectedT, noKlee=False):
 
     if noKlee:
         delpos = []
-        for pos, tc in enumerate(dataAll[SM_index_string]):
+        for pos, tc in enumerate(dataAll[X_index_string]):
             if os.path.basename(os.path.dirname(tc)).startswith("klee-out-"):
                 delpos.append(pos)
         for pos in sorted(delpos, reverse=True):
@@ -64,13 +66,13 @@ def loadMatrix(matrixfile, selectedT, noKlee=False):
     if selectedT is not None:
         assert len(selectedT) > 0, "empty tests subset file given"
         delpos = []
-        for pos, tc in enumerate(dataAll[SM_index_string]):
+        for pos, tc in enumerate(dataAll[X_index_string]):
             if sortedTestNameList[tc] not in selectedT:
                 delpos.append(pos)
         for pos in sorted(delpos, reverse=True):
             for tcmut in dataAll:
                 del(dataAll[tcmut][pos])
-        assert selectedT == set([sortedTestNameList[tcid] for tcid in dataAll[SM_index_string]]), "tests mismatch... "+str((selectedT))+" <> "+str((set([sortedTestNameList[tcid] for tcid in dataAll[SM_index_string]])))
+        assert selectedT == set([sortedTestNameList[tcid] for tcid in dataAll[X_index_string]]), "tests mismatch... "+str((selectedT))+" <> "+str((set([sortedTestNameList[tcid] for tcid in dataAll[X_index_string]])))
     # print " ".join([matrixfile, "Loaded"])
     return dataAll #, sortedTestNameList
 #~ def loadMatrix()
@@ -78,23 +80,36 @@ def loadMatrix(matrixfile, selectedT, noKlee=False):
 '''
     get the list of test that kill mutants
 '''
-def TestsKilling(mutant, dataAll):
+def TestsKilling(mutant, dataAll, X_index_string=SM_index_string):
     tests = set()
 
     for pos, pf in enumerate(dataAll[mutant]):
         if pf not in PASS:
-            tests.add(dataAll[SM_index_string][pos])
+            tests.add(dataAll[X_index_string][pos])
 
     return list(tests)
 #~ def TestsKilling()
 
 def getKillableMutants(matrixFile):
-    M = loadMatrix(matrixFile, None)
+    M = loadMatrix(matrixFile, None, SM_index_string)
     killablesMuts = []
     for mid in  set(M) - {SM_index_string}:
         if len(TestsKilling(mid, M)) > 0:
             killablesMuts.append(mid)
     return killablesMuts
+#~ def getKillableMutants()
+
+'''
+    Return a list of pairs or covered mutants by at least testTresh tests and number of tests covering them
+'''
+def getCoveredMutants(covMatFile, testTresh=0):
+    M = loadMatrix(covMatFile, None, COVM_index_string)
+    covMuts = []
+    for mid in  set(M) - {COVM_index_string}:
+        ncov = len(TestsKilling(mid, M, COVM_index_string)) 
+        if ncov > testTresh:
+            covMuts.append((mid, ncov))
+    return covMuts
 #~ def getKillableMutants()
 
 def computeHardness(matrixdata):

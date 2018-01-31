@@ -34,16 +34,22 @@ ZESTI_CONCOLIC_WRAPPER = "wrapper-call-zesti-concolic.in"
 MY_SCANF = None
 mutantInfoFile = "mutantsInfos.json"
 
+KLEE_TESTGEN_SCRIPT_TESTS = "MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh"
+
 def error_exit(errstr):
     print "\nERROR: "+errstr+'\n'
     assert False
     exit(1)
 
+def loadJson (filename):
+    with open(filename) as f:
+        return json.load(f)
+
 def dumpJson (data, filename):
     with open(filename, 'w') as f:
         json.dump(data, f)
 
-def getTestSamples(testListFile, samplePercent, matrix):
+def getTestSamples(testListFile, samplePercent, matrix, hasKleeTests=True):
     assert samplePercent > 0 and samplePercent <= 100, "invalid sample percent"
     samples = {}
     unwrapped_testlist = []
@@ -52,16 +58,28 @@ def getTestSamples(testListFile, samplePercent, matrix):
             t = line.strip()
             if t != "":
                 unwrapped_testlist.append(t)
-    
+
     with open(matrix) as f:
         p = re.compile('\s')
         testlist = p.split(f.readline().strip())[1:]
+    
+    if hasKleeTests and KLEE_TESTGEN_SCRIPT_TESTS in unwrapped_testlist:
+        unwrapped_testlist.remove(KLEE_TESTGEN_SCRIPT_TESTS)
+
+    kleetestlist = []
+    devtestlist = []
+    for t in testlist:
+        if t.startswith(KLEE_TESTGEN_SCRIPT_TESTS+"-out/klee-out-"):
+            kleetestlist.append(t)
+        else:
+            devtestlist.append(t)
+
     # make samples for sizes samplePercent, 2*samplePercent, 3*samplePercent,..., 100
     random.shuffle(testlist)
     for s in range(samplePercent, 101, samplePercent):
         samples[s] = testlist[:int(s * len(testlist) / 100.0)]
         assert len(samples[s]) > 0, "too few test to sample percentage"
-    return samples, testlist, unwrapped_testlist
+    return samples, {'GENTESTS': kleetestlist, 'DEVTESTS':devtestlist}, unwrapped_testlist
 #~ def getTestSamples()
 
 def processMatrix (matrix, testSample, outname, thisOutDir):
@@ -229,18 +247,13 @@ def bestFit(outMaxVals, outNonTaken, inVals):
     return enabledArgs
 #~ def bestFit()
 
-def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
-    #if program == 'Expr':
-    #    symArgs = "--sym-args 0 1 10 --sym-args 0 3 2 --sym-stdout"
-    #else:
-    #    symArgs = "--sym-stdin 2"
-    #    symArgs += " --sym-args 0 1 10 --sym-args 0 2 2 --sym-files 1 8 --sym-stdout"
-
-    # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions
+def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
+    assert len(ktestFilesList) == len(testNamesList), "Error: size mismatch btw ktest and names: "+str(len(ktestFilesList))+" VS "+str(len(testNamesList))
+    name2ktestMap = {}
+    # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions(TODO double check)
     listTestArgs = []
-    ktestContains = {"FILENAME":[], "KTEST-OBJ":[]}
-    for pcfile in pathCondFilesList:
-        ktestfile = os.path.splitext(pcfile)[0] + '.ktest'
+    ktestContains = {"CORRESP_TESTNAME":[], "KTEST-OBJ":[]}
+    for ipos, ktestfile in enumerate(ktestFilesList):
         # XXX Zesti do not generate valid Ktest file when an argument is the empty string. Example tests 'basic_s18' of EXPR which is: expr "" "|" ""
         # The reson is that when writing ktest file, klee want the name to be non empty thus it fail (I think). 
         # Thus, we skip such tests here
@@ -251,10 +264,10 @@ def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
         # sed because Zesti give argv, argv_1... while sym args gives arg0, arg1,...
         ktestdat, testArgs = parseTextKtest(ktestfile)
         listTestArgs.append(testArgs)
-        ktestContains["FILENAME"].append(ktestfile)
+        ktestContains["CORRESP_TESTNAME"].append(testNamesList[ipos])
         ktestContains["KTEST-OBJ"].append(ktestdat)
     if len(listTestArgs) <= 0:
-        print "Err: no ktest data, ktest PCs:", pathCondFilesList
+        print "Err: no ktest data, ktest PCs:", ktestFilesList
         error_exit ("No ktest data could be extracted from ktests.")
 
     # Make a general form out of listTestArgs by inserting what is needed with size 0
@@ -385,16 +398,17 @@ def getSymArgsFromKtests (pathCondFilesList): #, program='Expr'):
                 objpos += 1
 
     # Write the new ktest files
-    for i in range(len(ktestContains["FILENAME"])):
-        shutil.move(ktestContains["FILENAME"][i], ktestContains["FILENAME"][i]+".bak")
-        ktestToFile(ktestContains["KTEST-OBJ"][i], ktestContains["FILENAME"][i])
+    for i in range(len(ktestContains["CORRESP_TESTNAME"])):
+        outFname = os.path.join(outDir, "test"+str(i)+".ktest")
+        ktestToFile(ktestContains["KTEST-OBJ"][i], outFname)
+        name2ktestMap[ktestContains["CORRESP_TESTNAME"][i]] = outFname
 
-    return commonArgs
+    return commonArgs, name2ktestMap
 #~ getSymArgsFromKtests()
 
 # put information from concolic run for the passed test set into a temporary dir, then possibly
 # Compute SEMU symbex and rank according to SEMU. outpout in outFilePath
-def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, candidateMutantsFile,  mode="zesti+symbex"):
+def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, candidateMutantsFile, symArgs, mode="zesti+symbex"):
     outFilePath = os.path.join(thisOutDir, outname)
     tmpdir = semuworkdir+".tmp"
     #assert not os.path.isdir(tmpdir), "For Semu temporary dir already exists: "+tmpdir
@@ -403,23 +417,22 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
 
     # aggregated for the sample tests (semuTC mode)
     if mode == "zesti+symbex":
-        symbexPreconditions = []
-        for tc in testSample:
-            tcdir = test2semudirMap[tc]
-            for pathcondfile in glob.glob(os.path.join(tcdir, "*.pc")):
-                symbexPreconditions.append(pathcondfile)
+        #symbexPreconditions = []
+        #for tc in testSample:
+        #    tcdir = test2semudirMap[tc]
+        #    for pathcondfile in glob.glob(os.path.join(tcdir, "*.pc")):
+        #        symbexPreconditions.append(pathcondfile)
                 # In th parth condition file, replace argv with arg: XXX temporary, DBG
-                os.system(" ".join(["sed -i'' 's/argv_/arg/g; s/argv/arg0/g'", pathcondfile])) #DBG
+        #        os.system(" ".join(["sed -i'' 's/argv_/arg/g; s/argv/arg0/g'", pathcondfile])) #DBG
         # use the collected preconditions and run semy in symbolic mode
         kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp -max-time=30000 -max-memory=9000 --max-solver-time=300"
         kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -watchdog -use-cex-cache"
         kleeArgs += " --output-dir="+tmpdir
-        semuArgs = " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions]+["-semu-mutant-max-fork=4"])
+        semuArgs = " ".join(["-seed-out-dir="+semuworkdir, "-semu-mutant-max-fork=4"])
+        #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
         if candidateMutantsFile is not None:
             semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
-        symArgs = getSymArgsFromKtests (symbexPreconditions) #, program="Expr") #TODO : change program here
-        #print "\nSYM ARGS:\n", symArgs,"\n\n"  #DBG
-        #exit(1)  #DBG
+        
         sretcode = os.system(" ".join(["klee-semu", kleeArgs, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"]))
         if sretcode != 0 and sretcode != 256: # 256 for tieout
             error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
@@ -460,6 +473,13 @@ def main():
         MY_SCANF = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "FixScanfForShadow/my_scanf.c"))
     else:
         WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), SEMU_CONCOLIC_WRAPPER))
+
+    ZESTI_DEV_TASK = 'ZESTI-DEV'
+    TEST_GEN_TASK = 'TEST-GEN'
+    SEMU_EXECUTION = 'SEMU-EXECUTION'
+    ANALYSE_TASK = "ANALYSE"
+    tasksList = [ZESTI_DEV_TASK, TEST_GEN_TASK, SEMU_EXECUTION, ANALYSE_TASK]
+
     parser = argparse.ArgumentParser()
     parser.add_argument("outTopDir", help="topDir for output (required)")
     parser.add_argument("--exepath", type=str, default=None, help="The path to executable in project")
@@ -467,6 +487,12 @@ def main():
     parser.add_argument("--testlist", type=str, default=None, help="The test list file")
     parser.add_argument("--martout", type=str, default=None, help="The Mart output directory (passing this enable semu selection)")
     parser.add_argument("--matrix", type=str, default=None, help="The Strong Mutation matrix (passing this enable selecting by matrix)")
+    parser.add_argument("--coverage", type=str, default=None, help="The mutant Coverage matrix")
+    parser.add_argument("--klee_tests_dir", type=str, default=None, help="The Optional directory containing the extra tests separately generated by KLEE")
+    parser.add_argument("--covTestThresh", type=int, default=10, help="Minimum number of tests covering a mutant for it to be selected for analysis")
+    parser.add_argument("--skip_completed", type=list, default=[], choices=tasksList, help="Specify the tasks that have already been executed")
+    parser.add_argument("--testSampleMode", type=str, default="DEV", choices=["DEV", "KLEE", "NUM"] help="choose how to sample subset for evaluation. DEV means use Developer test, NUM, mean a percentage of all tests")
+    parser.add_argument("--testSamplePercent", type=float, default=10, help="Specify the percentage of test suite to use for analysis, (require setting testSampleMode to NUM)")
     args = parser.parse_args()
 
     outDir = os.path.join(args.outTopDir, OutFolder)
@@ -475,6 +501,8 @@ def main():
     testList = args.testlist
     martOut = args.martout
     matrix = args.matrix
+    coverage = args.coverage
+    klee_tests_dir = args.klee_tests_dir
 
     # get abs path in case not
     outDir = os.path.abspath(outDir)
@@ -483,6 +511,24 @@ def main():
     testList = os.path.abspath(testList) if testList is not None else None 
     martOut = os.path.abspath(martOut) if martOut is not None else None 
     matrix = os.path.abspath(matrix) if matrix is not None else None
+    coverage = os.path.abspath(coverage) if coverage is not None else None
+    klee_tests_dir = os.path.abspath(klee_tests_dir) if klee_tests_dir is not None else None
+
+    covTestThresh = args.covTestThresh
+    testSampleMode = args.testSampleMode
+    assert testSampleMode == "DEV", "XXX: Other test sampling modes are not yet supported (KLEE and NUM require fixing symbargs, unless will implement Shadow base test gen)"
+
+    toExecute = [v for v in tasksList if v not in args.skip_completed]
+    assert len(toExecute) > 0, "Error: Specified skipping all tasks"
+    # Check continuity of tasks
+    pos = tasksList.index[toExecute[0]]
+    for v in toExecute[1:]:
+        pos += 1
+        assert tasksList[pos] == v, "Error: Specified skipping only middle task: "+str(args.skip_completed)
+
+    # We need to set size fraction of test samples
+    testSamplePercent = args.testSamplePercent
+    assert testSamplePercent > 0 and testSamplePercent <= 100, "Error: Invalid testSamplePercent"
 
     # Create outdir if absent
     cacheDir = os.path.join(outDir, "caches")
@@ -490,61 +536,123 @@ def main():
         os.mkdir(outDir)
         os.mkdir(cacheDir)
 
-    # We need to set size fraction of test samples
-    testSamplePercent = 10
-
     # Get all test samples before starting experiment
+    ## TODO TODO: Fix this when supporting other testSampleModes
     print "# Getting Test Samples .."
-    testSamples, alltests, unwrapped_testlist = getTestSamples(testList, testSamplePercent, matrix) 
-    dumpJson([testSamples, alltests, unwrapped_testlist], os.path.join(cacheDir, "testsamples.json"))
+    testSamples, alltestsObj, unwrapped_testlist = getTestSamples(testList, testSamplePercent, matrix) 
+    dumpJson([testSamples, alltestsObj, unwrapped_testlist], os.path.join(cacheDir, "testsamples.json"))
+    alltests = alltestsObj["DEVTESTS"] + alltestsObj["GENTESTS"]
 
     candidateMutantsFile = None
     groundKilledMutants = None
     if matrix is not None:
         groundKilledMutants = matrixHardness.getKillableMutants(matrix) 
+        covAtleastMutants = matrixHardness.getCoveredMutants(coverage, covTestThresh = covTestThresh)
+        groundKilledMutants = list(set(groundKilledMutants) & set(covAtleastMutants))
+        print "# Number of Mutants Considered:", len(groundKilledMutants)
         candidateMutantsFile = os.path.join(cacheDir, "candidateMutants.list")
         with open(candidateMutantsFile, "w") as f:
-            for mid in groundKilledMutants:
+            for mid in groundKilledMutants.keys():
                 f.write(str(mid)+"\n")
 
     # get Semu for all tests
     if martOut is not None:
-        print "# Running Semu..."
+        if runMode == 'zesti+symbex':
+            print "# Running Zesti to extract Dev tests"
+        else:
+            print "# Running Semu..."
         zestiInBC = os.path.basename(exePath) + ZestiBCSuff
         zestiInBCLink = os.path.join(martOut, zestiInBC)
         kleeSemuInBC = os.path.basename(exePath) + KleeSemuBCSuff
         kleeSemuInBCLink = os.path.join(martOut, kleeSemuInBC)
-        semuworkdir = os.path.join(outDir, "SemuWorkDir")
+        zestiourdir = os.path.join(outDir, "ZestiOutDir")
         inBCFilePath = zestiInBCLink if runMode == "zesti+symbex" else kleeSemuInBCLink
-        test2semudirMap = runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, inBCFilePath, semuworkdir, mode=runMode) #mode can also be "semuTC"
-        dumpJson(test2semudirMap, os.path.join(cacheDir, "test2semudirMap.json"))
+        test2zestidirMapFile = os.path.join(cacheDir, "test2zestidirMap.json")
+        if ZESTI_DEV_TASK in toExecute:
+            test2zestidirMap = runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, inBCFilePath, zestiourdir, mode=runMode) #mode can also be "semuTC"
+            dumpJson(test2zestidirMap, test2zestidirMapFile)
+        else:
+            print "## Loading zesti test mapping from Cache"
+            assert os.path.isdir(zestiourdir), "Error: zestiourdir absent when ZESTI_DEV mode skipped"
+            test2zestidirMap = loadJson(test2zestidirMapFile)
 
-    # processfor each test Sample
-    for ts_size in testSamples:
-        print "# Procesing for test size", ts_size, "..."
+    # TODO: TEST GEN part here. if klee_tests_dir is not None, means use the tests from klee to increase baseline and dev test to evaluate aproaches
+    # prepare seeds and extract sym-args. Then store it in the cache
+    semuworkdir = os.path.join(outDir, "SemuWorkDir")
+    test2semudirMapFile = os.path.join(cacheDir, "test2semudirMap.json")
+    if TEST_GEN_TASK in toExecute:
+        assert os.path.isdir(zestiourdir), "Error: "+zestiourdir+" not existing. Please make sure to collect Dev tests with Zesti"
+        
+        if os.path.isdir(semuworkdir):
+            shutil.rmtree(semuworkdir)
+            os.mkdir(semuworkdir)
 
-        # Make temporary outdir for test sample size
-        thisOut = os.path.join(outDir, "out_testsize_"+str(ts_size))
+        # refactor the ktest fom zesti and put in semu workdir, together with the sym
+        zestKtests = []
+        for tc in test2zestidirMap.keys():
+            tcdir = test2zestidirMap[tc]
+            listKtestFiles = glob.glob(os.path.join(tcdir, "*.ktest"))
+            assert len(listKtestFiles) == 1, "Error: more than 1 or no ktest from Zesti for tests: "+tc+", zestiout: "+tcdir
+            for ktestfile in listKtestFiles:
+                zestKtests.append(ktestfile)
+        sym_args_param, test2semudirMap = getSymArgsFromKtests (zestKtests, test2zestidirMap.keys(), semuworkdir)
+        dumpJson([sym_args_param, test2semudirMap], test2zestidirMapFile)
+    else:
+        print "## Loading parametrized tests mapping from cache"
+        assert os.path.isdir(semuworkdir), "Error: semuworkdir absent when TEST-GEN mode skipped"
+        sym_args_param, test2semudirMap = loadJson(test2semudirMapFile)
 
-        if martOut is not None or matrix is not None:
-            if os.path.isdir(thisOut):
-                shutil.rmtree(thisOut)
-            os.mkdir(thisOut)
+    if testSampleMode = 'DEV':
+        testSamples = {'DEV': alltestsObj['DEVTESTS']}
+    elif testSampleMode = 'KLEE':
+        testSamples = {'KLEE': alltestsObj['GENTESTS']}
 
-        # process for matrix
-        if matrix is not None:
-            processMatrix (matrix, alltests, 'groundtruth', thisOut) 
-            processMatrix (matrix, testSamples[ts_size], 'classic', thisOut) 
+    # process for each test Sample with each approach
+    if SEMU_EXECUTION in toExecute: 
+        for ts_size in testSamples:
+            print "# Procesing for test size", ts_size, "..."
 
-        # process for SEMU
-        if martOut is not None:
-            processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut, kleeSemuInBCLink, candidateMutantsFile, mode=runMode) 
+            # Make temporary outdir for test sample size
+            thisOut = os.path.join(outDir, "out_testsize_"+str(ts_size))
 
-        # Make final Analysis and plot
-        if martOut is not None and matrix is not None:
-            analysis_plot(thisOut, groundKilledMutants) 
+            if martOut is not None or matrix is not None:
+                if os.path.isdir(thisOut):
+                    shutil.rmtree(thisOut)
+                os.mkdir(thisOut)
+
+            # process for matrix
+            if matrix is not None:
+                processMatrix (matrix, alltests, 'groundtruth', thisOut) 
+                processMatrix (matrix, testSamples[ts_size], 'classic', thisOut) 
+
+            # process for SEMU
+            if martOut is not None:
+                processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut, kleeSemuInBCLink, candidateMutantsFile, sym_args_param, mode=runMode) 
+
+    # Analysing for each test Sample 
+    if ANALYSE_TASK in toExecute:
+        for ts_size in testSamples:
+            print "# Analysing for test size", ts_size, "..."
+
+            # Make temporary outdir for test sample size
+            thisOut = os.path.join(outDir, "out_testsize_"+str(ts_size))
+
+            # Make final Analysis and plot
+            if martOut is not None and matrix is not None:
+                analysis_plot(thisOut, groundKilledMutants) 
 
 #~ def main()
 
 if __name__ == "__main__":
     main()
+
+'''
+FLOW:
+-----
+
+1) Get DEV Tests KTESTS with ZESTI 
+2-a) Transform Zesti ktests(seeds) for symbex, as well as the Sym args for running Semu
+2-b) Use those to generate more tests using SHADOW-SEMU  (for now we only use KLEE)
+3) Split the tests in training and evaluation (whith shadow random sample all. With KLEE, use Dev for training and KLEE for eval and vice vesa)
+4) Evaluate the technique using Tranining and evaluation tests
+'''
