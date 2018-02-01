@@ -42,6 +42,8 @@ def loadMatrix(matrixfile, selectedT, X_index_string=SM_index_string, noKlee=Fal
         dataAll[tclist[0]] = [testname2testid[testname]
                               for testname in tclist[1:]]  # header (test case list)
 
+        nTotTests = len(dataAll[tclist[0]])
+
         # read data
         for line in f:
             # strip to remove leading and trailing space and avoid empty word
@@ -53,6 +55,7 @@ def loadMatrix(matrixfile, selectedT, X_index_string=SM_index_string, noKlee=Fal
             assert (mID not in dataAll), "Mutant " + \
                 a[0] + " appear twice in the dataAll"
             dataAll[mID] = a[1:]
+            assert len(dataAll[mID]) == nTotTests, "uneven number od columns for mutant: "+str(mID)
 
     if noKlee:
         delpos = []
@@ -73,6 +76,11 @@ def loadMatrix(matrixfile, selectedT, X_index_string=SM_index_string, noKlee=Fal
             for tcmut in dataAll:
                 del(dataAll[tcmut][pos])
         assert selectedT == set([sortedTestNameList[tcid] for tcid in dataAll[X_index_string]]), "tests mismatch... "+str((selectedT))+" <> "+str((set([sortedTestNameList[tcid] for tcid in dataAll[X_index_string]])))
+    
+    # put back the test names ()useful for matching between SM and mutant Coverage
+    for i in range(len(dataAll[X_index_string])):
+        dataAll[X_index_string][i] = sortedTestNameList[dataAll[X_index_string][i]]
+
     # print " ".join([matrixfile, "Loaded"])
     return dataAll #, sortedTestNameList
 #~ def loadMatrix()
@@ -100,29 +108,38 @@ def getKillableMutants(matrixFile):
 #~ def getKillableMutants()
 
 '''
-    Return a list of pairs or covered mutants by at least testTresh tests and number of tests covering them
+    Return a map of mutant and covering tests for mutants having more than thresh tests covering
+    Do not return the mutants with number of covering tests cases less than threshold
 '''
-def getCoveredMutants(covMatFile, testTresh=0):
+def getCoveredMutants(covMatFile, testTresh=1):
     M = loadMatrix(covMatFile, None, COVM_index_string)
-    covMuts = []
+    covMuts = {}
     for mid in  set(M) - {COVM_index_string}:
-        ncov = len(TestsKilling(mid, M, COVM_index_string)) 
-        if ncov > testTresh:
-            covMuts.append((mid, ncov))
+        tccov = TestsKilling(mid, M, COVM_index_string)
+        if len(tccov) >= testTresh:
+            covMuts[mid] = tccov
     return covMuts
 #~ def getKillableMutants()
 
-def computeHardness(matrixdata):
+def computeHardness(matrixdata, mutantCovDict):
     outData = {'Relative-Equivalent': [], 'Hardness': {}}
     nTests = len(matrixdata[SM_index_string])
-    for mutID in set(matrixdata) - {SM_index_string}:
-        #compute hardness as proportion of tests killing the mutant
+    
+    # If mutantCovDict is None, consider hardness regardless of coverage: assume every test covers
+    if mutantCovDict is None:
+        candMutants = set(matrixdata) - {SM_index_string} 
+        mutantCovDict = {mid: matrixdata[SM_index_string] for mid in candMutants}
+
+    for mutID in mutantCovDict:
+        #assert nTCCov > 0, "No test covering candidate mutant (BUG). Mutant ID: "+str(mitID)
+        # compute hardness as proportion of tests killing the mutant among tests covering
+        nTCCov = len(mutantCovDict[mutID])
         nKill = len(TestsKilling(mutID, matrixdata))
 
-        if nKill == 0:
+        if nKill == 0 or nTCCov == 0: # The secon condition mus never be seen
             outData['Relative-Equivalent'].append(mutID)
         else:
-            m_hardness = 1 - float(nKill) / nTests
+            m_hardness = 1 - float(nKill) / nTCCov
             
             # add mutant to output
             if m_hardness not in outData['Hardness']:
@@ -131,10 +148,10 @@ def computeHardness(matrixdata):
     return outData
 #~ def computeHardness()
 
-def libMain(mutantMatrixFile, testset, outfile):
+def libMain(mutantMatrixFile, testset, mutantCovDict, outfile):
     matrixKA = loadMatrix (mutantMatrixFile, set(testset))
 
-    outDataObj = computeHardness(matrixKA)
+    outDataObj = computeHardness(matrixKA, mutantCovDict)
 
     with open(outfile+'.json', "w") as fp:
         json.dump(outDataObj, fp)
@@ -146,14 +163,20 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mutantMatrix", help="input file of mutant execution as matrix (tests as column, mutants as rorw)")
     parser.add_argument("--testset", type=str, default=None, help="optional input file of subset of tests to consider")
+    parser.add_argument("--coverage", type=str, default=None, help="optional mutant coverage matrix")
     parser.add_argument("-o", "--outfile", type=str, default=None, help="JSON output file for mutant classement")
     args = parser.parse_args()
 
     matrixFile = args.mutantMatrix
+    coverage = args.coverage
     testSubSetFile = args.testset
     outFile = args.outfile
 
     assert (outFile is not None), "Must specify output file: option -o or --outfile"
+
+    from_coverge = None
+    if coverage is not None:
+        assert False,"For coverage in command line to be implemented (choosing cov thresh)"
 
     print "# Starting", matrixFile, "..."
 
@@ -164,7 +187,7 @@ def main():
             if tc:
                 selectedT.add(tc)
 
-    libMain(matrixFile, selectedT, outFile)
+    libMain(matrixFile, selectedT, from_coverge, outFile)
 #~ def main()
 
 if __name__ == "__main__":

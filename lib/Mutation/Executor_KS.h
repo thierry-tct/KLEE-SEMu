@@ -585,7 +585,7 @@ public:
 
   inline void ks_CheckAndBreakInfinitLoop(ExecutionState &curState, ExecutionState *&prevState, double &initTime);
 
-  inline bool ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size);
+  inline bool ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size, bool isSeeding);
 
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS

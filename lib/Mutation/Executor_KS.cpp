@@ -2927,7 +2927,7 @@ void Executor::run(ExecutionState &initialState) {
 
       // @KLEE-SEMu
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-        if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize))
+        if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize, true/*is Seeidng*/))
           continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
       }
       //~KS
@@ -3009,7 +3009,7 @@ void Executor::run(ExecutionState &initialState) {
 
     // @KLEE-SEMu
     if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-      if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize))
+      if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize, false/*is Seeding*/))
         continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
     }
     //~KS
@@ -4132,6 +4132,13 @@ void Executor::ks_setInitialSymbolics (/*ExecutionState &state, */Module &module
 // get the list of mutants to use in the execution from semuCandidateMutantsFile 
 // If the filename is not the empty string, get the mutants list and remove the mutant not in the list from module
 void Executor::ks_FilterMutants (llvm::Module *module) {
+
+  // We must have at least a mutant to run SEMU mid selector represents maxID + 1)
+  if (dyn_cast<ConstantInt>(ks_mutantIDSelectorGlobal->getInitializer())->getZExtValue() < 2) {
+    klee_error("SEMU@ERROR: The module passed contains no mutant!");
+    exit(1);
+  }
+
   std::set<ExecutionState::KS_MutantIDType> cand_mut_ids;
   if (!semuCandidateMutantsFile.empty()) {
     std::ifstream ifs(semuCandidateMutantsFile); 
@@ -4143,8 +4150,12 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
         ifs >> tmpid;
       }
       ifs.close();
+      if (cand_mut_ids.empty()) {
+        klee_error("SEMU@ERROR: The candidate mutant list passed is empty!");
+        exit(1);
+      }
     } else {
-      llvm::errs() << "Error: Unable to open Mutants Candidate file: " << semuCandidateMutantsFile << "\n";
+      llvm::errs() << "SEMU@ERROR: Unable to open Mutants Candidate file: " << semuCandidateMutantsFile << "\n";
       assert(false);
       exit(1);
     }
@@ -4220,6 +4231,8 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
       } // For Inst ...
     } // For BB ...
   } // For Func ...
+
+  // XXX: do not Update the number of mutants in Global mutant ID selectod For it represents HighestID + 1
 }
 
 void Executor::ks_mutationPointBranching(ExecutionState &state, 
@@ -4780,7 +4793,7 @@ inline void Executor::ks_CheckAndBreakInfinitLoop(ExecutionState &curState, Exec
 }
 
 /// Return true if the check actually happened, false otherwise
-inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size) {
+inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size, bool isSeeding) {
   // // FIXME: We just checked memory and some states will be killed if exeeded and we will have some problem in comparison
   // // FIXME: For now we assume that the memory limitmust not be exceeded, need to find a way to handle this later
   if (atMemoryLimit) {
@@ -4793,7 +4806,8 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   bool ks_WPReached = ks_watchPointReached (curState, ki);
   if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
     //remove from searcher
-    searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
+    if (!isSeeding)
+        searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
     
     if (! ks_terminated) {
       //add to ks_reachedWatchPoint if so
