@@ -87,13 +87,10 @@ def processMatrix (matrix, testSample, outname, thisOutDir):
     matrixHardness.libMain(matrix, testSample, outFilePath)
 #~ def processMatrix()
 
-def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, kleeZestiSemuInBCLink, semuworkdir, mode="zesti+symbex"):
+def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, kleeZestiSemuInBCLink, outpdir, zestiexedir, mode="zesti+symbex"):
     test2outdirMap = {}
 
-    # Prepare outdir and copy bc
-    if os.path.isdir(semuworkdir):
-        shutil.rmtree(semuworkdir)
-    os.mkdir(semuworkdir)
+    # copy bc
     kleeZestiSemuInBC = os.path.basename(kleeZestiSemuInBCLink) 
     if mode == "zesti+symbex":
         print "# Extracting tests Infos with ZESTI\n"
@@ -101,17 +98,25 @@ def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, klee
         ec = os.system(cmd)
         if ec != 0:
             error_exit("Error: failed to compile my_scanf to llvm for Zesti. Returned "+str(ec)+".\n >> Command: "+cmd)
-        ec = os.system("llvm-link "+kleeZestiSemuInBCLink+" "+MY_SCANF+".bc -o "+os.path.join(semuworkdir, kleeZestiSemuInBC))
+        ec = os.system("llvm-link "+kleeZestiSemuInBCLink+" "+MY_SCANF+".bc -o "+os.path.join(outpdir, kleeZestiSemuInBC))
         if ec != 0:
             error_exit("Error: failed to link myscanf and zesti bc. Returned "+str(ec))
         os.remove(MY_SCANF+".bc")
+
+        # Verify that Zesti is accessible
+        zextmp = "klee"
+        if zestiexedir is None:
+           zextmp = os.path.join(zestiexedir, zextmp)
+        if os.system(zextmp+" --help | grep zest > /dev/null") != 0:
+            error_exit ("The available klee do not have Zesti: "+zextmp)
     else:
         print "# Running SEMU Concretely\n"
-        shutil.copy2(kleeZestiSemuInBCLink, os.path.join(semuworkdir, kleeZestiSemuInBC))
+        shutil.copy2(kleeZestiSemuInBCLink, os.path.join(outpdir, kleeZestiSemuInBC))
 
     # Install wrapper
     wrapper_fields = {
-                        "IN_TOOL_DIR": semuworkdir,
+                        "ZESTI_KLEE_EXECUTABLE_DIRNAME/": zestiexedir+'/' if zestiexedir is not None else "",
+                        "IN_TOOL_DIR": outpdir,
                         "IN_TOOL_NAME": kleeZestiSemuInBC[:-3], #remove ".bc"
                         "TOTAL_MAX_TIME_": "7200.0", #600
                         "SOLVER_MAX_TIME_": "240.0"    #60
@@ -139,18 +144,18 @@ def runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, klee
 
     # Run Semu through tests running
     testrunlog = "> /dev/null"
-    nKleeOut = len(glob.glob(os.path.join(semuworkdir, "klee-out-*")))
+    nKleeOut = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
     assert nKleeOut == 0, "Must be no klee out in the begining"
     for tc in unwrapped_testlist:
         # Run Semu with tests (wrapper is installed)
         print "# Running Tests", tc, "..."
         retCode = os.system(" ".join(["bash", runtestScript, tc, testrunlog]))
-        nNew = len(glob.glob(os.path.join(semuworkdir, "klee-out-*")))
+        nNew = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
         if nNew == nKleeOut:
             error_exit ("Test execution failed for test case '"+tc+"', retCode was: "+str(retCode))
         assert nNew > nKleeOut, "Test was not run: "+tc
         for devtid, kleetid in enumerate(range(nKleeOut, nNew)):
-            kleeoutdir = os.path.join(semuworkdir, 'klee-out-'+str(kleetid))
+            kleeoutdir = os.path.join(outpdir, 'klee-out-'+str(kleetid))
             wrapTestName = os.path.join(tc.replace('/', '_') + "-out", "Dev-out-"+str(devtid), "devtest.ktest")
 
             test2outdirMap[wrapTestName] = kleeoutdir
@@ -408,7 +413,7 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
 
 # put information from concolic run for the passed test set into a temporary dir, then possibly
 # Compute SEMU symbex and rank according to SEMU. outpout in outFilePath
-def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, candidateMutantsFile, symArgs, mode="zesti+symbex"):
+def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, candidateMutantsFile, symArgs, semuexedir, mode="zesti+symbex"):
     outFilePath = os.path.join(thisOutDir, outname)
     tmpdir = semuworkdir+".tmp"
     #assert not os.path.isdir(tmpdir), "For Semu temporary dir already exists: "+tmpdir
@@ -433,7 +438,8 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
         if candidateMutantsFile is not None:
             semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
         
-        sretcode = os.system(" ".join(["klee-semu", kleeArgs, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"]))
+        semuExe = "klee-semu" if semuexedir is None else os.path.join(semuexedir, "klee-semu")
+        sretcode = os.system(" ".join([semuExe, kleeArgs, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"]))
         if sretcode != 0 and sretcode != 256: # 256 for tieout
             error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
     else:
@@ -488,10 +494,12 @@ def main():
     parser.add_argument("--martout", type=str, default=None, help="The Mart output directory (passing this enable semu selection)")
     parser.add_argument("--matrix", type=str, default=None, help="The Strong Mutation matrix (passing this enable selecting by matrix)")
     parser.add_argument("--coverage", type=str, default=None, help="The mutant Coverage matrix")
+    parser.add_argument("--zesti_exe_dir", type=str, default=None, help="The Optional directory containing the zesti executable (named klee). if not specified, the default klee must be zesti")
+    parser.add_argument("--semu_exe_dir", type=str, default=None, help="The Optional directory containing the SEMu executable (named klee-semu). if not specified, must be available on the PATH")
     parser.add_argument("--klee_tests_dir", type=str, default=None, help="The Optional directory containing the extra tests separately generated by KLEE")
     parser.add_argument("--covTestThresh", type=int, default=10, help="Minimum number of tests covering a mutant for it to be selected for analysis")
     parser.add_argument("--skip_completed", type=list, default=[], choices=tasksList, help="Specify the tasks that have already been executed")
-    parser.add_argument("--testSampleMode", type=str, default="DEV", choices=["DEV", "KLEE", "NUM"] help="choose how to sample subset for evaluation. DEV means use Developer test, NUM, mean a percentage of all tests")
+    parser.add_argument("--testSampleMode", type=str, default="DEV", choices=["DEV", "KLEE", "NUM"], help="choose how to sample subset for evaluation. DEV means use Developer test, NUM, mean a percentage of all tests")
     parser.add_argument("--testSamplePercent", type=float, default=10, help="Specify the percentage of test suite to use for analysis, (require setting testSampleMode to NUM)")
     args = parser.parse_args()
 
@@ -503,6 +511,8 @@ def main():
     matrix = args.matrix
     coverage = args.coverage
     klee_tests_dir = args.klee_tests_dir
+    zesti_exe_dir = args.zesti_exe_dir
+    semu_exe_dir = args.semu_exe_dir
 
     # get abs path in case not
     outDir = os.path.abspath(outDir)
@@ -513,6 +523,8 @@ def main():
     matrix = os.path.abspath(matrix) if matrix is not None else None
     coverage = os.path.abspath(coverage) if coverage is not None else None
     klee_tests_dir = os.path.abspath(klee_tests_dir) if klee_tests_dir is not None else None
+    zesti_exe_dir = os.path.abspath(zesti_exe_dir) if zesti_exe_dir is not None else None
+    semu_exe_dir = os.path.abspath(semu_exe_dir) if semu_exe_dir is not None else None
 
     covTestThresh = args.covTestThresh
     testSampleMode = args.testSampleMode
@@ -520,8 +532,9 @@ def main():
 
     toExecute = [v for v in tasksList if v not in args.skip_completed]
     assert len(toExecute) > 0, "Error: Specified skipping all tasks"
+
     # Check continuity of tasks
-    pos = tasksList.index[toExecute[0]]
+    pos = tasksList.index(toExecute[0])
     for v in toExecute[1:]:
         pos += 1
         assert tasksList[pos] == v, "Error: Specified skipping only middle task: "+str(args.skip_completed)
@@ -547,12 +560,12 @@ def main():
     groundKilledMutants = None
     if matrix is not None:
         groundKilledMutants = matrixHardness.getKillableMutants(matrix) 
-        covAtleastMutants = matrixHardness.getCoveredMutants(coverage, covTestThresh = covTestThresh)
+        covAtleastMutants = matrixHardness.getCoveredMutants(coverage, testTresh = covTestThresh)
         groundKilledMutants = list(set(groundKilledMutants) & set(covAtleastMutants))
         print "# Number of Mutants Considered:", len(groundKilledMutants)
         candidateMutantsFile = os.path.join(cacheDir, "candidateMutants.list")
         with open(candidateMutantsFile, "w") as f:
-            for mid in groundKilledMutants.keys():
+            for mid in groundKilledMutants:
                 f.write(str(mid)+"\n")
 
     # get Semu for all tests
@@ -565,15 +578,20 @@ def main():
         zestiInBCLink = os.path.join(martOut, zestiInBC)
         kleeSemuInBC = os.path.basename(exePath) + KleeSemuBCSuff
         kleeSemuInBCLink = os.path.join(martOut, kleeSemuInBC)
-        zestiourdir = os.path.join(outDir, "ZestiOutDir")
+        zestioutdir = os.path.join(outDir, "ZestiOutDir")
         inBCFilePath = zestiInBCLink if runMode == "zesti+symbex" else kleeSemuInBCLink
         test2zestidirMapFile = os.path.join(cacheDir, "test2zestidirMap.json")
         if ZESTI_DEV_TASK in toExecute:
-            test2zestidirMap = runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, inBCFilePath, zestiourdir, mode=runMode) #mode can also be "semuTC"
+            # Prepare outdir and copy bc
+            if os.path.isdir(zestioutdir):
+                shutil.rmtree(zestioutdir)
+            os.mkdir(zestioutdir)
+
+            test2zestidirMap = runZestiOrSemuTC (unwrapped_testlist, alltests, exePath, runtestScript, inBCFilePath, zestioutdir, zesti_exe_dir, mode=runMode) #mode can also be "semuTC"
             dumpJson(test2zestidirMap, test2zestidirMapFile)
         else:
             print "## Loading zesti test mapping from Cache"
-            assert os.path.isdir(zestiourdir), "Error: zestiourdir absent when ZESTI_DEV mode skipped"
+            assert os.path.isdir(zestioutdir), "Error: zestioutdir absent when ZESTI_DEV mode skipped"
             test2zestidirMap = loadJson(test2zestidirMapFile)
 
     # TODO: TEST GEN part here. if klee_tests_dir is not None, means use the tests from klee to increase baseline and dev test to evaluate aproaches
@@ -581,7 +599,7 @@ def main():
     semuworkdir = os.path.join(outDir, "SemuWorkDir")
     test2semudirMapFile = os.path.join(cacheDir, "test2semudirMap.json")
     if TEST_GEN_TASK in toExecute:
-        assert os.path.isdir(zestiourdir), "Error: "+zestiourdir+" not existing. Please make sure to collect Dev tests with Zesti"
+        assert os.path.isdir(zestioutdir), "Error: "+zestioutdir+" not existing. Please make sure to collect Dev tests with Zesti"
         
         if os.path.isdir(semuworkdir):
             shutil.rmtree(semuworkdir)
@@ -602,9 +620,9 @@ def main():
         assert os.path.isdir(semuworkdir), "Error: semuworkdir absent when TEST-GEN mode skipped"
         sym_args_param, test2semudirMap = loadJson(test2semudirMapFile)
 
-    if testSampleMode = 'DEV':
+    if testSampleMode == 'DEV':
         testSamples = {'DEV': alltestsObj['DEVTESTS']}
-    elif testSampleMode = 'KLEE':
+    elif testSampleMode == 'KLEE':
         testSamples = {'KLEE': alltestsObj['GENTESTS']}
 
     # process for each test Sample with each approach
@@ -627,7 +645,7 @@ def main():
 
             # process for SEMU
             if martOut is not None:
-                processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut, kleeSemuInBCLink, candidateMutantsFile, sym_args_param, mode=runMode) 
+                processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut, kleeSemuInBCLink, candidateMutantsFile, sym_args_param, semu_exe_dir, mode=runMode) 
 
     # Analysing for each test Sample 
     if ANALYSE_TASK in toExecute:

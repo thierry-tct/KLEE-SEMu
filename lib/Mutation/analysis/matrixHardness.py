@@ -17,7 +17,7 @@ PASS = ["0"]
 FAIL = ["1"]
 SM_index_string = "ktestSM"
 WM_index_string = "ktestWM"
-COVM_index_string = "ktestCOVM"
+COVM_index_string = "ktestMCOV"
 
 def loadMatrix(matrixfile, selectedT, X_index_string=SM_index_string, noKlee=False):
     dataAll = {}
