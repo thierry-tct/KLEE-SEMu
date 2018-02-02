@@ -4347,7 +4347,8 @@ inline bool Executor::ks_isOutEnvCall (CallInst *ci, ExecutionState *state) {
 
 // In the case of call, check the next to execute instruction, which should be state.pc
 inline bool Executor::ks_nextIsOutEnv (ExecutionState &state) {
-  //is the next instruction to execute an external call that change output
+  //if ((uint64_t)state.pc->inst==1) {state.prevPC->inst->getParent()->dump();state.prevPC->inst->dump();} 
+  // Is the next instruction to execute an external call that change output
   if (state.pc->inst->getOpcode() == Instruction::Call) { 
     if (ks_isOutEnvCall(dyn_cast<CallInst>(state.pc->inst), &state)) {
       return true;
@@ -4792,7 +4793,7 @@ inline void Executor::ks_CheckAndBreakInfinitLoop(ExecutionState &curState, Exec
   }
 }
 
-/// Return true if the check actually happened, false otherwise
+/// Return true if the check actually happened, false otherwise. This help to know if we need tu call updateStates or not
 inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size, bool isSeeding) {
   // // FIXME: We just checked memory and some states will be killed if exeeded and we will have some problem in comparison
   // // FIXME: For now we assume that the memory limitmust not be exceeded, need to find a way to handle this later
@@ -4801,13 +4802,26 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
     exit(1);
   }
 
-  bool ks_terminated = (terminated_prev_size < ks_terminatedBeforeWP.size());
-  bool ks_OutEnvReached = ks_nextIsOutEnv (curState);
-  bool ks_WPReached = ks_watchPointReached (curState, ki);
+  bool ks_terminated = false;
+  bool ks_OutEnvReached = false;
+  bool ks_WPReached = false;
+
+  // If next instruction is unreachable instruction, terminate the state early
+  //if (/*llvm::isa<llvm::UnreachableInst>(curState.pc->inst) || */llvm::isa<llvm::UnreachableInst>(curState.prevPC->inst)) {
+  //  terminateStateEarly(curState, "@SEMU: unreachable instruction reached");
+  //  ks_terminated = true;
+  //} else {
+    ks_terminated = (terminated_prev_size < ks_terminatedBeforeWP.size());
+    ks_OutEnvReached = ks_nextIsOutEnv (curState);
+    ks_WPReached = ks_watchPointReached (curState, ki);
+  //}
+
   if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
-    //remove from searcher
-    if (!isSeeding)
-        searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
+    //remove from searcher or seed map
+    if (isSeeding)
+      seedMap.erase(&curState);
+    else
+      searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
     
     if (! ks_terminated) {
       //add to ks_reachedWatchPoint if so

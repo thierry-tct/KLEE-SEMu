@@ -187,7 +187,7 @@ def ktestToFile(ktestData, outfilename):
         for i in range(len(ktestData.objects)):
             f.write(struct.pack('>i', len(ktestData.objects[i][0]))) #name length
             f.write(ktestData.objects[i][0])
-            f.write(struct.pack('>i', len(ktestData.objects[i][1]))) #name length
+            f.write(struct.pack('>i', len(ktestData.objects[i][1]))) #data length
             f.write(ktestData.objects[i][1])
     #print "Done ktest!"       
 #~ def ktestToFile()
@@ -212,7 +212,7 @@ def parseTextKtest(filename):
             else:
                 model_version_pos = i
         else:
-            # File passed
+            # File passed  FIXME: TODO: case of file read actual file contain instead of its stat
             if name in b.args:  # filename not in args, just verify that size is 0 (data is empty)
                 if len(data) > 0:
                     error_exit ("object name in args but not a file: "+name) # beware of argument with value 'argv'
@@ -363,7 +363,15 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
                 commonArgs.append(" ".join(["-sym-stdin", str(stdinMaxSize)]))
             break
 
+    # Sym stdout, is this really needed
     commonArgs.append('--sym-stdout')
+    # add sym-out to ktets just before the last (model_version)
+    for i in range(len(ktestContains["CORRESP_TESTNAME"])):
+        symout_obj = ('stdout', '\0'*1024)
+        symoutstat_obj = ('stdout-stat', '\0'*144)
+        ktestContains["KTEST-OBJ"][i].objects.insert(-1, symout_obj)
+        ktestContains["KTEST-OBJ"][i].objects.insert(-1, symoutstat_obj)
+
 
     # TODO: UPDATE KTEST CONTAINS WITH NEW ARGUMENT LIST AND INSERT THE "n_args" FOR '-sym-args'. ALSO PLACE 'model_version' AT THE END
     # For each Test, Change ktestContains args, go through common args and compute the different "n_args" using 'listTestArgs'  and stdin stdout default.
@@ -387,8 +395,15 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
                     print "Objects:", ktestContains["KTEST-OBJ"][t].objects
                     error_exit("must be argv, but found: "+ktestContains["KTEST-OBJ"][t].objects[objpos][0])  # the name must be argv...
 
+                # Pad the argument data with '\0' until args maxlen
+                maxlen = int(commonArgs[apos].strip().split(' ')[-1])
+                for sharedarg_i in range(commonArgsNumPerTest[t][apos]):
+                    curlen = len(ktestContains["KTEST-OBJ"][t].objects[objpos + sharedarg_i][1])
+                    curval = ktestContains["KTEST-OBJ"][t].objects[objpos + sharedarg_i]
+                    ktestContains["KTEST-OBJ"][t].objects[objpos + sharedarg_i] = (curval[0], curval[1]+'\0'*(maxlen-curlen+1)) #+1 Because last zero added after sym len
+
                 # Insert n_args
-                ktestContains["KTEST-OBJ"][t].objects.insert(objpos, ("n_args", str(commonArgsNumPerTest[t][apos])))       
+                ktestContains["KTEST-OBJ"][t].objects.insert(objpos, ("n_args", struct.pack('<i', commonArgsNumPerTest[t][apos])))       
                 objpos += 1 #pass just added 'n_args'
 
                 if commonArgsNumPerTest[t][apos] > 0: #Else no object for this, no need to advance this (will be done bellow)
@@ -400,7 +415,22 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
                     print "Args:", ktestContains["KTEST-OBJ"][t].args[1:]
                     print "Objects:", ktestContains["KTEST-OBJ"][t].objects
                     error_exit("must be argv, but found: "+ktestContains["KTEST-OBJ"][t].objects[objpos][0])  # the name must be argv...
+
+                # Pad the argument data with '\0' until args maxlen
+                maxlen = int(commonArgs[apos].strip().split(' ')[-1])
+                curlen = len(ktestContains["KTEST-OBJ"][t].objects[objpos][1])
+                curval = ktestContains["KTEST-OBJ"][t].objects[objpos]
+                ktestContains["KTEST-OBJ"][t].objects[objpos] = (curval[0], curval[1]+'\0'*(maxlen-curlen+1)) #+1 Because last zero added after sym len
+                
                 objpos += 1
+            else:  # File or stdin, stdout
+                pass #TODO handle the case of files (NB: check above how the files are recpgnized from zesti tests (size may not be 0)
+
+    # Change the args list in each ktest object with the common symb args 
+    for ktdat in ktestContains["KTEST-OBJ"]:
+        ktdat.args = ktdat.args[:1]
+        for s in commonArgs:
+            ktdat.args += s.strip().split(' ') 
 
     # Write the new ktest files
     for i in range(len(ktestContains["CORRESP_TESTNAME"])):
@@ -433,18 +463,19 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
         kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp -max-time=30000 -max-memory=9000 --max-solver-time=300"
         kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -watchdog -use-cex-cache"
         kleeArgs += " --output-dir="+tmpdir
-        semuArgs = " ".join(["-seed-out-dir="+semuworkdir, "-semu-mutant-max-fork=4"])
+        semukleearg = "-seed-out-dir="+semuworkdir
+        semuArgs = " ".join(["-semu-mutant-max-fork=4"])
         #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
         if candidateMutantsFile is not None:
             semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
         
         semuExe = "klee-semu" if semuexedir is None else os.path.join(semuexedir, "klee-semu")
-        runSemuCmd = " ".join([semuExe, kleeArgs, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"])
+        runSemuCmd = " ".join([semuExe, kleeArgs, semukleearg, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"])
         sretcode = os.system(runSemuCmd)
         if sretcode != 0 and sretcode != 256: # 256 for timeout
             error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
-        print sretcode, "@@@@ -- ", runSemuCmd
-        exit(0)
+        #print sretcode, "@@@@ -- ", runSemuCmd  #DBG
+        #exit(0)  #DBG
     else:
         os.mkdir(tmpdir)
         mutDataframes = {}
