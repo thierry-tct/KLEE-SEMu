@@ -52,7 +52,8 @@ cmake -DCMAKE_BUILD_TYPE=Release \
   --with-llvmcxx=/home/users/ttitcheuchekam/myinstalls/llvm-3.4.2/build/bin/clang++ \
   --with-stp=/mnt/gaiagpfs/users/homedirs/ttitcheuchekam/mytools/shadow/kleeDeploy/stp_install \
   --with-uclibc=/mnt/gaiagpfs/users/homedirs/ttitcheuchekam/mytools/shadow/kleeDeploy/klee-uclibc \
-  --enable-posix-runtime
+  --enable-posix-runtime \
+  --enable-cxx11
 
 =====
 STP from source with specific minisat install dir: use

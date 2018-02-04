@@ -4077,7 +4077,9 @@ inline llvm::Instruction * Executor::ks_makeArgSym (Module &module, GlobalVariab
 // This will insert call to 'klee_make_symbolic' over all the arguments.
 void Executor::ks_setInitialSymbolics (/*ExecutionState &state, */Module &module, Function &Func)
 {
+#if 0
   assert (module.getContext() == getGlobalContext() && "");
+#endif
   llvm::Function *f_make_symbolic = module.getFunction("klee_make_symbolic");
   
   //The user already added the klee_make_symbolic, no need to proceed
