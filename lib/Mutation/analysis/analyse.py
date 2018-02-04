@@ -24,6 +24,113 @@ def average(xarrlist, yarrlist):
     return xarrlist[0], y
 #~ average()
 
+# ROC
+def ComputeMLAccuraciesPercent(scores, couplingproba, precisionrecallthresolds, cumulROC):
+    PROBA_EQ = -1.0
+    PROBA_COUPLED = 1.0
+    lowboundscore = -1.0
+    
+    thresholds = precisionrecallthresolds
+
+    nPositive = 0
+    nNegative = 0
+    for j in range(len(scores)):
+        posj = sum([int(couplingproba[j][i] == PROBA_COUPLED) for i in range(len(scores[j]))])
+        nPositive += posj
+        nNegative += len(scores[j]) - posj
+    # TPR is True Positive Rate, FPR iis False Positive Rate
+    minlen = min([len(x) for x in scores])
+    ROC = {"TPR":[None]*(1+minlen), "FPR":[None]*(1+minlen), "ThreshScore":[None]*(1+minlen)}
+    seenPos = 0
+    seenNeg = 0
+    previdx = [0]*len(scores)
+    for tcount in range(minlen):
+        for si,pscores in enumerate(scores):
+            curM = int(tcount*len(pscores)/float(minlen))
+            for idx in range(previdx[si],curM):
+                seenPos += int(couplingproba[si][idx] == PROBA_COUPLED)
+                seenNeg += int(couplingproba[si][idx] < PROBA_COUPLED)
+            previdx[si] = curM
+        ROC["TPR"][tcount] = seenPos / float(nPositive)
+        ROC["FPR"][tcount] = seenNeg / float(nNegative)
+        ROC["ThreshScore"][tcount] = numpy.nan
+    ROC["TPR"][minlen] = 1.0
+    ROC["FPR"][minlen] = 1.0
+    ROC["ThreshScore"][tcount] = numpy.nan
+
+    if cumulROC is not None:
+        cumulROC["TPR"] += ROC["TPR"]
+        cumulROC["FPR"] += ROC["FPR"]
+        cumulROC["ThreshScore"] += ROC["ThreshScore"]
+
+    # Compute AUC
+    AUC = 0.0
+    for i in range(minlen):
+        AUC += (ROC["FPR"][i+1]-ROC["FPR"][i]) * (ROC["TPR"][i+1]+ROC["TPR"][i])
+    AUC *= 0.5
+    #print "AUC =", AUC
+
+    # Compute Precision and Recall
+    precision = []
+    recall = []
+    F_Measure = []
+    Accuracy = []
+    randomPrecision = []
+    randomRecall = []
+    randomF_Measure = []
+    randomAccurcy = []
+    seenPos = 0
+    seenNeg = 0
+    previdx = [0]*len(scores)
+    for tcount,t in enumerate(thresholds):
+        for si,pscores in enumerate(scores):
+            curM = int(t*len(pscores)/100.0)
+            for idx in range(previdx[si],curM):
+                seenPos += int(couplingproba[si][idx] == PROBA_COUPLED)
+                seenNeg += int(couplingproba[si][idx] < PROBA_COUPLED)
+            previdx[si] = curM
+        if seenPos == 0 and seenNeg == 0:
+            continue
+        precision.append(seenPos / float(seenPos + seenNeg))
+        recall.append(seenPos / float(nPositive))
+        if precision[-1] > 0 or recall[-1] > 0:
+            F_Measure.append(2 * precision[-1] * recall[-1] / (precision[-1] + recall[-1]))
+        else:
+            F_Measure.append(numpy.nan)
+        Accuracy.append(float(seenPos + nNegative - seenNeg) / (nPositive + nNegative))
+
+        randomPrecision.append(nPositive/float((nNegative+nPositive)))
+        randomRecall.append(randomPrecision[-1] * (seenPos+seenNeg) / float(nPositive))
+        if randomPrecision[-1] > 0 or randomRecall[-1] > 0:
+            randomF_Measure.append(2 * randomPrecision[-1] * randomRecall[-1] / (randomPrecision[-1] + randomRecall[-1]))
+        else:
+            randomF_Measure.append(numpy.nan)
+    return {"Precision":precision, "Recall":recall, "F-Measure":F_Measure, "AUC":AUC, "Accuracy":Accuracy, "RandomPrecision":randomPrecision,"RandomRecall":randomRecall,"RandomF-Measure":randomF_Measure} 
+#~ def ComputeMLAccuraciesPercent()
+
+def plotROC(semu_cumulROC, classic_cumulROC, ref_cumulROC, rand_cumulROC, title, figfilename=None, percentage=True):
+    aucstring = ''
+    if len(mlAccuracies) == 1:  #All are merged
+        aucstring = " Curve with AUC=%s" % str(mlAccuracies[0]["AUC"])
+    rocdf = pandas.DataFrame(cumulROC)
+    p = ggplot.ggplot(rocdf, ggplot.aes(x='FPR', y='TPR', label='ThreshScore')) + ggplot.geom_point() #+ ggplot.geom_text(hjust=-0.2)
+    #print p
+    p += ggplot.geom_abline(linetype='dashed')
+    p += ggplot.geom_area(alpha=0.2)
+    p += ggplot.ggtitle("ROC"+aucstring) 
+    p += ggplot.ylab('True Positive Rate') 
+    p += ggplot.xlab('False Positive Rate') 
+    p += ggplot.scale_y_continuous(limits=(0,1)) 
+    p += ggplot.scale_x_continuous(limits=(0,1))
+    if imageout:
+        p.save(imageout+"-ROC.png")
+    rocdf.to_csv(imageout+"-ROC.csv", index=False)
+#def plotROC()
+
+
+
+#-------
+
 def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, percentage=True):
     plt.style.use('ggplot')
     plt.figure(figsize=(10,6)) #(16,9)

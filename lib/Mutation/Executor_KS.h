@@ -15,7 +15,9 @@
 #ifndef KLEE_EXECUTOR_H
 #define KLEE_EXECUTOR_H
 
+#ifdef ENABLE_Z3 
 #include "KS_Z3MaxSat.h"
+#endif
 #include "ExecutionState_KS.h"
 #include "klee/Interpreter.h"
 #include "klee/Internal/Module/Cell.h"
@@ -526,9 +528,11 @@ private:
   unsigned long ks_watchPointID=0;
   unsigned long ks_maxDepthID=1;
 
+#ifdef KS_Z3MAXSAT_SOLVER__H
   // Partial Max Sat Solver
   // Make this with cache
   ks::PartialMaxSATSolver pmaxsat_solver;
+#endif //~KS_Z3MAXSAT_SOLVER__H
 public:
   /// Create new states where each constraint is that of the input state
   /// and return the results. The input state is *NOT* included

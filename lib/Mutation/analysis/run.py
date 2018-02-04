@@ -460,11 +460,12 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
                 # In th parth condition file, replace argv with arg: XXX temporary, DBG
         #        os.system(" ".join(["sed -i'' 's/argv_/arg/g; s/argv/arg0/g'", pathcondfile])) #DBG
         # use the collected preconditions and run semy in symbolic mode
-        kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp -max-time=30000 -max-memory=9000 --max-solver-time=300"
+        kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp -max-time=50000 -max-memory=9000 --max-solver-time=300"
         kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -watchdog -use-cex-cache"
         kleeArgs += " --output-dir="+tmpdir
         semukleearg = "-seed-out-dir="+semuworkdir
-        semuArgs = " ".join(["-semu-mutant-max-fork=4"])
+        semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
+        semuArgs = " ".join(["-semu-precondition-length=3", "-semu-mutant-max-fork=2"])
         #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
         if candidateMutantsFile is not None:
             semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile

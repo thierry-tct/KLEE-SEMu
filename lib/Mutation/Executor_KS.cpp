@@ -136,7 +136,7 @@ cl::opt<std::string> semuCandidateMutantsFile("semu-candidate-mutants-list-file"
 // TODO: Add this to checkWatchpointreached
 cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork", 
                                  cl::init(0), 
-                                 cl::desc("Maximum number of length of mutant path condition from mutation point (number of fork locations since mutation point)"));
+                                 cl::desc("Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
 
 // TODO, actually detect loop and limit the number of iterations. For now just limit the time. set this time large enough to capture loop, not simple instructions
 cl::opt<double> semuLoopBreakDelay("semu-loop-break-delay", 
@@ -831,8 +831,16 @@ void Executor::branch(ExecutionState &state,
     if (OnlyReplaySeeds) {
       for (unsigned i=0; i<N; ++i) {
         if (result[i] && !seedMap.count(result[i])) {
-          terminateState(*result[i]);
-          result[i] = NULL;
+          // @KLEE-SEMu
+          if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+            terminateStateEarly(*result[i], "Do not follow Seed");
+          } else {
+          //~KS
+            terminateState(*result[i]);
+            result[i] = NULL;
+          // @KLEE-SEMu
+          }
+          //~KS
         }
       } 
     }
@@ -4651,10 +4659,12 @@ void Executor::ks_checkMaxSat (ConstraintManager const &mutPathCond,
     //bool rr = coreSolver->mayBeTrue(Query(ConstraintManager(xxx), stateDiffExprs.back()), ress); 
     //llvm::errs() << rr << " " << ress<< " #\n";
 
-    pmaxsat_solver.setSolverTimeout(coreSolverTimeout);
     nMaxFeasibleDiffs = stateDiffExprs.size();
+#ifdef KS_Z3MAXSAT_SOLVER__H
+    pmaxsat_solver.setSolverTimeout(coreSolverTimeout);
     // TODO fix z3 maxsat and uncoment bellow
     //pmaxsat_solver.checkMaxSat(hardClauses, stateDiffExprs, nMaxFeasibleDiffs, nMaxFeasibleEqs);
+#endif //~KS_Z3MAXSAT_SOLVER__H
   }
   
   // update using nTrue and nFalse
@@ -4818,10 +4828,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
 
   if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
     //remove from searcher or seed map
-    if (isSeeding)
-      seedMap.erase(&curState);
-    else
+    if (isSeeding) {
+      if (seedMap.count(&curState) > 0)
+        seedMap.erase(&curState);
+    } else {
       searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
+    }
     
     if (! ks_terminated) {
       //add to ks_reachedWatchPoint if so
