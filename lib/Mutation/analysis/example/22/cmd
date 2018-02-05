@@ -1,0 +1,76 @@
+# Can run this from top dir, which contain inputs in directory 'inputs'
+
+# Example run:  SKIP_TASKS="" bash cmd
+# tasksList = [ZESTI_DEV_TASK, TEST_GEN_TASK, SEMU_EXECUTION, ANALYSE_TASK]
+
+set -u 
+
+error_exit()
+{
+    echo "@CMD-Error: $1"
+    exit 1
+}
+
+intopdir=`readlink -f $(dirname $0)`/'inputs'
+outtopdir=`readlink -f $(dirname $0)`
+
+#Config DIR
+configdir='/media/thierry/0630b405-f70d-48dc-ba06-3f3b6af08b44/home/shadowvm/shadow/tmpTCT/TMP-Corebench/workspace/metactrl/22/'
+configfile='22conf-script.conf'
+
+if [ $# = 1 ]; then
+    [ "$1" = "onHPC" ] || error_exit "the only accepted argument is onHPC to skip zesti"
+    configdir=$intopdir/'hpcConfigDir'
+    configfile=`ls $configdir | grep 'conf-script.conf'`        # assume only on
+    [ `echo $configfile | tr ' ' '\n' | wc -l` -eq 1 ] || error_exit "HPC config file not found or more than 1 found"
+    SKIP_TASKS=`echo ${SKIP_TASKS:-} | sed '1iZESTI_DEV_TASK' | sort -u | xargs`
+elif [ $# != 0 ]; then
+    error_exit "expected one or no argument"
+fi
+
+# SEMU and ZESTI dir
+semudir='/media/thierry/TestMutants/KLEE-MART/klee-semu/build/bin/'
+[ "${SEMU_BINARY_DIR:-}" = "" ] || semudir=$SEMU_BINARY_DIR
+test -d  $semudir || error_exit "SEMU dir not existing: $semudir"
+ScriptDir=`readlink -f $semudir/../../src/lib/Mutation/analysis/`
+test -d  $ScriptDir || error_exit "Script dir not existing: $ScriptDir"
+
+# Assuming that klee zesti is already on the path
+zestidir=$(dirname `which klee`)
+PATH=$PATH:$semudir
+
+test -d $intopdir || { echo "intopdir not existing: $intopdir"; exit 1; }
+
+# Check if want to skip some task
+skipargs=""
+if [ "${SKIP_TASKS:-}" != "" ]
+then
+    echo "@CMD-Warning: Skipping tests: $SKIP_TASKS!"
+    for s in $SKIP_TASKS; do
+        skipargs+=" --skip_completed $s"
+    done
+fi
+
+#echo $skipargs
+cd $configdir || { echo "Couldn't find config dir"; exit 1; }
+. $configfile
+cd - > /dev/null
+
+printf "\n>> CMD calling run.py\n\n"
+
+python $ScriptDir/run.py $outtopdir $skipargs \
+--exepath $(readlink -f $MFI_EXEDIR/$MFI_PROGRAM) \
+--runtest $MFI_RUNTESTSCRIPT \
+--testlist $MFI_TCSFILE \
+--martout $intopdir/mutantsdata \
+--matrix $intopdir/matrices/SM.dat \
+--coverage $intopdir/matrices/MCOV.dat \
+--zesti_exe_dir $zestidir \
+--covTestThresh 20 \
+--testSampleMode 'DEV' \
+--testSamplePercent 10 \
+--semutimeout 86400 \
+--semumaxmemory 16000 \
+--semupreconditionlength 2 \
+--semumutantmaxfork 2 \
+

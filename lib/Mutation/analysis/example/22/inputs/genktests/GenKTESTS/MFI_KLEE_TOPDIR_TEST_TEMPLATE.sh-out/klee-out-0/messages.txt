@@ -1,0 +1,2 @@
+KLEE: HaltTimer invoked
+KLEE: halting execution, dumping remaining states

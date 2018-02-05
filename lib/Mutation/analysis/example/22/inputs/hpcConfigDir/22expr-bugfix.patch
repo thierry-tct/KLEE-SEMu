@@ -1,0 +1,11 @@
+--- 22-6fc0ccf7_bug/src/expr.c	2016-03-18 13:01:12.727023000 +0100
++++ 22-6fc0ccf7_fix/src/expr.c	2016-03-09 22:00:40.594696000 +0100
+@@ -356,7 +356,7 @@
+ 	while (*++cp);
+ 
+ 	free (v->u.s);
+-	v->u.i = value * sign;
++	v->u.i = klee_change(value * sign, value);
+ 	v->type = integer;
+ 	return true;
+       }

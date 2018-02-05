@@ -1,0 +1,84 @@
+KLEE: WARNING: undefined reference to function: __ctype_b_loc
+KLEE: WARNING: undefined reference to function: __xstat64
+KLEE: WARNING: undefined reference to function: klee_posix_prefer_cex
+KLEE: WARNING: undefined reference to function: lseek64
+KLEE: WARNING: executable has module level assembly (ignoring)
+KLEE: WARNING ONCE: calling external: syscall(16, 0, 21505, 59284768)
+KLEE: WARNING ONCE: silently concretizing (reason: max-sym-array-size) expression (Add w64 52264960
+          (Mul w64 8
+                   (SExt w64 (Sub w32 0
+                                      (Select w32 (Ult 4294966272
+                                                       N0:(Xor w32 4294967295
+                                                                   (ReadLSB w32 0 n_args)))
+                                                  N0
+                                                  4294966272))))) to value 52264976 (/home/shadowvm/shadow/klee_llvm2.9/src/runtime/POSIX/klee_init_env.c:80)
+KLEE: WARNING ONCE: calling external: __xstat64(1, 59237744, 51053424)
+KLEE: WARNING ONCE: calling close_stdout with extra arguments.
+KLEE: WARNING ONCE: calling external: vprintf(59212272, 59575264)
+KLEE: WARNING ONCE: calling external: printf(56118224, (ReadLSB w64 0 U0:[(Add w32 7
+                             N0:(Extract w32 0 (Mul w64 8
+                                                        (SExt w64 (Sub w32 4294967295
+                                                                           (Add w32 N1:(Select w32 (Ult 4294966272
+                                                                                                        N2:(Xor w32 4294967295
+                                                                                                                    (ReadLSB w32 0 n_args)))
+                                                                                                   N2
+                                                                                                   4294966272)
+                                                                                    (Select w32 (Ult N3:(Sub w32 4294966271 N1) 4294967295)
+                                                                                                4294967295
+                                                                                                N3)))))))=0,
+                    (Add w32 6 N0)=0,
+                    (Add w32 5 N0)=0,
+                    (Add w32 4 N0)=0,
+                    (Add w32 3 N0)=0,
+                    (Add w32 2 N0)=0,
+                    (Add w32 1 N0)=0,
+                    N0=0] @ const_arr2), (ReadLSB w64 0 U0:[(Add w32 7
+                             N0:(Extract w32 0 (Mul w64 8
+                                                        (SExt w64 (Sub w32 4294967295
+                                                                           (Add w32 N1:(Select w32 (Ult 4294966272
+                                                                                                        N2:(Xor w32 4294967295
+                                                                                                                    (ReadLSB w32 0 n_args)))
+                                                                                                   N2
+                                                                                                   4294966272)
+                                                                                    (Select w32 (Ult N3:(Sub w32 4294966271 N1) 4294967295)
+                                                                                                4294967295
+                                                                                                N3)))))))=0,
+                    (Add w32 6 N0)=0,
+                    (Add w32 5 N0)=0,
+                    (Add w32 4 N0)=0,
+                    (Add w32 3 N0)=0,
+                    (Add w32 2 N0)=0,
+                    (Add w32 1 N0)=0,
+                    N0=0] @ const_arr2))
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+
+KLEE: WARNING: write: write() ignores bytes.
+

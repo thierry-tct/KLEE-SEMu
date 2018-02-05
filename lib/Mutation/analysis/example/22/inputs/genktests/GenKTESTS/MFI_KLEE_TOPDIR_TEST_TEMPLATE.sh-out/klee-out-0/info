@@ -1,0 +1,23 @@
+klee --simplify-sym-indices --max-memory=3048 --disable-inlining --optimize --use-forked-solver --use-cex-cache --libc=uclibc --posix-runtime --allow-external-sym-calls --only-output-states-covering-new --max-sym-array-size=4096 --max-instruction-time=30. --max-time=7200. --watchdog --max-memory-inhibit=false --max-static-fork-pct=1 --max-static-solve-pct=1 --max-static-cpfork-pct=1 --switch-type=internal --randomize-fork --search=random-path --search=nurs:covnew --use-batching-search --batch-instructions=10000 /home/mfi/hardtokill/workspace/metactrl/22/22-output/data/genktests/GenKTESTS/MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh-out/expr.bc --sym-args 0 1 10 --sym-args 0 3 2 --sym-stdout
+PID: 383
+Started: 2018-02-01 03:18:16
+BEGIN searcher description
+<BatchingSearcher> timeBudget: 5.000000e+00, instructionBudget: 10000, baseSearcher:
+<InterleavedSearcher> containing 2 searchers:
+RandomPathSearcher
+WeightedRandomSearcher::CoveringNew
+</InterleavedSearcher>
+</BatchingSearcher>
+END searcher description
+Finished: 2018-02-01 05:18:16
+Elapsed: 02:00:00
+KLEE: done: explored paths = 30136
+KLEE: done: avg. constructs per query = 541
+KLEE: done: total queries = 133563
+KLEE: done: valid queries = 93107
+KLEE: done: invalid queries = 40456
+KLEE: done: query cex = 133563
+
+KLEE: done: total instructions = 44326633
+KLEE: done: completed paths = 30136
+KLEE: done: generated tests = 126

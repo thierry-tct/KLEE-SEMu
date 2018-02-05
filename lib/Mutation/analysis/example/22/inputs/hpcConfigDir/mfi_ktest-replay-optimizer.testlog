@@ -1,0 +1,9 @@
+
+mfi_ktest-replay-optimizer.log: mfi_ktest-replay-optimizer
+	@p='mfi_ktest-replay-optimizer'; \
+	b='mfi_ktest-replay-optimizer'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+	
