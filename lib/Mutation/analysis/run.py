@@ -723,7 +723,7 @@ def main():
 
             # Make final Analysis and plot
             if martOut is not None and matrix is not None:
-                analysis_plot(thisOut, groundConsideredMutant_covtests.keys()) 
+                analysis_plot(thisOut, None) #groundConsideredMutant_covtests.keys()) # None to not plot random
 
 #~ def main()
 

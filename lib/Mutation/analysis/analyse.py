@@ -218,6 +218,24 @@ def computePoints(subjObj, refObj, refHardness=None, tieRandom=True, percentage=
     return ss, nh
 #~ computePoints()
 
+def getSemu_AND_OR_Classic(semu_dat, classic_dat, ground_dat, isAndNotOr):
+    semu_res = {}
+    classic_res = {}
+    ground_res = {}
+    s_m = set([])
+    c_m = set([])
+    for hdness in semu_dat:
+        s_m |= set(semu_dat[hdness])
+    for hdness in classic_dat:
+        c_m |= set(classic_dat[hdness])
+    intersect = s_m & c_m if isAndNotOr else s_m | c_m
+    for tech_dat, tech_res in [(semu_dat, semu_res), (classic_dat, classic_res), (ground_dat, ground_res)]:
+        for hdness in tech_dat:
+            retain = intersect & set(tech_dat[hdness])
+            if len(retain) > 0:
+                tech_res[hdness] = list(retain)
+    return semu_res, classic_res, ground_res
+#~ def getSemu_AND_OR_Classic():
 
 SEMU_JSON = "semu.json"
 CLASSIC_JSON = "classic.json"
@@ -226,47 +244,62 @@ GROUNDTRUTH_JSON = "groundtruth.json"
 RAND_REP = 100
 
 def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
-    semuData = loadJson(os.path.join(jsonsdir, SEMU_JSON))['Hardness']
-    classicData = loadJson(os.path.join(jsonsdir, CLASSIC_JSON))['Hardness']
-    groundtruthData = loadJson(os.path.join(jsonsdir, GROUNDTRUTH_JSON))['Hardness']
+    semuData_all = loadJson(os.path.join(jsonsdir, SEMU_JSON))['Hardness']
+    classicData_all = loadJson(os.path.join(jsonsdir, CLASSIC_JSON))['Hardness']
+    groundtruthData_all = loadJson(os.path.join(jsonsdir, GROUNDTRUTH_JSON))['Hardness']
 
-    semuSelSizes = [None] * RAND_REP
-    semuNHard = [None] * RAND_REP
-    classicSelSizes = [None] * RAND_REP
-    classicNHard = [None] * RAND_REP
-    print "Processing Semu and Classic..."
-    for r in range(RAND_REP):
-        semuSelSizes[r], semuNHard[r] = computePoints(semuData, groundtruthData)
-        classicSelSizes[r], classicNHard[r] = computePoints(classicData, groundtruthData)
-    semuSelSizes, semuNHard = average(semuSelSizes, semuNHard)
-    classicSelSizes, classicNHard = average(classicSelSizes, classicNHard)
+    graphTypes = ["all", "semuANDclassic", "semuORclassic"]
+    for title in graphTypes:
+        if title == 'all':
+            semuData, classicData, groundtruthData = semuData_all, classicData_all, groundtruthData_all
+        elif title == 'semuANDclassic':
+            semuData, classicData, groundtruthData = getSemu_AND_OR_Classic(semuData_all, classicData_all, groundtruthData_all, isAndNotOr=True)
+        elif title == 'semuORclassic':
+            semuData, classicData, groundtruthData = getSemu_AND_OR_Classic(semuData_all, classicData_all, groundtruthData_all, isAndNotOr=False)
+        else:
+            assert False, "Invalid type of graph: "+title+". Expected from: "+str(graphTypes)
 
-    gtHardness = []
-    groundtruthSelSize, groundtruthNHard = computePoints(groundtruthData, groundtruthData, refHardness=gtHardness)
-
-    mutsShuffled = None
-    if mutantInfoFile is not None:
-        mutsShuffled = [int(m) for m in loadJson(mutantInfoFile).keys()]
-    if mutantListForRandom is not None:
-        mutsShuffled = list(mutantListForRandom)
-    if mutsShuffled is not None:
-        randSelSizes = [None] * RAND_REP
-        randNHard = [None] * RAND_REP
-        print "Processing Semu and Random..."
-        #for i in groundtruthData:
-        #    mutsShuffled += list(groundtruthData[i])
+        if len(semuData) == 0 or len(classicData) == 0:
+            print "Analysis@Warning: Skipped Title because empty data."
+            continue
+            
+        semuSelSizes = [None] * RAND_REP
+        semuNHard = [None] * RAND_REP
+        classicSelSizes = [None] * RAND_REP
+        classicNHard = [None] * RAND_REP
+        print "Processing Semu and Classic for", title, "..."
         for r in range(RAND_REP):
-            random.shuffle(mutsShuffled)
-            randSelSizes[r], randNHard[r] = computePoints({float(pos)/len(mutsShuffled): set([mutsShuffled[pos]]) for pos in range(len(mutsShuffled))}, groundtruthData)
-        randSelSizes, randNHard = average(randSelSizes, randNHard)
-    else:
-        randSelSizes = None
-        randNHard = None
+            semuSelSizes[r], semuNHard[r] = computePoints(semuData, groundtruthData)
+            classicSelSizes[r], classicNHard[r] = computePoints(classicData, groundtruthData)
+        semuSelSizes, semuNHard = average(semuSelSizes, semuNHard)
+        classicSelSizes, classicNHard = average(classicSelSizes, classicNHard)
 
-    print "Plotting ..."
-    figDir = jsonsdir
-    plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected", os.path.join(figDir, "comparison"))
-    hardnessPlot(gtHardness[0], gtHardness[1], os.path.join(figDir, "hardness"))
+        gtHardness = []
+        groundtruthSelSize, groundtruthNHard = computePoints(groundtruthData, groundtruthData, refHardness=gtHardness)
+
+        mutsShuffled = None
+        if mutantInfoFile is not None:
+            mutsShuffled = [int(m) for m in loadJson(mutantInfoFile).keys()]
+        if mutantListForRandom is not None:
+            mutsShuffled = list(mutantListForRandom)
+        if mutsShuffled is not None:
+            randSelSizes = [None] * RAND_REP
+            randNHard = [None] * RAND_REP
+            print "Processing Semu and Random..."
+            #for i in groundtruthData:
+            #    mutsShuffled += list(groundtruthData[i])
+            for r in range(RAND_REP):
+                random.shuffle(mutsShuffled)
+                randSelSizes[r], randNHard[r] = computePoints({float(pos)/len(mutsShuffled): set([mutsShuffled[pos]]) for pos in range(len(mutsShuffled))}, groundtruthData)
+            randSelSizes, randNHard = average(randSelSizes, randNHard)
+        else:
+            randSelSizes = None
+            randNHard = None
+
+        print "Plotting ", title, "..."
+        figDir = jsonsdir
+        plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected", os.path.join(figDir, "comparison-"+title))
+        hardnessPlot(gtHardness[0], gtHardness[1], os.path.join(figDir, "hardness-"+title))
     
 #~ libMain()
 

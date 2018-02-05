@@ -454,9 +454,9 @@ const Module *Executor::setModule(llvm::Module *module,
   ks_mutantIDSelectorGlobal = module->getNamedGlobal(ks_mutantIDSelectorName);
   assert (ks_mutantIDSelectorGlobal && 
     "@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
-  //Make sure that the value of the mutIDSelector global variable is 0 (original)
+  // Not needed, it has value the number of mutants + 1 Make sure that the value of the mutIDSelector global variable is 0 (original)
   assert (ks_mutantIDSelectorGlobal->hasInitializer() 
-          && ks_mutantIDSelectorGlobal->getInitializer()->isNullValue()
+          //&& ks_mutantIDSelectorGlobal->getInitializer()->isNullValue()
           && "@KLEE-SEMu - ERROR: mutant ID selector Must be initialized to 0!");
           
   ks_mutantIDSelectorGlobal_Func = module->getFunction(ks_mutantIDSelectorName_Func);
@@ -497,7 +497,7 @@ const Module *Executor::setModule(llvm::Module *module,
     "@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
   //Make sure that the value of the mutIDSelector global variable is 0 (original)
   assert (ks_mutantIDSelectorGlobal->hasInitializer() 
-          && ks_mutantIDSelectorGlobal->getInitializer()->isNullValue()
+          //&& ks_mutantIDSelectorGlobal->getInitializer()->isNullValue()
           && "@KLEE-SEMu - ERROR: mutant ID selector Must be initialized to 0!");
           
   ks_mutantIDSelectorGlobal_Func = module->getFunction(ks_mutantIDSelectorName_Func);
@@ -2871,10 +2871,11 @@ void Executor::run(ExecutionState &initialState) {
       mergedPrecond = OrExpr::create(mergedPrecond, tcPCCond);
     }
     // add precondition  
-    for (auto *as: states) {
-      as->constraints.addConstraint(mergedPrecond);
-        //(mergedPrecond)->dump();
-    }
+    if (!mergedPrecond->isFalse())
+      for (auto *as: states) {
+        as->constraints.addConstraint(mergedPrecond);
+          //(mergedPrecond)->dump();
+      }
   }
   //~KS
 
