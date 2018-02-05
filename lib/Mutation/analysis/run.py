@@ -504,6 +504,19 @@ def analysis_plot(thisOut, groundConsideredMutant_covtests):
     analyse.libMain(thisOut, mutantListForRandom=groundConsideredMutant_covtests)
 #~ def analysis_plot()
 
+def stripRootTest2Dir (rootdir, test2dir):
+    res = {}
+    for tc in test2dir:
+        res[tc] = os.path.relpath(test2dir[tc], rootdir)
+    return res
+#~ def stripRootTest2Dir ()
+
+def prependRootTest2Dir (rootdir, test2dir):
+    res = {}
+    for tc in test2dir:
+        res[tc] = os.path.join(rootdir, test2dir[tc])
+    return res
+#~ def prependRootTest2Dir ()
 
 def main():
     global WRAPPER_TEMPLATE 
@@ -638,11 +651,12 @@ def main():
             os.mkdir(zestioutdir)
 
             test2zestidirMap = runZestiOrSemuTC (unwrapped_testlist, alltestsObj['DEVTESTS'], exePath, runtestScript, inBCFilePath, zestioutdir, zesti_exe_dir, mode=runMode) #mode can also be "semuTC"
-            dumpJson(test2zestidirMap, test2zestidirMapFile)
+            dumpJson(stripRootTest2Dir(outDir, test2zestidirMap), test2zestidirMapFile)
         else:
             print "## Loading zesti test mapping from Cache"
             assert os.path.isdir(zestioutdir), "Error: zestioutdir absent when ZESTI_DEV mode skipped"
             test2zestidirMap = loadJson(test2zestidirMapFile)
+            test2zestidirMap = prependRootTest2Dir(outDir, test2zestidirMap)
 
     # TODO: TEST GEN part here. if klee_tests_dir is not None, means use the tests from klee to increase baseline and dev test to evaluate aproaches
     # prepare seeds and extract sym-args. Then store it in the cache
@@ -665,11 +679,12 @@ def main():
             for ktestfile in listKtestFiles:
                 zestKtests.append(ktestfile)
         sym_args_param, test2semudirMap = getSymArgsFromKtests (zestKtests, test2zestidirMap.keys(), semuworkdir)
-        dumpJson([sym_args_param, test2semudirMap], test2semudirMapFile)
+        dumpJson([sym_args_param, stripRootTest2Dir(outDir, test2semudirMap)], test2semudirMapFile)
     else:
         print "## Loading parametrized tests mapping from cache"
         assert os.path.isdir(semuworkdir), "Error: semuworkdir absent when TEST-GEN mode skipped"
         sym_args_param, test2semudirMap = loadJson(test2semudirMapFile)
+        test2semudirMap = prependRootTest2Dir(outDir, test2semudirMap)
 
     if testSampleMode == 'DEV':
         testSamples = {'DEV': alltestsObj['DEVTESTS']}
