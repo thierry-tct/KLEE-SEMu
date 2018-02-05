@@ -443,7 +443,7 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
 
 # put information from concolic run for the passed test set into a temporary dir, then possibly
 # Compute SEMU symbex and rank according to SEMU. outpout in outFilePath
-def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, candidateMutantsFile, symArgs, semuexedir, mode="zesti+symbex"):
+def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir, metaMutantBC, candidateMutantsFile, symArgs, semuexedir, tuning, mode="zesti+symbex"):
     outFilePath = os.path.join(thisOutDir, outname)
     tmpdir = semuworkdir+".tmp"
     #assert not os.path.isdir(tmpdir), "For Semu temporary dir already exists: "+tmpdir
@@ -460,12 +460,13 @@ def processSemu (semuworkdir, testSample, test2semudirMap,  outname, thisOutDir,
                 # In th parth condition file, replace argv with arg: XXX temporary, DBG
         #        os.system(" ".join(["sed -i'' 's/argv_/arg/g; s/argv/arg0/g'", pathcondfile])) #DBG
         # use the collected preconditions and run semy in symbolic mode
-        kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp -max-time=50000 -max-memory=9000 --max-solver-time=300"
+        kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp"
+        kleeArgs += " ".join([par+'='+str(tuning['KLEE'][par]) for par in tuning['KLEE']])  #-max-time=50000 -max-memory=9000 --max-solver-time=300
         kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -watchdog -use-cex-cache"
         kleeArgs += " --output-dir="+tmpdir
         semukleearg = "-seed-out-dir="+semuworkdir
         semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
-        semuArgs = " ".join(["-semu-precondition-length=3", "-semu-mutant-max-fork=2"])
+        semuArgs = " ".join([par+'='+str(tuning['SEMU'][par]) for par in tuning['SEMU']])  #" ".join(["-semu-precondition-length=3", "-semu-mutant-max-fork=2"])
         #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
         if candidateMutantsFile is not None:
             semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
@@ -536,6 +537,10 @@ def main():
     parser.add_argument("--skip_completed", action='append', default=[], choices=tasksList, help="Specify the tasks that have already been executed")
     parser.add_argument("--testSampleMode", type=str, default="DEV", choices=["DEV", "KLEE", "NUM"], help="choose how to sample subset for evaluation. DEV means use Developer test, NUM, mean a percentage of all tests")
     parser.add_argument("--testSamplePercent", type=int, default=10, help="Specify the percentage of test suite to use for analysis, (require setting testSampleMode to NUM)")
+    parser.add_argument("--semutimeout", type=int, default=86400, help="Specify the timeout for semu execution")
+    parser.add_argument("--semumaxmemory", type=int, default=9000, help="Specify the max memory for semu execution")
+    parser.add_argument("--semupreconditionlength", type=int, default=2, help="Specify precondition length semu execution")
+    parser.add_argument("--semumutantmaxfork", type=int, default=2, help="Specify hard checkpoint for mutants (or post condition checkpoint) as PC length, in semu execution")
     args = parser.parse_args()
 
     outDir = os.path.join(args.outTopDir, OutFolder)
@@ -578,6 +583,12 @@ def main():
     # We need to set size fraction of test samples
     testSamplePercent = args.testSamplePercent
     assert testSamplePercent > 0 and testSamplePercent <= 100, "Error: Invalid testSamplePercent"
+
+    # Parameter tuning for Semu execution (timeout, to precondition depth)
+    semuTuning = {
+                    'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
+                    'SEMU':{"-semu-precondition-length":args.semupreconditionlength, "-semu-mutant-max-fork":args.semumutantmaxfork}
+                 }
 
     # Create outdir if absent
     cacheDir = os.path.join(outDir, "caches")
@@ -685,7 +696,7 @@ def main():
 
             # process for SEMU
             if martOut is not None:
-                processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut, kleeSemuInBCLink, candidateMutantsFile, sym_args_param, semu_exe_dir, mode=runMode) 
+                processSemu (semuworkdir, testSamples[ts_size], test2semudirMap, 'semu', thisOut, kleeSemuInBCLink, candidateMutantsFile, sym_args_param, semu_exe_dir, semuTuning, mode=runMode) 
 
     # Analysing for each test Sample 
     if ANALYSE_TASK in toExecute:
