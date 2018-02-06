@@ -158,9 +158,10 @@ def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, perc
 #~ plot4()
 
 def hardnessPlot (xlist, ylist, figfilename=None):
+    color = '#1b2431' #'xkcd:dark'
     plt.style.use('ggplot')
     plt.figure(figsize=(10,6)) #(16,9)
-    plt.plot(xlist, ylist, '-', color='xkcd:dark', linewidth=3.0, alpha=0.5)
+    plt.plot(xlist, ylist, '-', color=color, linewidth=3.0, alpha=0.5)
     plt.ylim(-0.06, 1)
     plt.xlabel("Selected Mutants percentage position")
     plt.ylabel("Hardness")

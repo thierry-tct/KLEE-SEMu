@@ -4806,7 +4806,7 @@ inline void Executor::ks_CheckAndBreakInfinitLoop(ExecutionState &curState, Exec
   }
 }
 
-/// Return true if the check actually happened, false otherwise. This help to know if we need tu call updateStates or not
+/// Return true if the state comparison actually happened, false otherwise. This help to know if we need to call updateStates or not
 inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size, bool isSeeding) {
   // // FIXME: We just checked memory and some states will be killed if exeeded and we will have some problem in comparison
   // // FIXME: For now we assume that the memory limitmust not be exceeded, need to find a way to handle this later
@@ -4846,14 +4846,17 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         ks_reachedWatchPoint.insert(&curState);
     } 
     
+    // Put it here to make sure that any newly added state is considered (addesStates and removedStates are empty after)
+    updateStates(0);
+
     //Check if all reached and compare states
     if (ks_reachedOutEnv.size() + 
         ks_reachedWatchPoint.size() + 
         ks_terminatedBeforeWP.size() >= states.size()) {   //Temporary solution here(assumed that all states reach that point). TODO
       std::vector<ExecutionState *> remainWPStates;
       ks_watchPointID++;
-      llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() << " States.\n";
       bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
+      llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() << " States" << (ks_hasOutEnv?" (OutEnv)":" (Checkpoint)") << ".\n";
       ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/);
       llvm::errs() << "# SEMU@Status: State Comparison Done!\n";
       
@@ -4869,6 +4872,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         }
         ks_terminatedBeforeWP.clear();
         ks_maxDepthID++;
+
+        // add all terminated states to the searcher so that update won't assert that the states are not in searcher
+        // XXX The searcher is empty here. This is necessary because in updateStates, removedStates must be in searcher
+        if (searcher)
+          searcher->update(0, removedStates/*adding*/, std::vector<ExecutionState *>());
+
       } else { // there should be no terminated state
         if (ks_reachedOutEnv.size() != remainWPStates.size()) {
           klee_error("SEMU@ERROR: BUG, state reaching outenv different after comparestates");
@@ -4876,10 +4885,10 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         }
         ks_reachedOutEnv.clear();
       }
-
+      // take account of addedStates and removedStates
       updateStates(0);
     }
-    
+
     return true;
   }
   return false;
