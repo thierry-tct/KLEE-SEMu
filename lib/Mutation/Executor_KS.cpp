@@ -4572,6 +4572,10 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
         ExecutionState::ks_checkNoDiffError(sDiff, mState->ks_mutantID);
 
         if (ExecutionState::ks_isNoDiff(sDiff)) {
+          if (doMaxSat) {
+            // XXX put out the paths showing no differences as well
+            ks_checkMaxSat(mState->constraints, mSisState, inStateDiffExp, mState->ks_mutantID, sDiff);
+          }
   #ifdef ENABLE_KLEE_SEMU_DEBUG
           llvm::errs() << "<==> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Equivalent.\n\n";
   #endif

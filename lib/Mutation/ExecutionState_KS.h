@@ -91,7 +91,7 @@ public:
   inline static void ks_checkNoDiffError(int sdiff, KS_MutantIDType mutant_id)
   {
     if (sdiff >= ksFAILURE_BUG) {
-      llvm::errs() << "error in semu execution - Mutant ID: " << mutant_id << ", error code: 1\n";
+      llvm::errs() << "\nSEMU@ERROR: error in semu execution - Mutant ID: " << mutant_id << ", error code: 1\n";
       exit(1); //ERROR
     }
   }
