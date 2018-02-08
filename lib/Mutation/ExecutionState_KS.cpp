@@ -201,7 +201,7 @@ int ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *M
   }
 
   //TODO>
-  //> First: They should have same PC (The both executed the watch point)
+  //> First: They should have same PC (They both executed the watch point)
   if (aPC != bPC) { 
 #ifdef ENABLE_KLEE_SEMU_DEBUG
     llvm::errs() << "--> aPC != bPC\n";  

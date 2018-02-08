@@ -74,12 +74,13 @@ def RightEasierOrIncomparableToLeft(mutID, compID, inData):
                 for ffl in inData[mutID][pc]:
                     for ffr in inData[compID][pc]:
                         if ffl['Diff_Type'] == ffr['Diff_Type']:
-                            if float(ffl['nMaxFeasibleDiffs']) / ffl['nSoftClauses'] < float(ffr['nMaxFeasibleDiffs']) / ffr['nSoftClauses']:
-                                lscore += 1
-                            else:
-                                rscore += 1
+                            if ks.hasAnyCodes (ffl['Diff_Type'], ks.VARS_DIFF):
+                                if float(ffl['nMaxFeasibleDiffs']) / ffl['nSoftClauses'] < float(ffr['nMaxFeasibleDiffs']) / ffr['nSoftClauses']: 
+                                    lscore += 1
+                                else:
+                                    rscore += 1
                         else:
-                            if int(ffl['Diff_Type']) > int(ffr['Diff_Type']):
+                            if int(ffl['Diff_Type']) < int(ffr['Diff_Type']):  # TODO: consider main/entry func, outenv, symbolic, pc diffs as equals
                                 lscore += 1
                             else:
                                 rscore += 1
@@ -98,7 +99,10 @@ def RightEasierOrIncomparableToLeft(mutID, compID, inData):
 
 #~ def RightEasierOrIncomparableToLeft()
 
-def computeScores(inData):
+'''
+    Approximate the mutant hardness with regard to another mutants
+'''
+def computeScoresPairwise(inData):
     outData = {'Relative-Equivalent': [], 'Hardness': {}}
     for mutID in inData:
         # compute mutant hardness (0~1)
@@ -117,14 +121,116 @@ def computeScores(inData):
 
         # add mutant to output
         if m_hardness == 1.0:
-            pass # Impossible
-            #outData['Relative-Equivalent'].append(mutID)
+            #pass # Impossible
+            outData['Relative-Equivalent'].append(mutID)
         else:
             if m_hardness not in outData['Hardness']:
                 outData['Hardness'][m_hardness] = list()
             outData['Hardness'][m_hardness].append(mutID)
     return outData
-#~ def computeScores()
+#~ def computeScoresPairwise()
+
+'''
+    approximate the hardness of a Mutant. Take as input the mutant symbolic info Dict. containing diff per path.
+    -------------------------------
+    hardness = 1 - (kill / covers)
+    ------------------------------
+        kill -> diff
+        covers -> diff or no-diff
+    ------------------------------
+    hardness = sum_{p in Paths}(percentage of tests killing M in p) / (Number of paths) 
+    -----------------------------
+        Approximate percentage of killing with state diffs.
+            - Out Env diff -> 100%
+            - Entry/main func ret code diff -> 100%
+            - PC(program counter) diff -> 50% 
+            - No Diff -> 0%
+            - Symbolic diff -> 100%
+            - state variable diff -> (num var diff) / (total num vars)
+
+'''
+def independentApproximateHardness(mutantsymbinfos):
+    maxKillProba = 100.0
+    weights = { ks.NO_DIFF: 0.0,
+                ks.VARS_DIFF: 1.0, # Will be computed later
+                ks.RETCODE_DIFF_OTHERFUNC: 1.0, #Unexpected
+                ks.RETCODE_DIFF_ENTRYFUNC: maxKillProba,
+                ks.RETCODE_DIFF_MAINFUNC: maxKillProba, 
+                ks.OUTENV_DIFF: maxKillProba/2, 
+                ks.SYMBOLICS_DIFF: maxKillProba, 
+                ks.PC_DIFF: maxKillProba/10 
+            }
+    surediffsSet = [ks.RETCODE_DIFF_ENTRYFUNC, ks.RETCODE_DIFF_MAINFUNC, ks.SYMBOLICS_DIFF]
+    unsureSet = set(weights) - set(surediffsSet)
+    surediffsDiff = None
+    if len(surediffsSet) > 0:
+        surediffsDiff = surediffsSet[0]
+        for d in surediffsSet[1:]:
+            surediffsDiff |= d
+    
+    nPaths = len(mutantsymbinfos)
+    killProba = 0.0
+    for pc in mutantsymbinfos:
+        local_proba = 0.0
+        for instance in mutantsymbinfos[pc]:  # Multiple instance because we may have multiple environment calls
+            dt = instance['Diff_Type']
+
+            if surediffsDiff is not None and ks.hasAnyCodes(dt, surediffsDiff):
+                local_proba = weights[surediffsSet[0]]
+                # certainly kill, we are done with this path (break)
+                break
+            else:
+                for subdifftype in unsureSet:
+                    if ks.hasAnyCodes(dt, ks.VARS_DIFF):
+                        local_proba += weights[subdifftype] * float(instance['nMaxFeasibleDiffs']) / instance['nSoftClauses']
+                    else:
+                        local_proba += weights[subdifftype]
+        killProba += local_proba if local_proba <= maxKillProba else maxKillProba
+
+    return (1 - killProba / nPaths / maxKillProba) #value betwen 0 and 1
+#~ def independentApproximateHardness()
+
+'''
+    Use the state difference to approximate the hardness of each mutant regardless independently
+'''
+def computeScoresStateApproximate(inData):
+    outData = {'Relative-Equivalent': [], 'Hardness': {}}
+    for mutID in inData:
+        # compute mutant hardness (0~1)
+        m_hardness = independentApproximateHardness(inData[mutID])
+
+        # add mutant to output
+        if m_hardness == 1.0:
+            #pass # Impossible
+            outData['Relative-Equivalent'].append(mutID)
+        else:
+            if m_hardness not in outData['Hardness']:
+                outData['Hardness'][m_hardness] = list()
+            outData['Hardness'][m_hardness].append(mutID)
+
+    return outData
+#~ def computeScoresStateApproximate()
+
+'''
+Combine pairwise with state approximation
+'''
+def pairwise_state_Scores(inData):
+    outData = {}
+    intermDat = computeScoresPairwise(inData)
+    ordered = []
+    for ph in sorted(intermDat.keys(), reverse=True):
+        state_hn = {}
+        for mut in intermDat[ph]:
+            m_h = independentApproximateHardness(inData[mut])
+            if m_h not in state_hn:
+                state_hn[m_h] = []
+            state_hn[m_h].append(mut)
+        ordered += [state_hn[mhv] for mhv in sorted(state_hn, reverse=True)]
+    for pos,uniform_hn in enumerate(np.linspace(0.0, 1.0, len(ordered),endpoint=False)[::-1]): #[::-1] reverses the array
+        outData[uniform_hn] = ordered[pos]
+    assert len(outData) == len(ordered)
+    return outData
+#~ def pairwise_state_Scores()
 
 def libMain(semuOutDir, outFilename):
     assert (outFilename is not None), "Must specify output file"
@@ -133,9 +239,19 @@ def libMain(semuOutDir, outFilename):
 
     inDataObj = loadData(semuOutDir)
 
-    outDataObj = computeScores(inDataObj)
+    outDataObj = computeScoresPairwise(inDataObj)
 
-    with open(outFilename+'.json', "w") as fp:
+    with open(outFilename+'-pairwise.json', "w") as fp:
+        json.dump(outDataObj, fp)
+
+    outDataObj = computeScoresStateApproximate(inDataObj)
+
+    with open(outFilename+'-approxH.json', "w") as fp:
+        json.dump(outDataObj, fp)
+
+    outDataObj = pairwise_state_Scores(inDataObj)
+
+    with open(outFilename+'-merged_PairApprox.json', "w") as fp:
         json.dump(outDataObj, fp)
 
     print "# Done"

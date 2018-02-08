@@ -4566,13 +4566,17 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, false/*post...*/);
         } else {
           sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, true/*post...*/);
+          // XXX if mutant terminated and not original or vice versa, set the main return diff
+          // TODO: Meke this more efficient
+          if (ks_terminatedBeforeWP.count(mSisState) != ks_terminatedBeforeWP.count(mState))
+            sDiff |= ExecutionState::KS_StateDiff_t::ksRETCODE_DIFF_MAINFUNC;
         }
         
         // make sure that the sDiff is not having an error. If error, abort
         ExecutionState::ks_checkNoDiffError(sDiff, mState->ks_mutantID);
 
         if (ExecutionState::ks_isNoDiff(sDiff)) {
-          if (doMaxSat) {
+          if (!outEnvOnly/*at check point*/ && doMaxSat) {
             // XXX put out the paths showing no differences as well
             ks_checkMaxSat(mState->constraints, mSisState, inStateDiffExp, mState->ks_mutantID, sDiff);
           }
