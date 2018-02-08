@@ -142,12 +142,12 @@ def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, perc
     plt.figure(figsize=(10,6)) #(16,9)
     for si in range(len(semuPair[0])):
         cval = getColor(colors)
-        label = os.path.splitext(SEMU_JSONs[si])[0]
+        label = (os.path.splitext(SEMU_JSONs[si])[0] if len(SEMU_JSONs) > 0 else 'semu').replace("semu", "SymbolicExec")
         plt.plot(semuPair[0][si], semuPair[1][si], '-', color=cval , linewidth=3.0, alpha=0.6, label=label)
         plt.fill_between(semuPair[0][si], 0, semuPair[1][si], facecolor=cval, alpha=0.05)
     for ci in range(len(classPair[0])):
         cval = getColor(colors)
-        label = os.path.splitext(CLASSIC_JSONs[ci])[0]
+        label = os.path.splitext(CLASSIC_JSONs[ci])[0].replace('classic', 'Test-Cases')
         plt.plot(classPair[0][ci], classPair[1][ci], '-.', color=cval, linewidth=3.0, alpha=0.6, label=label)
         plt.fill_between(classPair[0][ci], 0, classPair[1][ci], facecolor=cval, alpha=0.05)
     if randPair[0] is not None and randPair[1] is not None:
