@@ -15,6 +15,7 @@ import json, re
 import glob, shutil
 
 import pandas as pd
+import numpy as np
 
 class DIFF_CODES:
     def __init__(self):
@@ -215,20 +216,21 @@ def computeScoresStateApproximate(inData):
 Combine pairwise with state approximation
 '''
 def pairwise_state_Scores(inData):
-    outData = {}
+    outData = {'Relative-Equivalent': [], 'Hardness': {}}
     intermDat = computeScoresPairwise(inData)
+    outData['Relative-Equivalent'] = intermDat['Relative-Equivalent']
     ordered = []
-    for ph in sorted(intermDat.keys(), reverse=True):
+    for ph in sorted(intermDat['Hardness'].keys(), reverse=True):
         state_hn = {}
-        for mut in intermDat[ph]:
+        for mut in intermDat['Hardness'][ph]:
             m_h = independentApproximateHardness(inData[mut])
             if m_h not in state_hn:
                 state_hn[m_h] = []
             state_hn[m_h].append(mut)
         ordered += [state_hn[mhv] for mhv in sorted(state_hn, reverse=True)]
     for pos,uniform_hn in enumerate(np.linspace(0.0, 1.0, len(ordered),endpoint=False)[::-1]): #[::-1] reverses the array
-        outData[uniform_hn] = ordered[pos]
-    assert len(outData) == len(ordered)
+        outData['Hardness'][uniform_hn] = ordered[pos]
+    assert len(outData['Hardness']) == len(ordered)
     return outData
 #~ def pairwise_state_Scores()
 

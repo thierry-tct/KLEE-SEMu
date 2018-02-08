@@ -132,16 +132,32 @@ def plotROC(semu_cumulROC, classic_cumulROC, ref_cumulROC, rand_cumulROC, title,
 #-------
 
 def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, percentage=True):
+    colors = {'colors':['blue', 'cyan', 'magenta','green','red', 'yellow'], 'pos':0}
+    def getColor(cdict):
+        assert cdict['pos'] < len(cdict['colors']), "reached max colors"
+        cdict['pos'] += 1
+        return cdict['colors'][cdict['pos']-1]
+        
     plt.style.use('ggplot')
     plt.figure(figsize=(10,6)) #(16,9)
-    plt.plot(semuPair[0], semuPair[1], 'b-', linewidth=3.0, alpha=0.6, label='semu')
-    plt.fill_between(semuPair[0], 0, semuPair[1], facecolor='blue', alpha=0.05)
-    plt.plot(classPair[0], classPair[1], 'g-.', linewidth=3.0, alpha=0.6, label='classic')
-    plt.fill_between(classPair[0], 0, classPair[1], facecolor='green', alpha=0.05)
+    for si in range(len(semuPair[0])):
+        cval = getColor(colors)
+        label = os.path.splitext(SEMU_JSONs[si])[0]
+        plt.plot(semuPair[0][si], semuPair[1][si], '-', color=cval , linewidth=3.0, alpha=0.6, label=label)
+        plt.fill_between(semuPair[0][si], 0, semuPair[1][si], facecolor=cval, alpha=0.05)
+    for ci in range(len(classPair[0])):
+        cval = getColor(colors)
+        label = os.path.splitext(CLASSIC_JSONs[ci])[0]
+        plt.plot(classPair[0][ci], classPair[1][ci], '-.', color=cval, linewidth=3.0, alpha=0.6, label=label)
+        plt.fill_between(classPair[0][ci], 0, classPair[1][ci], facecolor=cval, alpha=0.05)
     if randPair[0] is not None and randPair[1] is not None:
-        plt.plot(randPair[0], randPair[1], 'r:', linewidth=3.0, alpha=0.6, label='random')
-        plt.fill_between(randPair[0], 0, randPair[1], facecolor='red', alpha=0.05)
-    plt.plot(refPair[0], refPair[1], 'r--', color='gray', alpha=0.755555, linewidth=2.0, label='ground-truth')
+        assert len(randPair[0]) == 1
+        for ri in range(len(randPair[0])):
+            cval = getColor(colors)
+            plt.plot(randPair[0][ri], randPair[1][ri], ':', color=cval, linewidth=3.0, alpha=0.6, label='random')
+            plt.fill_between(randPair[0][ri], 0, randPair[1][ri], facecolor=cval, alpha=0.05)
+    assert len(refPair[0]) == 1
+    plt.plot(refPair[0][0], refPair[1][0], 'r--', color='gray', alpha=0.755555, linewidth=2.0, label='ground-truth')
     #plt.fill_between(semuPair[0], 0, semuPair[1], facecolor='gray', alpha=0.05)
     plt.legend(loc='upper center', ncol=1, fontsize='x-large')
     met = "Percentage" if percentage else "Number"
@@ -220,17 +236,19 @@ def computePoints(subjObj, refObj, refHardness=None, tieRandom=True, percentage=
 #~ computePoints()
 
 def getSemu_AND_OR_Classic(semu_dat, classic_dat, ground_dat, isAndNotOr):
-    semu_res = {}
-    classic_res = {}
-    ground_res = {}
+    semu_res = [{} for i in range(len(semu_dat))]
+    classic_res = [{} for i in range(len(classic_dat))]
+    ground_res = [{} for i in range(len(ground_dat))]
     s_m = set([])
     c_m = set([])
-    for hdness in semu_dat:
-        s_m |= set(semu_dat[hdness])
-    for hdness in classic_dat:
-        c_m |= set(classic_dat[hdness])
+    for si in range(len(semu_dat)):
+        for hdness in semu_dat[si]:
+            s_m |= set(semu_dat[si][hdness])
+    for ci in range(len(classic_dat)):
+        for hdness in classic_dat[ci]:
+            c_m |= set(classic_dat[ci][hdness])
     intersect = s_m & c_m if isAndNotOr else s_m | c_m
-    for tech_dat, tech_res in [(semu_dat, semu_res), (classic_dat, classic_res), (ground_dat, ground_res)]:
+    for tech_dat, tech_res in [(semu_dat[si], semu_res[si]) for si in range(len(semu_dat))] + [(classic_dat[ci], classic_res[ci]) for ci in range(len(classic_dat))] + [(ground_dat[gi], ground_res[gi]) for gi in range(len(ground_dat))]:
         for hdness in tech_dat:
             retain = intersect & set(tech_dat[hdness])
             if len(retain) > 0:
@@ -238,45 +256,53 @@ def getSemu_AND_OR_Classic(semu_dat, classic_dat, ground_dat, isAndNotOr):
     return semu_res, classic_res, ground_res
 #~ def getSemu_AND_OR_Classic():
 
-SEMU_JSON = "semu.json"
-CLASSIC_JSON = "classic.json"
-GROUNDTRUTH_JSON = "groundtruth.json"
+SEMU_JSONs = ["semu"+var+".json" for var in ['-pairwise', '-approxH', '-merged_PairApprox']]
+CLASSIC_JSONs = ["classic.json"]
+GROUNDTRUTH_JSONs = ["groundtruth.json"]
 
 RAND_REP = 100
 
 def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
-    semuData_all = loadJson(os.path.join(jsonsdir, SEMU_JSON))['Hardness']
-    classicData_all = loadJson(os.path.join(jsonsdir, CLASSIC_JSON))['Hardness']
-    groundtruthData_all = loadJson(os.path.join(jsonsdir, GROUNDTRUTH_JSON))['Hardness']
+    semuData_all_l = [loadJson(os.path.join(jsonsdir, semu_json))['Hardness'] for semu_json in SEMU_JSONs]
+    classicData_all_l = [loadJson(os.path.join(jsonsdir, classic_json))['Hardness'] for classic_json in CLASSIC_JSONs]
+    groundtruthData_all_l = [loadJson(os.path.join(jsonsdir, ground_json))['Hardness'] for ground_json in GROUNDTRUTH_JSONs]
 
     graphTypes = ["all", "semuANDclassic", "semuORclassic"]
     for title in graphTypes:
         if title == 'all':
-            semuData, classicData, groundtruthData = semuData_all, classicData_all, groundtruthData_all
+            semuData_l, classicData_l, groundtruthData_l = semuData_all_l, classicData_all_l, groundtruthData_all_l
         elif title == 'semuANDclassic':
-            semuData, classicData, groundtruthData = getSemu_AND_OR_Classic(semuData_all, classicData_all, groundtruthData_all, isAndNotOr=True)
+            semuData_l, classicData_l, groundtruthData_l = getSemu_AND_OR_Classic(semuData_all_l, classicData_all_l, groundtruthData_all_l, isAndNotOr=True)
         elif title == 'semuORclassic':
-            semuData, classicData, groundtruthData = getSemu_AND_OR_Classic(semuData_all, classicData_all, groundtruthData_all, isAndNotOr=False)
+            semuData_l, classicData_l, groundtruthData_l = getSemu_AND_OR_Classic(semuData_all_l, classicData_all_l, groundtruthData_all_l, isAndNotOr=False)
         else:
             assert False, "Invalid type of graph: "+title+". Expected from: "+str(graphTypes)
 
-        if len(semuData) == 0 or len(classicData) == 0:
+        if len(semuData_l[0]) == 0 or len(classicData_l[0]) == 0:
             print "Analysis@Warning: Skipped Title because empty data."
             continue
             
-        semuSelSizes = [None] * RAND_REP
-        semuNHard = [None] * RAND_REP
-        classicSelSizes = [None] * RAND_REP
-        classicNHard = [None] * RAND_REP
+        semuSelSizes = [[None] * RAND_REP] * len(semuData_l)
+        semuNHard = [[None] * RAND_REP] * len(semuData_l)
+        classicSelSizes = [[None] * RAND_REP] * len(classicData_l)
+        classicNHard = [[None] * RAND_REP] * len(classicData_l)
         print "Processing Semu and Classic for", title, "..."
+        assert len(groundtruthData_l) == 1, "Mus have one groundtruth"
         for r in range(RAND_REP):
-            semuSelSizes[r], semuNHard[r] = computePoints(semuData, groundtruthData)
-            classicSelSizes[r], classicNHard[r] = computePoints(classicData, groundtruthData)
-        semuSelSizes, semuNHard = average(semuSelSizes, semuNHard)
-        classicSelSizes, classicNHard = average(classicSelSizes, classicNHard)
+            for si in range(len(semuData_l)):
+                semuSelSizes[si][r], semuNHard[si][r] = computePoints(semuData_l[si], groundtruthData_l[0])
+            for ci in range(len(classicData_l)):
+                classicSelSizes[ci][r], classicNHard[ci][r] = computePoints(classicData_l[ci], groundtruthData_l[0])
+
+        for si in range(len(semuSelSizes)):
+            semuSelSizes[si], semuNHard [si]= average(semuSelSizes[si], semuNHard[si])
+        for ci in range(len(classicSelSizes)):
+            classicSelSizes[ci], classicNHard[ci] = average(classicSelSizes[ci], classicNHard[ci])
 
         gtHardness = []
-        groundtruthSelSize, groundtruthNHard = computePoints(groundtruthData, groundtruthData, refHardness=gtHardness)
+        groundtruthSelSize, groundtruthNHard = computePoints(groundtruthData_l[0], groundtruthData_l[0], refHardness=gtHardness)
+        groundtruthSelSize = [groundtruthSelSize]
+        groundtruthNHard = [groundtruthNHard]
 
         mutsShuffled = None
         if mutantInfoFile is not None:
@@ -286,13 +312,15 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
         if mutsShuffled is not None:
             randSelSizes = [None] * RAND_REP
             randNHard = [None] * RAND_REP
-            print "Processing Semu and Random..."
+            print "Processing Random..."
             #for i in groundtruthData:
             #    mutsShuffled += list(groundtruthData[i])
             for r in range(RAND_REP):
                 random.shuffle(mutsShuffled)
                 randSelSizes[r], randNHard[r] = computePoints({float(pos)/len(mutsShuffled): set([mutsShuffled[pos]]) for pos in range(len(mutsShuffled))}, groundtruthData)
             randSelSizes, randNHard = average(randSelSizes, randNHard)
+            randSelSizes = [randSelSizes]
+            randNHard = [randNHard]
         else:
             randSelSizes = None
             randNHard = None
