@@ -5,12 +5,20 @@ import json
 import argparse
 import random
 
+import matplotlib
+matplotlib.use('Agg') # Plot when using ssh -X (avoid server ... error)
+
 import matplotlib.pyplot as plt
 
 def loadJson(filename):
     with open(filename) as f:
         return json.load(f)
 #~ loadJson()
+
+def dumpJson(obj, filename):
+    with open(filename, "w") as f:
+        json.dump(obj, f)
+#~dumpJson()
 
 def average(xarrlist, yarrlist):
     for k in range(1, len(xarrlist)):
@@ -131,46 +139,85 @@ def plotROC(semu_cumulROC, classic_cumulROC, ref_cumulROC, rand_cumulROC, title,
 
 #-------
 
-def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, percentage=True):
-    colors = {'colors':['blue', 'cyan', 'magenta','green','red', 'yellow'], 'pos':0}
+def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, vertline=None, percentage=True):
+    if len(SEMU_JSONs) > 1:
+        colors = {'colors':['blue', 'cyan', 'magenta','green','red', 'yellow'], 'pos':0}
+    else:
+        colors = {'colors':['blue', 'green','red', 'yellow', 'cyan', 'magenta'], 'pos':0}
     def getColor(cdict):
         assert cdict['pos'] < len(cdict['colors']), "reached max colors"
         cdict['pos'] += 1
         return cdict['colors'][cdict['pos']-1]
-        
-    plt.style.use('ggplot')
-    plt.figure(figsize=(10,6)) #(16,9)
+    
+    def makeFull(subjvals, refvals):
+        res = []
+        for i, v in enumerate(subjvals):
+            res.append(v / refvals[i] if v>0 else 0)
+        return res
+
+    fullPlot = True
+
+    #plt.style.use('ggplot')
+    plt.style.use('seaborn-whitegrid')
+    plt.figure(figsize=(10,6)) #(13,9)) #(16,9)
+    plt.gcf().subplots_adjust(bottom=0.27)
+    plt.rcParams["axes.edgecolor"] = "0.15"
+    plt.rcParams["axes.linewidth"]  = 1.25
+    fontsize = 20 #26
     for si in range(len(semuPair[0])):
         cval = getColor(colors)
-        label = (os.path.splitext(SEMU_JSONs[si])[0] if len(SEMU_JSONs) > 0 else 'semu').replace("semu", "SymbolicExec")
-        plt.plot(semuPair[0][si], semuPair[1][si], '-', color=cval , linewidth=3.0, alpha=0.6, label=label)
-        plt.fill_between(semuPair[0][si], 0, semuPair[1][si], facecolor=cval, alpha=0.05)
+        label = (os.path.splitext(SEMU_JSONs[si])[0] if len(SEMU_JSONs) > 1 else 'semu').replace("semu", "SymbolicExec")
+        ysemu = makeFull(semuPair[1][si], refPair[1][0]) if fullPlot else semuPair[1][si]
+        plt.plot(semuPair[0][si], ysemu, '-', color=cval , linewidth=3.0, alpha=0.6, label=label)
+        plt.fill_between(semuPair[0][si], 0, ysemu, facecolor=cval, alpha=0.05)
+        # Vertical line
+        if vertline is not None:
+            plt.axvline(x=vertline['semu'], linewidth=1, color=cval, linestyle='--')
     for ci in range(len(classPair[0])):
         cval = getColor(colors)
         label = os.path.splitext(CLASSIC_JSONs[ci])[0].replace('classic', 'Test-Cases')
-        plt.plot(classPair[0][ci], classPair[1][ci], '-.', color=cval, linewidth=3.0, alpha=0.6, label=label)
-        plt.fill_between(classPair[0][ci], 0, classPair[1][ci], facecolor=cval, alpha=0.05)
+        yclassic = makeFull(classPair[1][ci], refPair[1][0]) if fullPlot else classPair[1][ci]
+        plt.plot(classPair[0][ci], yclassic, '-.', color=cval, linewidth=3.0, alpha=0.6, label=label)
+        plt.fill_between(classPair[0][ci], 0, yclassic, facecolor=cval, alpha=0.05)
+        # Vertivcal line
+        if vertline is not None:
+            plt.axvline(x=vertline['classic'], linewidth=1, color=cval, linestyle='--')
     if randPair[0] is not None and randPair[1] is not None:
         assert len(randPair[0]) == 1
         for ri in range(len(randPair[0])):
             cval = getColor(colors)
             plt.plot(randPair[0][ri], randPair[1][ri], ':', color=cval, linewidth=3.0, alpha=0.6, label='random')
             plt.fill_between(randPair[0][ri], 0, randPair[1][ri], facecolor=cval, alpha=0.05)
-    assert len(refPair[0]) == 1
-    plt.plot(refPair[0][0], refPair[1][0], 'r--', color='gray', alpha=0.755555, linewidth=2.0, label='ground-truth')
+
+    if not fullPlot:
+        assert len(refPair[0]) == 1
+        plt.plot(refPair[0][0], refPair[1][0], 'r--', color='gray', alpha=0.755555, linewidth=2.0, label='ground-truth')
     #plt.fill_between(semuPair[0], 0, semuPair[1], facecolor='gray', alpha=0.05)
-    plt.legend(loc='upper center', ncol=1, fontsize='x-large')
+
     met = "Percentage" if percentage else "Number"
-    plt.xlabel(met + " of Selected Mutants")
-    plt.ylabel(met + " of Hard to Kill Mutants")
-    plt.title(title)
+    plt.xlabel(met + " of Selected Mutants (as Hard to Kill)", fontsize=fontsize)
+
+    if fullPlot:
+        lgd = plt.legend(bbox_to_anchor=(0., 0.98, 1., .102), loc=2, ncol=3, mode="expand", fontsize=fontsize, borderaxespad=0.)
+        plt.ylabel("Precision", fontsize=fontsize)
+        plt.ylim(-0.01,1.01)
+        plt.xlim(-1,101)
+    else:
+        lgd = plt.legend(loc='upper center', ncol=1, fontsize='x-large', shadow=True)
+        lgd.get_frame().set_facecolor('#FFFFFF')
+        plt.ylabel(met + " of Hard to Kill Mutants", fontsize=fontsize)
+        plt.title(title)
+
     plt.tight_layout()
     #plt.autoscale(enable=True, axis='x', tight=True)
     #plt.autoscale(enable=True, axis='y', tight=True)
     if figfilename is not None:
-        plt.savefig(figfilename+".png")
+        plt.savefig(figfilename+".pdf", format='pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
+        plt.savefig(figfilename+".png", bbox_extra_artists=(lgd,), bbox_inches='tight')
     else:
         plt.show()
+
+    plt.close('all')
 #~ plot4()
 
 def hardnessPlot (xlist, ylist, figfilename=None):
@@ -184,9 +231,12 @@ def hardnessPlot (xlist, ylist, figfilename=None):
     plt.title("Hardness of Mutants according to Ground-Truth")
     plt.tight_layout()
     if figfilename is not None:
+        plt.savefig(figfilename+".pdf", format='pdf')
         plt.savefig(figfilename+".png")
     else:
         plt.show()
+
+    plt.close('all')
 #~ hardnessPlot()
 
 '''
@@ -256,7 +306,21 @@ def getSemu_AND_OR_Classic(semu_dat, classic_dat, ground_dat, isAndNotOr):
     return semu_res, classic_res, ground_res
 #~ def getSemu_AND_OR_Classic():
 
-SEMU_JSONs = ["semu"+var+".json" for var in ['-pairwise', '-approxH', '-merged_PairApprox']]
+def getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, infoObj):
+    for tech, tdata in [('semu', semuData_l), ('classic', classicData_l), ('ground', groundtruthData_l)]:
+        nMuts = 0
+        nHardLevels = 0
+        for var in tdata:
+            nHardLevels += len(var)
+            for hdn in var:
+                nMuts += len(var[hdn])
+        nMuts /= len(tdata)
+        nHardLevels /= len(tdata)
+        infoObj[tech]["#Mutants"] = nMuts
+        infoObj[tech]["#hardnessLevels"] = nHardLevels
+#~ def getAnalyseInfos()
+
+SEMU_JSONs = ["semu"+var+".json" for var in ['-pairwise']] #, '-approxH', '-merged_PairApprox']]
 CLASSIC_JSONs = ["classic.json"]
 GROUNDTRUTH_JSONs = ["groundtruth.json"]
 
@@ -268,6 +332,7 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
     groundtruthData_all_l = [loadJson(os.path.join(jsonsdir, ground_json))['Hardness'] for ground_json in GROUNDTRUTH_JSONs]
 
     graphTypes = ["all", "semuANDclassic", "semuORclassic"]
+    analyseInfo = {gt:{'semu':{}, 'classic':{}, 'ground':{}} for gt in graphTypes}
     for title in graphTypes:
         if title == 'all':
             semuData_l, classicData_l, groundtruthData_l = semuData_all_l, classicData_all_l, groundtruthData_all_l
@@ -281,7 +346,11 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
         if len(semuData_l[0]) == 0 or len(classicData_l[0]) == 0:
             print "Analysis@Warning: Skipped Title because empty data."
             continue
-            
+        
+        # Get analysis information
+        getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, analyseInfo[title])
+        dumpJson(analyseInfo, os.path.join(jsonsdir, "analyse-info.json"))
+
         semuSelSizes = [[None] * RAND_REP] * len(semuData_l)
         semuNHard = [[None] * RAND_REP] * len(semuData_l)
         classicSelSizes = [[None] * RAND_REP] * len(classicData_l)
@@ -317,7 +386,7 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
             #    mutsShuffled += list(groundtruthData[i])
             for r in range(RAND_REP):
                 random.shuffle(mutsShuffled)
-                randSelSizes[r], randNHard[r] = computePoints({float(pos)/len(mutsShuffled): set([mutsShuffled[pos]]) for pos in range(len(mutsShuffled))}, groundtruthData)
+                randSelSizes[r], randNHard[r] = computePoints({float(pos)/len(mutsShuffled): set([mutsShuffled[pos]]) for pos in range(len(mutsShuffled))}, groundtruthData_l[0])
             randSelSizes, randNHard = average(randSelSizes, randNHard)
             randSelSizes = [randSelSizes]
             randNHard = [randNHard]
@@ -327,7 +396,8 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
 
         print "Plotting ", title, "..."
         figDir = jsonsdir
-        plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected", os.path.join(figDir, "comparison-"+title))
+        visitedMutsPercent = {'semu':analyseInfo[title]['semu']['#Mutants']*100.0/analyseInfo[title]['ground']['#Mutants'], 'classic':analyseInfo[title]['classic']['#Mutants']*100.0/analyseInfo[title]['ground']['#Mutants']}
+        plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected", os.path.join(figDir, "comparison-"+title), vertline=visitedMutsPercent)
         hardnessPlot(gtHardness[0], gtHardness[1], os.path.join(figDir, "hardness-"+title))
     
 #~ libMain()
