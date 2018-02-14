@@ -2896,6 +2896,9 @@ void Executor::run(ExecutionState &initialState) {
     ExecutionState *ks_prevState = nullptr;  
     //~KS
 
+    // will have the number of states that already reached precondition(for compare to be sound)
+    uint64_t precond_offset = 0;
+
     while (!seedMap.empty()) {
       if (haltExecution) {
         doDumpStates();
@@ -2919,6 +2922,7 @@ void Executor::run(ExecutionState &initialState) {
         // remove from seedMap the last state if depth exceeded the precondition length
         if (state.depth >= semuPreconditionLength) {
           seedMap.erase(it);
+          precond_offset++;
           continue;
         }
 
@@ -2936,7 +2940,7 @@ void Executor::run(ExecutionState &initialState) {
 
       // @KLEE-SEMu
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-        if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize, true/*is Seeidng*/))
+        if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize, true/*is Seeidng*/, precond_offset))
           continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
       }
       //~KS
@@ -4293,6 +4297,13 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
       // Thus is in seed mode
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::TESTGEN_MODE)
         ns->isTestGenMutSeeding = true;
+
+      // Handle seed phase. Insert mutant in seedMap with same seed as original
+      std::map< ExecutionState*, std::vector<SeedInfo> >::iterator sm_it = 
+        seedMap.find(&state);
+      if (sm_it != seedMap.end()) {
+        seedMap[ns] = sm_it->second;
+      }
     }
   }
 }
@@ -4815,7 +4826,7 @@ inline void Executor::ks_CheckAndBreakInfinitLoop(ExecutionState &curState, Exec
 }
 
 /// Return true if the state comparison actually happened, false otherwise. This help to know if we need to call updateStates or not
-inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size, bool isSeeding) {
+inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size, bool isSeeding, uint64_t precond_offset) {
   // // FIXME: We just checked memory and some states will be killed if exeeded and we will have some problem in comparison
   // // FIXME: For now we assume that the memory limitmust not be exceeded, need to find a way to handle this later
   if (atMemoryLimit) {
@@ -4842,10 +4853,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
     //remove from searcher or seed map
     if (isSeeding) {
-      if (seedMap.count(&curState) > 0) {
+      std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
+        seedMap.find(&curState);
+      if (it != seedMap.end()) {
         // keep state for restoration after compare (seedMap not set un UpdateStates)
-        backed_seedMap[&curState] = seedMap[&curState];  
-        seedMap.erase(&curState);
+        backed_seedMap[&curState] = it->second;  
+        seedMap.erase(it);
       }
     } else {
       searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
@@ -4863,7 +4876,8 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
     updateStates(0);
 
     //Check if all reached and compare states
-    if (ks_reachedOutEnv.size() + 
+    if (precond_offset + 
+        ks_reachedOutEnv.size() + 
         ks_reachedWatchPoint.size() + 
         ks_terminatedBeforeWP.size() >= states.size()) {   //Temporary solution here(assumed that all states reach that point). TODO
       std::vector<ExecutionState *> remainWPStates;
@@ -4890,7 +4904,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         // XXX The searcher is empty here. This is necessary because in updateStates, removedStates must be in searcher
         if (searcher)
           searcher->update(0, removedStates/*adding*/, std::vector<ExecutionState *>());
-        llvm::errs() << "# SEMU@Status: After checkpoint ID=" << (ks_maxDepthID-1) << " There are " << addedStates.size() <<" States remaining!\n";
+        llvm::errs() << "# SEMU@Status: After checkpoint ID=" << (ks_maxDepthID-1) << " There are " << addedStates.size() <<" States remaining (seeding is "<<(isSeeding?"True":"False")<<")!\n";
 
       } else { // there should be no terminated state
         if (ks_reachedOutEnv.size() != remainWPStates.size()) {
@@ -4905,9 +4919,11 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       if (isSeeding) {
         assert ((ks_hasOutEnv || seedMap.empty()) && "SeedMap must be empty at checkpoint");
         for(auto *s: addedStates) {
-          assert (backed_seedMap.count(s) && "A state is not in backed seed map but remains."); 
-          seedMap[s] = backed_seedMap[s];
-          backed_seedMap.erase(s);
+          std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
+            backed_seedMap.find(s);
+          assert (it != backed_seedMap.end() && "A state is not in backed seed map but remains."); 
+          seedMap[s] = it->second;
+          backed_seedMap.erase(it);
         }
         // if checkpoint, clear backed_seedMap.
         if (!ks_hasOutEnv)
@@ -4918,6 +4934,14 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
 
       // take account of addedStates and removedStates
       updateStates(0);
+    } else {
+      // in Seen Mode, the seedMap must not be empty
+      if (isSeeding && seedMap.empty()) {
+        klee_error("SEMU@ERROR: on seeding phase, the seedMap is empty while some some states are not at a check stage of preconditioned");
+        llvm::errs() << "States has: "<<states.size()<<". Sum of check stages sizes: " 
+                     << (ks_reachedOutEnv.size() + ks_reachedWatchPoint.size() + ks_terminatedBeforeWP.size() + precond_offset)<<".\n";
+        exit(1);
+      }
     }
 
     return true;
