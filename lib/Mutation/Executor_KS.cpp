@@ -4890,6 +4890,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         // XXX The searcher is empty here. This is necessary because in updateStates, removedStates must be in searcher
         if (searcher)
           searcher->update(0, removedStates/*adding*/, std::vector<ExecutionState *>());
+        llvm::errs() << "# SEMU@Status: After checkpoint ID=" << (ks_maxDepthID-1) << " There are " << addedStates.size() <<" States remaining!\n";
 
       } else { // there should be no terminated state
         if (ks_reachedOutEnv.size() != remainWPStates.size()) {
