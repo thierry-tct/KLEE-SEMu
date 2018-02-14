@@ -477,6 +477,7 @@ def executeSemu (semuworkdir, semuOutDir, testSample, test2semudirMap, metaMutan
         semukleearg = "-seed-out-dir="+semuSeedsDir
         semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
         semuArgs = " ".join([par+'='+str(tuning['SEMU'][par]) for par in tuning['SEMU']])  #" ".join(["-semu-precondition-length=3", "-semu-mutant-max-fork=2"])
+         semuArgs += " -semu-loop-break-delay 120.0 "
         #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
         if candidateMutantsFile is not None:
             semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile

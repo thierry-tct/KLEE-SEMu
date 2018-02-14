@@ -12,7 +12,7 @@ solvermaxtime=${SEMU_MAX_SOLVER_TIME:-SOLVER_MAX_TIME_}
 semuout="semu.out"
 
 # Concolic
-(ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1)
+(ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1)
 
 
 # Symbolic

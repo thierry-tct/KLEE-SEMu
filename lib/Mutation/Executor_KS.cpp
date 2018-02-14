@@ -4823,6 +4823,8 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
     exit(1);
   }
 
+  static std::map<ExecutionState*, std::vector<SeedInfo> > backed_seedMap;
+
   bool ks_terminated = false;
   bool ks_OutEnvReached = false;
   bool ks_WPReached = false;
@@ -4840,8 +4842,11 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
     //remove from searcher or seed map
     if (isSeeding) {
-      if (seedMap.count(&curState) > 0)
+      if (seedMap.count(&curState) > 0) {
+        // keep state for restoration after compare (seedMap not set un UpdateStates)
+        backed_seedMap[&curState] = seedMap[&curState];  
         seedMap.erase(&curState);
+      }
     } else {
       searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
     }
@@ -4893,6 +4898,23 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         }
         ks_reachedOutEnv.clear();
       }
+
+      // in seeding mode, since seedMap is not augmented in updateState,
+      // we update it with remaining states (in addesStates vector) before updateStates
+      if (isSeeding) {
+        assert ((ks_hasOutEnv || seedMap.empty()) && "SeedMap must be empty at checkpoint");
+        for(auto *s: addedStates) {
+          assert (backed_seedMap.count(s) && "A state is not in backed seed map but remains."); 
+          seedMap[s] = backed_seedMap[s];
+          backed_seedMap.erase(s);
+        }
+        // if checkpoint, clear backed_seedMap.
+        if (!ks_hasOutEnv)
+          backed_seedMap.clear();
+      } else {
+        backed_seedMap.clear(); // seed mode already passed, clear any ramining
+      }
+
       // take account of addedStates and removedStates
       updateStates(0);
     }
