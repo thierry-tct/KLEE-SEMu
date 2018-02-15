@@ -477,7 +477,6 @@ def executeSemu (semuworkdir, semuOutDir, testSample, test2semudirMap, metaMutan
         semukleearg = "-seed-out-dir="+semuSeedsDir
         semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
         semuArgs = " ".join([par+'='+str(tuning['SEMU'][par]) for par in tuning['SEMU']])  #" ".join(["-semu-precondition-length=3", "-semu-mutant-max-fork=2"])
-        semuArgs += " -semu-loop-break-delay 120.0 "
         #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
         if candidateMutantsFile is not None:
             semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
@@ -570,6 +569,7 @@ def main():
     parser.add_argument("--semumaxmemory", type=int, default=9000, help="Specify the max memory for semu execution")
     parser.add_argument("--semupreconditionlength", type=int, default=2, help="Specify precondition length semu execution")
     parser.add_argument("--semumutantmaxfork", type=int, default=2, help="Specify hard checkpoint for mutants (or post condition checkpoint) as PC length, in semu execution")
+    parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
     args = parser.parse_args()
 
     outDir = os.path.join(args.outTopDir, OutFolder)
@@ -616,7 +616,7 @@ def main():
     # Parameter tuning for Semu execution (timeout, to precondition depth)
     semuTuning = {
                     'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
-                    'SEMU':{"-semu-precondition-length":args.semupreconditionlength, "-semu-mutant-max-fork":args.semumutantmaxfork}
+                    'SEMU':{"-semu-precondition-length":args.semupreconditionlength, "-semu-mutant-max-fork":args.semumutantmaxfork, "-semu-loop-break-delay":args.semuloopbreaktimeout }
                  }
 
     # Create outdir if absent

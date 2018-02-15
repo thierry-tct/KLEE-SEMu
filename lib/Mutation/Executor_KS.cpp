@@ -2908,11 +2908,15 @@ void Executor::run(ExecutionState &initialState) {
 
       // @KLEE-SEMu
       std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it;
-      if (seedMap.size() != prevSeedMapSize) {
-        it = seedMap.upper_bound(lastState); // take another if seedMap changed
-        prevSeedMapSize = seedMap.size();
-      } else { 
-        it = seedMap.lower_bound(lastState); //take same if no change (for loop break)
+      if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
+        if (seedMap.size() != prevSeedMapSize) {
+          it = seedMap.upper_bound(lastState); // take another if seedMap changed
+          prevSeedMapSize = seedMap.size();
+        } else { 
+          it = seedMap.lower_bound(lastState); //take same if no change (for loop break)
+        }
+      } else {
+        it = seedMap.upper_bound(lastState);
       }
 
       if(false) // remove following statement XXX (done above)
