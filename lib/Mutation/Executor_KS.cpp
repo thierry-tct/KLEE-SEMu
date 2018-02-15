@@ -4953,9 +4953,9 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
     } else {
       // in Seen Mode, the seedMap must not be empty
       if (isSeeding && seedMap.empty()) {
-        klee_error("SEMU@ERROR: on seeding phase, the seedMap is empty while some some states are not at a check stage of preconditioned");
-        llvm::errs() << "States has: "<<states.size()<<". Sum of check stages sizes: " 
+        llvm::errs() << ">> States size: "<<states.size()<<". Sum of check stages sizes: " 
                      << (ks_reachedOutEnv.size() + ks_reachedWatchPoint.size() + ks_terminatedBeforeWP.size() + precond_offset)<<".\n";
+        klee_error("SEMU@ERROR: on seeding phase, the seedMap is empty while some some states are not at a check stage of preconditioned");
         exit(1);
       }
     }
