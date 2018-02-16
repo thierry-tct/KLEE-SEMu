@@ -31,7 +31,7 @@ def loadMatrix(matrixfile, selectedT, X_index_string=SM_index_string, noKlee=Fal
     with open(matrixfile, 'r') as f:
         # read header
         tclist = p.split(f.readline().strip())
-        assert tclist[0] == X_index_string, "invalid SMdatfile: " + \
+        assert tclist[0] == X_index_string, "invalid Matrix datfile ("+X_index_string+"): " + \
             matrixfile
 
         testid = 0 

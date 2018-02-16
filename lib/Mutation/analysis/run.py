@@ -11,13 +11,14 @@
 ########################
 ## TODO: implement runZesti
 
-import os, sys
+import os, sys, stat
 import json, re
 import shutil, glob
 import argparse
 import random
 import pandas as pd
 import struct
+import itertools
 
 # Other files
 import matrixHardness
@@ -141,20 +142,28 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
     ### Write it as exe
     with open(exePath, 'w') as f:
         f.write(wrapContent)
-    if exePathBak:
+    assert os.path.isfile(exePath), "wrapper wasn't written as exe"
+
+    if os.path.isfile(exePathBak):
         # copy stats (creation time, ...)
         shutil.copystat(exePathBak, exePath)
+    else:
+        # just make the wrapper executable
+        st = os.stat(exePath)
+        os.chmod(exePath, st.st_mode | stat.S_IEXEC)
 
     # Run Semu through tests running
-    testrunlog = "> /dev/null"
+    testrunlog = " > /dev/null" #+" 2>&1"
     nKleeOut = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
     assert nKleeOut == 0, "Must be no klee out in the begining"
     for tc in unwrapped_testlist:
         # Run Semu with tests (wrapper is installed)
         print "# Running Tests", tc, "..."
-        retCode = os.system(" ".join(["bash", runtestScript, tc, testrunlog]))
+        zestCmd = " ".join(["bash", runtestScript, tc, testrunlog])
+        retCode = os.system(zestCmd)
         nNew = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
         if nNew == nKleeOut:
+            print ">> command: "+ zestCmd
             error_exit ("Test execution failed for test case '"+tc+"', retCode was: "+str(retCode))
         assert nNew > nKleeOut, "Test was not run: "+tc
         for devtid, kleetid in enumerate(range(nKleeOut, nNew)):
@@ -200,47 +209,97 @@ def ktestToFile(ktestData, outfilename):
     where each argument is represented by a pair of argtype (argv or file or stdin and the corresponding size)
 '''
 def parseTextKtest(filename):
+    schar = [chr(i) for i in range(ord('A'),ord('Z')+1)+range(ord('a'),ord('z')+1)]
+    ShortNames = {'names':[z[0]+z[1] for z in itertools.product(schar,['']+schar)], 'pos':0}
+    def getShortname(dat=ShortNames):
+        dat['pos'] += 1
+        return dat['names'][dat['pos']-1]
+
     datalist = []
     b = ktest_tool.KTest.fromfile(filename)
-    # get the object one ate the time and obtain its stuffs
+    # get the object one at the time and obtain its stuffs
+    # the objects are as following: [model_version, <the argvs> <file contain, file stat>]
+    # Note that files appear in argv. here we do not have n_args because concrete (from Zesti)
     seenFileStatsPos = set()
     stdin = None
     model_version_pos = -1
-    for i,(name,data) in enumerate(b.objects):
-        if i in seenFileStatsPos:
+    fileargsposinObj_remove = []
+    for ind,(name,data) in enumerate(b.objects):
+        if ind in seenFileStatsPos:
             continue
-        if i == 0:
+        if ind == 0:
             if name != "model_version":
                 error_exit("The first argument in the ktest must be 'model_version'")
             else:
-                model_version_pos = i
+                model_version_pos = ind
         else:
-            # File passed  FIXME: TODO: case of file read actual file contain instead of its stat
-            if name in b.args:  # filename not in args, just verify that size is 0 (data is empty)
-                if len(data) > 0:
-                    error_exit ("object name in args but not a file: "+name) # beware of argument with value 'argv'
+            # File passed , In this case, there is: (1) an ARGV obj with data the filename, (2) an Obj with name the filename and data the file data, (3) an Obj for file stat (<filename>-stat) 
+            indexes_ia = [i for i,x in enumerate(b.args[1:]) if x == name]
+            if len(indexes_ia) > 0: # filename in args, the corresponding position in datalist is indexes_ia
+                # in case the same name appears many times in args, let the user manually verify
+                if len(indexes_ia) != 1:
+                    print "\n>> CONFLICT: the file object at position ",ind,"with name",name,"in ktest",filename,"appears several times in args. please choose its positions (",indexes_ia,"):"
+                    raw = raw_input()
+                    indinargs = [int(v) for v in raw.split()]
+                    assert len(set(indinargs) - set(indexes_ia)) == 0, "input wrond indexes. do not consider program name"
+                else:
+                    indinargs = indexes_ia
+
+                for iv in indinargs:
+                    datalist[iv] = ('FILE', len(data)) #XXX
+
+                fileargsposinObj_remove += indinargs  # ARGVs come before files in objects
+
+                shortfname = getShortname(ShortNames)
+
                 # seach for its stat
                 found = False
                 for si,(sname,sdata) in enumerate(b.objects):
                     if sname == name+"-stat":
-                        datalist.append(('FILE', len(sdata))) #XXX
                         seenFileStatsPos.add(si)
+                        b.objects[si] = (shortfname+'-stat', sdata)
+                        b.objects[ind] = (shortfname, data)
                         found = True
                         break
                 if not found:
                     error_exit("File is not having stat in ktest")
-            elif name == "stdin-stat": #case of stdin
-                stdin = ('STDIN', len(data)) #XXX 
+            #elif name == "stdin-stat": #case of stdin
+            #    stdin = ('STDIN', len(data)) #XXX 
             else: #ARGV
                 datalist.append(('ARGV', len(data))) #XXX
+
+    # remove the objects in fileargsposinObj_remove, considering model_version_pos
+    fileargsposinObj_remove = list(set(fileargsposinObj_remove))
+    if model_version_pos == 0:
+        fileargsposinObj_remove = [v+1 for v in fileargsposinObj_remove]
+    elif model_version_pos == b.objects:
+        model_version_pos -= len(fileargsposinObj_remove)
+    else:
+        assert False, "model version need to be either 1st or last object initially"
+
+    for pos in sorted(fileargsposinObj_remove, reverse=True):
+        del b.objects[pos]
+
     if stdin is not None:
         datalist.append(stdin)
+    else:
+        # shadow-zesti ay have problem with stdin, use our hack on wrappe to capture that
+        stdin_file = os.path.join(os.path.dirname(filename), "stdin-ktest-data")
+        assert os.path.isfile(stdin_file), "The stdin exported in wrapper is missing of test: "+filename
+        with open(stdin_file) as f:
+            sidat = f.read()
+            if len(sidat) > 0:
+                symin_obj = ('stdin', sidat) #'\0'*1024)
+                syminstat_obj = ('stdin-stat', '\0'*144)
+                b.objects.append(symin_obj)
+                b.objects.append(syminstat_obj)
+                stdin = ('STDIN', len(sidat)) #XXX 
+                datalist.append(stdin)
 
     # put 'model_version' last
     assert model_version_pos >= 0, "'model_version' not found in ktest file: "+filename
     b.objects.append(b.objects[model_version_pos])
     del b.objects[model_version_pos]
-
     return b, datalist
 #~ def parseTextKtest()
 
@@ -284,9 +343,9 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
     # then use -sym-args to flexibly set the number of enables argvs. First process the case before the first FILE, then between 1st and 2nd
     commonArgs = []
     commonArgsNumPerTest = {t: [] for t in range(len(listTestArgs))}
+    testsCurFilePos = [0 for i in range(len(listTestArgs))]
+    testsNumArgvs = [0 for i in range(len(listTestArgs))]
     while (True):
-        testsCurFilePos = [0 for i in range(len(listTestArgs))]
-        testsNumArgvs = [0 for i in range(len(listTestArgs))]
         # Find the next non ARGV argument for all tests
         for t in range(len(testsNumArgvs)):
             nonargvfound = False
@@ -351,19 +410,36 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
                 continue
             # If next is FILE
             if listTestArgs[t][testsCurFilePos[t]][0] == "FILE":
-                fileMaxSize = max(fileMaxSize, listTestArgs[t][testsCurFilePos[t]][0])
+                fileMaxSize = max(fileMaxSize, listTestArgs[t][testsCurFilePos[t]][1])
                 testsCurFilePos[t] += 1
-            # If nex is STDIN (last)
+            # If next is STDIN (last)
             elif listTestArgs[t][testsCurFilePos[t]][0] == "STDIN":
-                stdinMaxSize = max(stdinMaxSize, listTestArgs[t][testsCurFilePos[t]][0])
+                stdinMaxSize = max(stdinMaxSize, listTestArgs[t][testsCurFilePos[t]][1])
                 #testsCurFilePos[t] += 1  # XXX Not needed since stdin is the last arg
             else:
                 error_exit("unexpected arg type here: Neither FILE nor STDIN (type is "+listTestArgs[t][testsCurFilePos[t]][0]+")")
+
         if fileMaxSize >= 0:
             commonArgs.append(" ".join(["-sym-files 1", str(fileMaxSize)]))
         else:
             if stdinMaxSize >= 0:
                 commonArgs.append(" ".join(["-sym-stdin", str(stdinMaxSize)]))
+                # Update object's stdin size. add if not present
+                
+                for i in range(len(ktestContains["CORRESP_TESTNAME"])):
+                    siindex = len(ktestContains["KTEST-OBJ"][i].objects) - 1
+                    while siindex>=0 and ktestContains["KTEST-OBJ"][i].objects[siindex][0] != "stdin":
+                        siindex -= 1
+                    if siindex >= 0:
+                        assert ktestContains["KTEST-OBJ"][i].objects[siindex+1][0] == "stdin-stat", "stdin must be followed by its stats"
+                        pre_si_dat = ktestContains["KTEST-OBJ"][i].objects[siindex][1]
+                        ktestContains["KTEST-OBJ"][i].objects[siindex] = ('stdin', pre_si_dat + "\0"*(stdinMaxSize - len(pre_si_dat)))
+                    else:
+                        symin_obj = ('stdin', '\0'*stdinMaxSize)
+                        syminstat_obj = ('stdin-stat', '\0'*144)
+                        ktestContains["KTEST-OBJ"][i].objects.insert(-1, symin_obj)
+                        ktestContains["KTEST-OBJ"][i].objects.insert(-1, syminstat_obj)
+                
             break
 
     # Sym stdout, is this really needed
