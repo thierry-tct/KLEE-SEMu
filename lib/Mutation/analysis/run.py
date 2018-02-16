@@ -207,13 +207,9 @@ def ktestToFile(ktestData, outfilename):
 '''
     return a list representing the ordered list of argument 
     where each argument is represented by a pair of argtype (argv or file or stdin and the corresponding size)
+    IN KLEE, sym-files is taken into account only once (the last one)
 '''
 def parseTextKtest(filename):
-    schar = [chr(i) for i in range(ord('A'),ord('Z')+1)+range(ord('a'),ord('z')+1)]
-    ShortNames = {'names':[z[0]+z[1] for z in itertools.product(schar,['']+schar)], 'pos':0}
-    def getShortname(dat=ShortNames):
-        dat['pos'] += 1
-        return dat['names'][dat['pos']-1]
 
     datalist = []
     b = ktest_tool.KTest.fromfile(filename)
@@ -224,6 +220,8 @@ def parseTextKtest(filename):
     stdin = None
     model_version_pos = -1
     fileargsposinObj_remove = []
+    filesNstatsIndex = []
+    maxFileSize = 0
     for ind,(name,data) in enumerate(b.objects):
         if ind in seenFileStatsPos:
             continue
@@ -246,61 +244,63 @@ def parseTextKtest(filename):
                     indinargs = indexes_ia
 
                 for iv in indinargs:
-                    datalist[iv] = ('FILE', len(data)) #XXX
+                    datalist[iv] = ('ARGV', 1)  #XXX len is 1 because this will be the file name which is 1 char string in klee: 'A', 'B', ... ('A' + k | 0 <= k <= 255-'A')
 
-                fileargsposinObj_remove += indinargs  # ARGVs come before files in objects
+                fileargsposinObj_remove.append(indinargs)  # ARGVs come before files in objects
 
-                shortfname = getShortname(ShortNames)
-
-                # seach for its stat
+                # seach for its stat, it should be the next object
                 found = False
-                for si,(sname,sdata) in enumerate(b.objects):
-                    if sname == name+"-stat":
-                        seenFileStatsPos.add(si)
-                        b.objects[si] = (shortfname+'-stat', sdata)
-                        b.objects[ind] = (shortfname, data)
-                        found = True
-                        break
+                if b.objects[ind + 1][0] == name+"-stat":
+                    seenFileStatsPos.add(ind + 1)
+                    found = True
                 if not found:
                     error_exit("File is not having stat in ktest")
+
+                filesNstatsIndex += [ind, ind+1]
+                maxFileSize = max (maxFileSize, len(data))
             #elif name == "stdin-stat": #case of stdin
             #    stdin = ('STDIN', len(data)) #XXX 
             else: #ARGV
                 datalist.append(('ARGV', len(data))) #XXX
 
-    # remove the objects in fileargsposinObj_remove, considering model_version_pos
-    fileargsposinObj_remove = list(set(fileargsposinObj_remove))
+    if len(filesNstatsIndex) > 0:
+        assert filesNstatsIndex == range(filesNstatsIndex[0], filesNstatsIndex[-1]+1), "File objects are not continuous"
+
     if model_version_pos == 0:
-        fileargsposinObj_remove = [v+1 for v in fileargsposinObj_remove]
-    elif model_version_pos == b.objects:
-        model_version_pos -= len(fileargsposinObj_remove)
-    else:
-        assert False, "model version need to be either 1st or last object initially"
+        #for ii in range(len(fileargsposinObj_remove)):
+        #    for iii in range(len(fileargsposinObj_remove[ii])):
+        #        fileargsposinObj_remove[ii][iii] += 1
+        # Do bothing for fileargsposinObj_remove because already indexed to not account for model version XXX
+        if len(fileargsposinObj_remove) > 0:
+            assert max(fileargsposinObj_remove[-1]) < filesNstatsIndex[0], "arguments do not all come before files in object"
+        filesNstatsIndex = [(v - 1) for v in filesNstatsIndex] #-1 for model_versio which will be move to end later
 
-    for pos in sorted(fileargsposinObj_remove, reverse=True):
-        del b.objects[pos]
-
-    if stdin is not None:
-        datalist.append(stdin)
+        # stdin and after files obj
+        if stdin is not None:
+            afterLastFilenstatObj = max(fileargsposinObj_remove[-1]) + 1 if len(fileargsposinObj_remove) > 0 else len(b.objects) - 2 -1 # -2 because of stdin and stdin-stat, -1 for mode_version
+            datalist.append(stdin)
+        else:
+            afterLastFilenstatObj = max(fileargsposinObj_remove[-1]) + 1 if len(fileargsposinObj_remove) > 0 else len(b.objects) - 1 # -1 for model_version
+            # shadow-zesti ay have problem with stdin, use our hack on wrappe to capture that
+            stdin_file = os.path.join(os.path.dirname(filename), "stdin-ktest-data")
+            assert os.path.isfile(stdin_file), "The stdin exported in wrapper is missing of test: "+filename
+            with open(stdin_file) as f:
+                sidat = f.read()
+                if len(sidat) > 0:
+                    symin_obj = ('stdin', sidat) #'\0'*1024)
+                    syminstat_obj = ('stdin-stat', '\0'*144)
+                    b.objects.append(symin_obj)
+                    b.objects.append(syminstat_obj)
+                    stdin = ('STDIN', len(sidat)) #XXX 
+                    datalist.append(stdin)
     else:
-        # shadow-zesti ay have problem with stdin, use our hack on wrappe to capture that
-        stdin_file = os.path.join(os.path.dirname(filename), "stdin-ktest-data")
-        assert os.path.isfile(stdin_file), "The stdin exported in wrapper is missing of test: "+filename
-        with open(stdin_file) as f:
-            sidat = f.read()
-            if len(sidat) > 0:
-                symin_obj = ('stdin', sidat) #'\0'*1024)
-                syminstat_obj = ('stdin-stat', '\0'*144)
-                b.objects.append(symin_obj)
-                b.objects.append(syminstat_obj)
-                stdin = ('STDIN', len(sidat)) #XXX 
-                datalist.append(stdin)
+        assert False, "model version need to be either 1st"  # For last, take care of putting stdin before it  or last object initially"
 
     # put 'model_version' last
     assert model_version_pos >= 0, "'model_version' not found in ktest file: "+filename
     b.objects.append(b.objects[model_version_pos])
     del b.objects[model_version_pos]
-    return b, datalist
+    return b, datalist, filesNstatsIndex, maxFileSize, fileargsposinObj_remove, afterLastFilenstatObj
 #~ def parseTextKtest()
 
 def bestFit(outMaxVals, outNonTaken, inVals):
@@ -315,11 +315,27 @@ def bestFit(outMaxVals, outNonTaken, inVals):
 #~ def bestFit()
 
 def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
+    #-----------
+    #schar = [chr(i) for i in range(ord('A'),ord('Z')+1)+range(ord('a'),ord('z')+1)]
+    #ShortNames = {'names':[z[0]+z[1] for z in itertools.product(schar,['']+schar)], 'pos':0}
+    schar = [chr(i) for i in range(ord('A'), 256)]  # From KLEE: 'void klee_init_fds()' in runtime/POSIX/fd_init.c
+    ShortNames = {'names':schar, 'pos':0}
+    def getShortname(dat=ShortNames): 
+        dat['pos'] += 1
+        if dat['pos'] >= len(dat['names']):
+            error_exit("too many file arguments, exeeded shortname list")
+        return dat['names'][dat['pos']-1]
+    #-------------
+
     assert len(ktestFilesList) == len(testNamesList), "Error: size mismatch btw ktest and names: "+str(len(ktestFilesList))+" VS "+str(len(testNamesList))
     name2ktestMap = {}
     # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions(TODO double check)
     listTestArgs = []
     ktestContains = {"CORRESP_TESTNAME":[], "KTEST-OBJ":[]}
+    maxFileSize = 0
+    filenstatsInObj = []
+    fileArgInd = []
+    afterFileNStat = []
     for ipos, ktestfile in enumerate(ktestFilesList):
         # XXX Zesti do not generate valid Ktest file when an argument is the empty string. Example tests 'basic_s18' of EXPR which is: expr "" "|" ""
         # The reson is that when writing ktest file, klee want the name to be non empty thus it fail (I think). 
@@ -329,13 +345,49 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
             continue
 
         # sed because Zesti give argv, argv_1... while sym args gives arg0, arg1,...
-        ktestdat, testArgs = parseTextKtest(ktestfile)
+        ktestdat, testArgs, fileNstatInd, maxFsize, fileargind, afterFnS = parseTextKtest(ktestfile)
         listTestArgs.append(testArgs)
         ktestContains["CORRESP_TESTNAME"].append(testNamesList[ipos])
         ktestContains["KTEST-OBJ"].append(ktestdat)
+        filenstatsInObj.append(fileNstatInd)
+        maxFileSize = max(maxFileSize, maxFsize)
+        fileArgInd.append(fileargind)
+        afterFileNStat.append(afterFnS)
+
     if len(listTestArgs) <= 0:
         print "Err: no ktest data, ktest PCs:", ktestFilesList
         error_exit ("No ktest data could be extracted from ktests.")
+
+    # update file data in objects (shortname and size)
+    nmax_files = max([len(fpv) for fpv in filenstatsInObj]) / 2 # divide by 2 beacause has stats
+    if nmax_files > 0:
+        shortFnames = ShortNames['names'][:nmax_files]
+        for ktpos in range(len(ktestContains["CORRESP_TESTNAME"])):
+            ktdat = ktestContains["KTEST-OBJ"][ktpos]
+
+            # update file argument
+            for ind_fai, fainds in enumerate(fileArgInd[ktpos]):
+                for fai in fainds:
+                    ktdat.objects[fai] = (ktdat.objects[fai][0], shortFnames[ind_fai])
+
+            # first add file object of additional files
+            addedobj = []
+            for iadd in range(nmax_files - len(filenstatsInObj[ktpos])/2): # divide by two because also has stat
+                symf_obj = ('', '\0'*maxFileSize)
+                symfstat_obj = ('-stat', '\0'*144)
+                addedobj.append(symf_obj)
+                addedobj.append(symfstat_obj)
+            insat = afterFileNStat[ktpos] #filenstatsInObj[ktpos][-1] + 1 if len(filenstatsInObj[ktpos]) > 0 else len(ktdat.objects)  # if no existing file, just append
+            ktdat.objects[insat:insat] = addedobj
+            filenstatsInObj[ktpos] += range(insat, insat+len(addedobj))
+
+            # Now update the filenames and data
+            for ni, fi_ in enumerate(range(0, len(filenstatsInObj[ktpos]), 2)):
+                find_ = filenstatsInObj[ktpos][fi_]
+                fsind_ = filenstatsInObj[ktpos][fi_ + 1]
+                assert ktdat.objects[find_][0] + '-stat' == ktdat.objects[fsind_][0]
+                ktdat.objects[find_] = (shortFnames[ni], ktdat.objects[find_][1] + '\0'*(maxFileSize - len(ktdat.objects[find_][1]))) #file
+                ktdat.objects[fsind_] = (shortFnames[ni] + '-stat', ktdat.objects[fsind_][1]) #file
 
     # Make a general form out of listTestArgs by inserting what is needed with size 0
     # Make use of the sym-args param that can unset a param (klee care about param order)
@@ -345,6 +397,7 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
     commonArgsNumPerTest = {t: [] for t in range(len(listTestArgs))}
     testsCurFilePos = [0 for i in range(len(listTestArgs))]
     testsNumArgvs = [0 for i in range(len(listTestArgs))]
+    symFileNameSize_ordered = []
     while (True):
         # Find the next non ARGV argument for all tests
         for t in range(len(testsNumArgvs)):
@@ -402,45 +455,49 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
                 testsCurFilePos[t] += testsNumArgvs[t]
 
         # Process non ARGV argument stdin or file argument
-        fileMaxSize = -1
+#        fileMaxSize = -1
+        fileMaxSize =  maxFileSize
         stdinMaxSize = -1
         for t in range(len(testsNumArgvs)):
             # if the last arg was ARGV do nothing
             if testsCurFilePos[t] >= len(listTestArgs[t]):
                 continue
             # If next is FILE
-            if listTestArgs[t][testsCurFilePos[t]][0] == "FILE":
-                fileMaxSize = max(fileMaxSize, listTestArgs[t][testsCurFilePos[t]][1])
-                testsCurFilePos[t] += 1
+#            if listTestArgs[t][testsCurFilePos[t]][0] == "FILE":
+#                fileMaxSize = max(fileMaxSize, listTestArgs[t][testsCurFilePos[t]][1])
+#                testsCurFilePos[t] += 1
             # If next is STDIN (last)
-            elif listTestArgs[t][testsCurFilePos[t]][0] == "STDIN":
+#            elif listTestArgs[t][testsCurFilePos[t]][0] == "STDIN":
+            if listTestArgs[t][testsCurFilePos[t]][0] == "STDIN":
                 stdinMaxSize = max(stdinMaxSize, listTestArgs[t][testsCurFilePos[t]][1])
                 #testsCurFilePos[t] += 1  # XXX Not needed since stdin is the last arg
             else:
-                error_exit("unexpected arg type here: Neither FILE nor STDIN (type is "+listTestArgs[t][testsCurFilePos[t]][0]+")")
+#                error_exit("unexpected arg type here: Neither FILE nor STDIN (type is "+listTestArgs[t][testsCurFilePos[t]][0]+")")
+                error_exit("unexpected arg type here: Not STDIN (type is "+listTestArgs[t][testsCurFilePos[t]][0]+")")
 
         if fileMaxSize >= 0:
-            commonArgs.append(" ".join(["-sym-files 1", str(fileMaxSize)]))
-        else:
-            if stdinMaxSize >= 0:
-                commonArgs.append(" ".join(["-sym-stdin", str(stdinMaxSize)]))
-                # Update object's stdin size. add if not present
-                
-                for i in range(len(ktestContains["CORRESP_TESTNAME"])):
-                    siindex = len(ktestContains["KTEST-OBJ"][i].objects) - 1
-                    while siindex>=0 and ktestContains["KTEST-OBJ"][i].objects[siindex][0] != "stdin":
-                        siindex -= 1
-                    if siindex >= 0:
-                        assert ktestContains["KTEST-OBJ"][i].objects[siindex+1][0] == "stdin-stat", "stdin must be followed by its stats"
-                        pre_si_dat = ktestContains["KTEST-OBJ"][i].objects[siindex][1]
-                        ktestContains["KTEST-OBJ"][i].objects[siindex] = ('stdin', pre_si_dat + "\0"*(stdinMaxSize - len(pre_si_dat)))
-                    else:
-                        symin_obj = ('stdin', '\0'*stdinMaxSize)
-                        syminstat_obj = ('stdin-stat', '\0'*144)
-                        ktestContains["KTEST-OBJ"][i].objects.insert(-1, symin_obj)
-                        ktestContains["KTEST-OBJ"][i].objects.insert(-1, syminstat_obj)
-                
-            break
+            commonArgs.append(" ".join(["-sym-files", str(nmax_files), str(fileMaxSize)]))
+            symFileNameSize_ordered.append(fileMaxSize)
+#        else:
+        if stdinMaxSize >= 0:
+            commonArgs.append(" ".join(["-sym-stdin", str(stdinMaxSize)]))
+            # Update object's stdin size. add if not present
+            
+            for i in range(len(ktestContains["CORRESP_TESTNAME"])):
+                siindex = len(ktestContains["KTEST-OBJ"][i].objects) - 1
+                while siindex>=0 and ktestContains["KTEST-OBJ"][i].objects[siindex][0] != "stdin":
+                    siindex -= 1
+                if siindex >= 0:
+                    assert ktestContains["KTEST-OBJ"][i].objects[siindex+1][0] == "stdin-stat", "stdin must be followed by its stats"
+                    pre_si_dat = ktestContains["KTEST-OBJ"][i].objects[siindex][1]
+                    ktestContains["KTEST-OBJ"][i].objects[siindex] = ('stdin', pre_si_dat + "\0"*(stdinMaxSize - len(pre_si_dat)))
+                else:
+                    symin_obj = ('stdin', '\0'*stdinMaxSize)
+                    syminstat_obj = ('stdin-stat', '\0'*144)
+                    ktestContains["KTEST-OBJ"][i].objects.insert(-1, symin_obj)
+                    ktestContains["KTEST-OBJ"][i].objects.insert(-1, syminstat_obj)
+            
+        break
 
     # Sym stdout, is this really needed
     commonArgs.append('--sym-stdout')
