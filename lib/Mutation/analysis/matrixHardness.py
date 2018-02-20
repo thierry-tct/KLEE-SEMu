@@ -123,7 +123,8 @@ def getCoveredMutants(covMatFile, testTresh=1):
 
 def computeHardness(matrixdata, mutantCovDict):
     outData = {'Relative-Equivalent': [], 'Hardness': {}}
-    nTests = len(matrixdata[SM_index_string])
+    all_tests = set(matrixdata[SM_index_string])
+    nTests = len(all_tests)
     
     # If mutantCovDict is None, consider hardness regardless of coverage: assume every test covers
     if mutantCovDict is None:
@@ -133,9 +134,11 @@ def computeHardness(matrixdata, mutantCovDict):
     for mutID in mutantCovDict:
         #assert nTCCov > 0, "No test covering candidate mutant (BUG). Mutant ID: "+str(mitID)
         # compute hardness as proportion of tests killing the mutant among tests covering
-        nTCCov = len(mutantCovDict[mutID])
+        nTCCov = len(set(mutantCovDict[mutID]) & all_tests)
         nKill = len(TestsKilling(mutID, matrixdata))
 
+        assert nTCCov <= nTests, "BUG: ncovtest > nTests: nTests="+str(nTests)+", nCovTests="+str(nTCCov)
+        assert nKill <= nTests, "BUG: nkilltest > nTests: nTests="+str(nTests)+", nKillTests="+str(nKill)
         if nKill == 0 or nTCCov == 0: # The secon condition mus never be seen
             outData['Relative-Equivalent'].append(mutID)
         else:

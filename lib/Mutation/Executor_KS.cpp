@@ -1397,6 +1397,11 @@ void Executor::executeCall(ExecutionState &state,
       // with vaeend, however (like call it twice).
       break;
         
+  // @KLEE-SEMu
+    case Intrinsic::trap:
+      terminateStateEarly (state, "Trap instruction");
+      break;
+  //~KS
     case Intrinsic::vacopy:
       // va_copy should have been lowered.
       //
@@ -4365,20 +4370,20 @@ inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const Executio
 // Do not check anymore
 // XXX this is checked befor KLEE executes the corresponding call instruction
 inline bool Executor::ks_isOutEnvCall (CallInst *ci, ExecutionState *state) {
-  static std::set<std::string> outEnvFuncs = {"printf", "vprintf" "puts", "putchar", "putc", "fprintf", "vfprintf", "write", "fwrite", "fputs", "fputs_unlocked", "putchar_unlocked", "fputc", "fflush", "perror", "assert", "exit", "_exit", "syscall"};
+  static std::set<std::string> outEnvFuncs = {"printf", "vprintf" "puts", "putchar", "putc", "fprintf", "vfprintf", "write", "fwrite", "fputs", "fputs_unlocked", "putchar_unlocked", "fputc", "fflush", "perror", "assert", "exit", "_exit", "abort", "syscall"};
   Function *f = ci->getCalledFunction();  //TODO: consider indirect, maybe getCalledValue is better
   // Out env must be declaration only
   /*static std::set<std::string> tmpextern; //DBG*/
-  if (f && f->isDeclaration() && f->getIntrinsicID() == Intrinsic::not_intrinsic) {
-    /*if (tmpextern.count(f->getName()) == 0) { //DBG
-      tmpextern.insert(f->getName());   //DBG
-      llvm::outs()<<"@@@"<<f->getName()<<"\n"; //DBG
-    }  //DBG*/
-    if (outEnvFuncs.count(f->getName()))
-      // XXX this if if not needed since outenv call must be declaration
-      //if (state && state->ks_stackHasAnyFunctionOf(outEnvFuncs))
-      //  return false;
-      return true;
+  if (f && f->isDeclaration()) {
+    switch(f->getIntrinsicID()) {
+      case Intrinsic::trap:
+        return true;
+      case Intrinsic::not_intrinsic:
+        if (outEnvFuncs.count(f->getName()))
+          return true;
+      default:
+        ;
+    }  
   }
   return false;
 }
@@ -4924,7 +4929,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
 
       } else { // there should be no terminated state
         if (ks_reachedOutEnv.size() != remainWPStates.size()) {
-          klee_error("SEMU@ERROR: BUG, state reaching outenv different after comparestates");
+          klee_error("SEMU@ERROR: BUG, state reaching outenv different after compare states");
           exit(1);
         }
         ks_reachedOutEnv.clear();

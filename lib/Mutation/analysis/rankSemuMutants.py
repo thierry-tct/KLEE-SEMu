@@ -38,6 +38,10 @@ class DIFF_CODES:
 
 ks = DIFF_CODES()
 
+def getOrigState_MaxDepth(pc):
+    return os.path.dirname(pc)
+#~ def getOrigState_MaxDepth():
+
 def loadData(indir):
     outObj = {}
     for mutfile in glob.glob(os.path.join(indir,"mutant-*.semu")):
@@ -159,9 +163,9 @@ def independentApproximateHardness(mutantsymbinfos):
                 ks.RETCODE_DIFF_MAINFUNC: maxKillProba, 
                 ks.OUTENV_DIFF: maxKillProba/2, 
                 ks.SYMBOLICS_DIFF: maxKillProba, 
-                ks.PC_DIFF: maxKillProba/10 
+                ks.PC_DIFF: maxKillProba #/10 
             }
-    surediffsSet = [ks.RETCODE_DIFF_ENTRYFUNC, ks.RETCODE_DIFF_MAINFUNC, ks.SYMBOLICS_DIFF]
+    surediffsSet = [ks.RETCODE_DIFF_ENTRYFUNC, ks.RETCODE_DIFF_MAINFUNC, ks.SYMBOLICS_DIFF] + [ks.PC_DIFF]
     unsureSet = set(weights) - set(surediffsSet)
     surediffsDiff = None
     if len(surediffsSet) > 0:
@@ -169,11 +173,24 @@ def independentApproximateHardness(mutantsymbinfos):
         for d in surediffsSet[1:]:
             surediffsDiff |= d
     
-    nPaths = len(mutantsymbinfos)
+    # XXX
+    # Since we have two types of checking in SEMU (Out env check and watch point check), both happend on the same path thus we need to merge them
+    # Furthermore, for a same sate, a mutant must appear only once for watchpoint (all corresponding mutants are terminated after watchpoint)
+    # Therefore, we merge the instances by corresponding original state's value (OrigState) and MaxDepthID
+    uniq_mutantsymbinfos = {}
+    for e_pc in mutantsymbinfos:
+        pc = getOrigState_MaxDepth(e_pc)
+        if pc not in uniq_mutantsymbinfos:
+            uniq_mutantsymbinfos[pc] = []
+        uniq_mutantsymbinfos[pc] += mutantsymbinfos[e_pc]
+
+    #uniq_mutantsymbinfos = mutantsymbinfos
+    
+    nPaths = len(uniq_mutantsymbinfos)
     killProba = 0.0
-    for pc in mutantsymbinfos:
+    for pc in uniq_mutantsymbinfos:
         local_proba = 0.0
-        for instance in mutantsymbinfos[pc]:  # Multiple instance because we may have multiple environment calls
+        for instance in uniq_mutantsymbinfos[pc]:  # Multiple instance because we may have multiple environment calls
             dt = instance['Diff_Type']
 
             if surediffsDiff is not None and ks.hasAnyCodes(dt, surediffsDiff):

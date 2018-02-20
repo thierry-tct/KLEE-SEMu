@@ -242,7 +242,7 @@ def hardnessPlot (xlist, ylist, figfilename=None):
 '''
     Make the subject have same points as the reference and pairwise compare
 '''
-def computePoints(subjObj, refObj, refHardness=None, tieRandom=True, percentage=True):
+def computePoints(subjObj, refObj, refHardness=None, tieRandom=False, percentage=True):
     ss = []
     nh = []
     checkpoints = [0]
@@ -263,6 +263,9 @@ def computePoints(subjObj, refObj, refHardness=None, tieRandom=True, percentage=
             for i in range(len(refHardness[0])):
                 refHardness[0][i] *= 100.0 / len(refHardness[0])
 
+    if not tieRandom:
+        c_ind = 0
+
     for sscore in sorted(subjObj, reverse=True, key=lambda x: float(x)):
         if tieRandom:
             # RandomSel to break ties
@@ -271,7 +274,21 @@ def computePoints(subjObj, refObj, refHardness=None, tieRandom=True, percentage=
             subjMutsOrdered += tmpl
         else:
             # Take first those that are not Hard (worst case)
-            subjMutsOrdered += sorted(subjObj[sscore], key=lambda x:int(x in refSelMuts))
+            tmp_rev_subj = []
+            remsubj = set(subjObj[sscore])
+            next_sel_len = len(subjMutsOrdered) + len(subjObj[sscore])
+            while checkpoints[c_ind] < next_sel_len:
+                inter = set(refMutsOrdered[:checkpoints[c_ind]]) & remsubj
+                remsubj -= inter
+                tmp_rev_subj += list(inter)
+                c_ind += 1
+            tmp_rev_subj += list(remsubj)
+
+            if checkpoints[c_ind] == next_sel_len:
+                c_ind += 1
+
+            subjMutsOrdered += list(reversed(tmp_rev_subj))
+
     for c in checkpoints:
         ss.append(c)
         nh.append(len(set(refMutsOrdered[:c]) & set(subjMutsOrdered[:c])))
@@ -320,7 +337,8 @@ def getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, infoObj):
         infoObj[tech]["#hardnessLevels"] = nHardLevels
 #~ def getAnalyseInfos()
 
-SEMU_JSONs = ["semu"+var+".json" for var in ['-pairwise']] #, '-approxH', '-merged_PairApprox']]
+#SEMU_JSONs = ["semu"+var+".json" for var in ['-pairwise', '-approxH', '-merged_PairApprox']]
+SEMU_JSONs = ["semu"+var+".json" for var in ['-approxH']] #, '-pairwise', '-merged_PairApprox']]
 CLASSIC_JSONs = ["classic.json"]
 GROUNDTRUTH_JSONs = ["groundtruth.json"]
 
@@ -338,6 +356,11 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
             semuData_l, classicData_l, groundtruthData_l = semuData_all_l, classicData_all_l, groundtruthData_all_l
         elif title == 'semuANDclassic':
             semuData_l, classicData_l, groundtruthData_l = getSemu_AND_OR_Classic(semuData_all_l, classicData_all_l, groundtruthData_all_l, isAndNotOr=True)
+            #print "SEMU-Pair:", [sorted(semuData_l[0][v]) for v in sorted(semuData_l[0],reverse=True)] #DBG
+            #print "SEMU-Aprox:", [sorted(semuData_l[1][v]) for v in sorted(semuData_l[1],reverse=True)] #DBG
+            #print "SEMU-Merged:", [sorted(semuData_l[2][v]) for v in sorted(semuData_l[2],reverse=True)] #DBG
+            #print "CLASSIC:", [sorted(classicData_l[0][v]) for v in sorted(classicData_l[0],reverse=True)] #DBG
+            #print "GROUND:", [sorted(groundtruthData_l[0][v]) for v in sorted(groundtruthData_l[0],reverse=True)] #DBG
         elif title == 'semuORclassic':
             semuData_l, classicData_l, groundtruthData_l = getSemu_AND_OR_Classic(semuData_all_l, classicData_all_l, groundtruthData_all_l, isAndNotOr=False)
         else:
@@ -351,10 +374,10 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
         getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, analyseInfo[title])
         dumpJson(analyseInfo, os.path.join(jsonsdir, "analyse-info.json"))
 
-        semuSelSizes = [[None] * RAND_REP] * len(semuData_l)
-        semuNHard = [[None] * RAND_REP] * len(semuData_l)
-        classicSelSizes = [[None] * RAND_REP] * len(classicData_l)
-        classicNHard = [[None] * RAND_REP] * len(classicData_l)
+        semuSelSizes = [[None] * RAND_REP for ii in range(len(semuData_l))]
+        semuNHard = [[None] * RAND_REP for ii in range(len(semuData_l))]
+        classicSelSizes = [[None] * RAND_REP for ii in range(len(classicData_l))]
+        classicNHard = [[None] * RAND_REP for ii in range(len(classicData_l))]
         print "Processing Semu and Classic for", title, "..."
         assert len(groundtruthData_l) == 1, "Mus have one groundtruth"
         for r in range(RAND_REP):
