@@ -30,9 +30,9 @@ class DIFF_CODES:
         
     def hasAnyCodes (self, val, codeUnion):
         return (val & codeUnion != 0) 
-    def hasAllCodes (self, va2yyl, codeUnion):
+    def hasAllCodes (self, val, codeUnion):
         return (val & codeUnion == codeUnion) 
-    def isEqualTo (self, va2yyl, codeUnion):
+    def isEqualTo (self, val, codeUnion):
         return (val == codeUnion) 
 #~ class DIFF_CODES
 
@@ -85,12 +85,16 @@ def RightEasierOrIncomparableToLeft(mutID, compID, inData):
                                 else:
                                     rscore += 1
                         else:
-                            if int(ffl['Diff_Type']) < int(ffr['Diff_Type']):  # TODO: consider main/entry func, outenv, symbolic, pc diffs as equals
+                            if ks.hasAllCodes (ffl['Diff_Type'], ffr['Diff_Type']):  # all codes of ffr are also in ffl (ffr is harder)
+                                rscore += 1
+                            if ks.hasAllCodes (ffr['Diff_Type'], ffl['Diff_Type']):  # all codes of ffl are also in ffr (ffl is harder)
+                                lscore += 1
+                            '''if int(ffl['Diff_Type']) < int(ffr['Diff_Type']):  # TODO: consider main/entry func, outenv, symbolic, pc diffs as equals
                                 lscore += 1
                             else:
-                                rscore += 1
+                                rscore += 1'''
                             
-            return (lscore > rscore)
+            return (lscore >= rscore)
     else:
         # Not having same number of PCs
         intersect = set(inData[mutID]) & set(inData[compID])
@@ -135,6 +139,21 @@ def computeScoresPairwise(inData):
     return outData
 #~ def computeScoresPairwise()
 
+
+def getUnique (mutantsymbinfos):
+    # Since we have two types of checking in SEMU (Out env check and watch point check), both happend on the same path thus we need to merge them
+    # Furthermore, for a same sate, a mutant must appear only once for watchpoint (all corresponding mutants are terminated after watchpoint)
+    # Therefore, we merge the instances by corresponding original state's value (OrigState) and MaxDepthID
+    uniq_mutantsymbinfos = {}
+    for e_pc in mutantsymbinfos:
+        pc = getOrigState_MaxDepth(e_pc)
+        if pc not in uniq_mutantsymbinfos:
+            uniq_mutantsymbinfos[pc] = []
+        uniq_mutantsymbinfos[pc] += mutantsymbinfos[e_pc]
+    return uniq_mutantsymbinfos
+#~ def getUnique ():
+
+
 '''
     approximate the hardness of a Mutant. Take as input the mutant symbolic info Dict. containing diff per path.
     -------------------------------
@@ -177,14 +196,7 @@ def independentApproximateHardness(mutantsymbinfos):
     # Since we have two types of checking in SEMU (Out env check and watch point check), both happend on the same path thus we need to merge them
     # Furthermore, for a same sate, a mutant must appear only once for watchpoint (all corresponding mutants are terminated after watchpoint)
     # Therefore, we merge the instances by corresponding original state's value (OrigState) and MaxDepthID
-    uniq_mutantsymbinfos = {}
-    for e_pc in mutantsymbinfos:
-        pc = getOrigState_MaxDepth(e_pc)
-        if pc not in uniq_mutantsymbinfos:
-            uniq_mutantsymbinfos[pc] = []
-        uniq_mutantsymbinfos[pc] += mutantsymbinfos[e_pc]
-
-    #uniq_mutantsymbinfos = mutantsymbinfos
+    uniq_mutantsymbinfos = getUnique(mutantsymbinfos)  #mutantsymbinfos
     
     nPaths = len(uniq_mutantsymbinfos)
     killProba = 0.0
@@ -208,6 +220,23 @@ def independentApproximateHardness(mutantsymbinfos):
     return (1 - killProba / nPaths / maxKillProba) #value betwen 0 and 1
 #~ def independentApproximateHardness()
 
+def breakTies (inData, mutlist):
+    uniq_data = {}
+    for mid in mutlist:
+       uniq_data[mid] = getUnique(inData[mid])
+    
+    # use unique data to separate the mutants
+    pairw = computeScoresPairwise(uniq_data)
+    assert len(pairw['Relative-Equivalent']) == 0, "Must not be equivalent here"
+    res = []
+    for a_hn in sorted(pairw['Hardness'], reverse=True):
+        res.append(sorted(pairw['Hardness'][a_hn])) #Sort only for easy to see
+
+    assert len(mutlist) == sum([len(m_l) for m_l in res]), "Some mutants were omitted in above coputations"
+    
+    return res
+#~ def breakTies ():
+
 '''
     Use the state difference to approximate the hardness of each mutant regardless independently
 '''
@@ -226,6 +255,16 @@ def computeScoresStateApproximate(inData):
                 outData['Hardness'][m_hardness] = list()
             outData['Hardness'][m_hardness].append(mutID)
 
+    breakTiesEnabled = True
+    if breakTiesEnabled:
+        # Break Tie as much as possible using a sort of pairwise comparison
+        mutGroupsbyDechardness = []
+        for h in sorted(outData['Hardness'], reverse=True):
+            broken = breakTies (inData, outData['Hardness'][h])
+            mutGroupsbyDechardness += broken
+
+        newHardnesses = np.linspace(0.0, 1.0, len(mutGroupsbyDechardness),endpoint=False)[::-1]  #[::-1] reverses the array
+        outData['Hardness'] = {v: muts for v, muts in zip(newHardnesses, mutGroupsbyDechardness) }
     return outData
 #~ def computeScoresStateApproximate()
 
