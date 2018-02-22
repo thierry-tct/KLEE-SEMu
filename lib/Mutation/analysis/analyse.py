@@ -337,7 +337,7 @@ def getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, infoObj):
         infoObj[tech]["#hardnessLevels"] = nHardLevels
 #~ def getAnalyseInfos()
 
-#SEMU_JSONs = ["semu"+var+".json" for var in ['-pairwise', '-approxH', '-merged_PairApprox']]
+#SEMU_JSONs = ["semu"+var+".json" for var in ['-approxH', '-pairwise', '-merged_PairApprox']]
 SEMU_JSONs = ["semu"+var+".json" for var in ['-approxH']] #, '-pairwise', '-merged_PairApprox']]
 CLASSIC_JSONs = ["classic.json"]
 GROUNDTRUTH_JSONs = ["groundtruth.json"]
@@ -356,8 +356,8 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
             semuData_l, classicData_l, groundtruthData_l = semuData_all_l, classicData_all_l, groundtruthData_all_l
         elif title == 'semuANDclassic':
             semuData_l, classicData_l, groundtruthData_l = getSemu_AND_OR_Classic(semuData_all_l, classicData_all_l, groundtruthData_all_l, isAndNotOr=True)
-            #print "SEMU-Pair:", [sorted(semuData_l[0][v]) for v in sorted(semuData_l[0],reverse=True)] #DBG
-            #print "SEMU-Aprox:", [sorted(semuData_l[1][v]) for v in sorted(semuData_l[1],reverse=True)] #DBG
+            #print "SEMU-Approx:", [sorted(semuData_l[0][v]) for v in sorted(semuData_l[0],reverse=True)] #DBG
+            #print "SEMU-PairWise:", [sorted(semuData_l[1][v]) for v in sorted(semuData_l[1],reverse=True)] #DBG
             #print "SEMU-Merged:", [sorted(semuData_l[2][v]) for v in sorted(semuData_l[2],reverse=True)] #DBG
             #print "CLASSIC:", [sorted(classicData_l[0][v]) for v in sorted(classicData_l[0],reverse=True)] #DBG
             #print "GROUND:", [sorted(groundtruthData_l[0][v]) for v in sorted(groundtruthData_l[0],reverse=True)] #DBG

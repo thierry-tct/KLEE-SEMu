@@ -2854,6 +2854,15 @@ void Executor::run(ExecutionState &initialState) {
     //if (OnlySeed)
     //  klee_error("SEMU@ERROR: OnlySeed must not be enabled in SEMU mode");
 
+    // OnlyReplaySeeds must be set if precondition is enabled by giving seed dir or so
+    // XXX Maybe need to automatically set OnlyReplaySeeds here instead of displaying error?
+    if (usingSeeds) { //!seedMap.empty()) {
+      if (!OnlyReplaySeeds) {
+        klee_error("SEMU@ERROR: OnlyReplaySeeds is not set in Semu mode whith seed precondition. Must be set!");
+        exit(1);
+      }
+    }
+
     ks_watchPointID = 0;
     ks_maxDepthID = 1;
     
@@ -4872,26 +4881,32 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   //}
 
   if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
-    //remove from searcher or seed map
-    if (isSeeding) {
-      std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
-        seedMap.find(&curState);
-      if (it != seedMap.end()) {
-        // keep state for restoration after compare (seedMap not set un UpdateStates)
-        backed_seedMap[&curState] = it->second;  
-        seedMap.erase(it);
-      }
-    } else {
-      searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
-    }
+
+    bool curTerminated = ks_terminatedBeforeWP.count(&curState) > 0;
     
-    if (! ks_terminated) {
-      //add to ks_reachedWatchPoint if so
-      if (ks_OutEnvReached)
-        ks_reachedOutEnv.insert(&curState);
-      else // ! ks_OutEnvReached and ks_WPReached
-        ks_reachedWatchPoint.insert(&curState);
-    } 
+    //remove from searcher or seed map if the curState is concerned (guaranteed for WP and Out Env, but not term: termination while forking)
+    if (ks_WPReached | ks_OutEnvReached | curTerminated)  {
+      if (isSeeding) {
+        std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
+          seedMap.find(&curState);
+        if (it != seedMap.end()) {
+          // keep state for restoration after compare (seedMap not set un UpdateStates)
+          backed_seedMap[&curState] = it->second;  
+          seedMap.erase(it);
+        }
+      } else {
+        searcher->update(&curState, std::vector<ExecutionState *>(), std::vector<ExecutionState *>({&curState}));
+      }
+
+      // Terminated has priority, then outEnv
+      if (! curTerminated) {
+        // add to ks_reachedWatchPoint if so
+        if (ks_OutEnvReached)
+          ks_reachedOutEnv.insert(&curState);
+        else // ! ks_OutEnvReached and ks_WPReached
+          ks_reachedWatchPoint.insert(&curState);
+      } 
+    }
     
     // Put it here to make sure that any newly added state is considered (addesStates and removedStates are empty after)
     updateStates(0);
@@ -4905,8 +4920,9 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       ks_watchPointID++;
       bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
       llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() << " States" << (ks_hasOutEnv?" (OutEnv)":" (Checkpoint)") << ".\n";
+      auto elapsInittime = util::getWallTime();
       ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/);
-      llvm::errs() << "# SEMU@Status: State Comparison Done!\n";
+      llvm::errs() << "# SEMU@Status: State Comparison Done! (" << (util::getWallTime() - elapsInittime) << " seconds)\n";
       
       //continue the execution
       addedStates.insert(addedStates.end(), remainWPStates.begin(), remainWPStates.end());
@@ -4929,7 +4945,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
 
       } else { // there should be no terminated state
         if (ks_reachedOutEnv.size() != remainWPStates.size()) {
-          klee_error("SEMU@ERROR: BUG, state reaching outenv different after compare states");
+          klee_error("SEMU@ERROR: BUG, states reaching outenv different after compare states");
           exit(1);
         }
         ks_reachedOutEnv.clear();
