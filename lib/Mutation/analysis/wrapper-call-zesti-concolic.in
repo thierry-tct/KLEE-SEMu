@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -u
+set -o pipefail
 
 # TODO: path to 'tee' is hard-coded to avoid problems with binutils
 
@@ -20,13 +21,20 @@ then
     (ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1)
     touch $tmpstdindata
 else
-/usr/bin/tee >(ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1) >(cat - > $tmpstdindata || EXIT_CODE=1) 
+#/usr/bin/tee >(ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1) >(cat - > $tmpstdindata || EXIT_CODE=1) 
+(cat - > $tmpstdindata ) || EXIT_CODE=1
+(cat $tmpstdindata | ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" | /usr/bin/tee $semuout 2>&1); EXIT_CODE=$?
 fi
 
 # Symbolic
 
 # wait for zesti to finish (when tee is used for input dispatchment)
-sleep 1 # XXX removing this makes exit with 256, why(FIXME)
+#while true;
+#do
+#    `/bin/ps --ppid $$ | /bin/grep "ZESTI_KLEE_EXECUTABLE_DIRNAME/klee" > dev/null` || break
+#    /bin/sleep 1 # XXX removing this makes exit with 256, why(FIXME)
+#done
+#/bin/sleep 1 # XXX removing this makes exit with 256, why(FIXME)
 
 # after  zesti finished and updated klee-last
 mv $tmpstdindata $stdindata || EXIT_CODE=2 

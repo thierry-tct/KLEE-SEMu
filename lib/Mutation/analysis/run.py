@@ -216,6 +216,25 @@ def parseTextKtest(filename):
     # get the object one at the time and obtain its stuffs
     # the objects are as following: [model_version, <the argvs> <file contain, file stat>]
     # Note that files appear in argv. here we do not have n_args because concrete (from Zesti)
+
+    # XXX Watch this: TMP: make sure all files are at the end
+    firstFile_ind = -1
+    postFileArgv_ind = []
+    assert b.objects[0][0] == 'model_version'
+    for pos, (name, data) in enumerate(b.objects[1:]): #skip model_version
+        if name == 'argv':
+            if firstFile_ind >= 0:
+                postFileArgv_ind.append(pos+1)
+        else:
+            firstFile_ind = pos+1 if firstFile_ind < 0 else firstFile_ind
+    if len(postFileArgv_ind) > 0:
+        tmp_postFdat = []
+        for ind_ in sorted(postFileArgv_ind, reverse=True):
+            tmp_postFdat.append(b.objects[ind_])
+            del b.objects[ind_]
+        b.objects[firstFile_ind: firstFile_ind] = tmp_postFdat[::-1]
+    #~
+
     seenFileStatsPos = set()
     stdin = None
     model_version_pos = -1
@@ -261,10 +280,11 @@ def parseTextKtest(filename):
             #elif name == "stdin-stat": #case of stdin
             #    stdin = ('STDIN', len(data)) #XXX 
             else: #ARGV
+                assert name == "argv", "not in args and not argv: "+filename
                 datalist.append(('ARGV', len(data))) #XXX
 
     if len(filesNstatsIndex) > 0:
-        assert filesNstatsIndex == range(filesNstatsIndex[0], filesNstatsIndex[-1]+1), "File objects are not continuous"
+        assert filesNstatsIndex == range(filesNstatsIndex[0], filesNstatsIndex[-1]+1), "File objects are not continuous: (File "+filename+"): "+str(filesNstatsIndex)+str(range(filesNstatsIndex[0], filesNstatsIndex[-1]+1))
 
     if model_version_pos == 0:
         #for ii in range(len(fileargsposinObj_remove)):
@@ -277,10 +297,10 @@ def parseTextKtest(filename):
 
         # stdin and after files obj
         if stdin is not None:
-            afterLastFilenstatObj = max(fileargsposinObj_remove[-1]) + 1 if len(fileargsposinObj_remove) > 0 else len(b.objects) - 2 -1 # -2 because of stdin and stdin-stat, -1 for mode_version
+            afterLastFilenstatObj = max(filesNstatsIndex) + 1 if len(filesNstatsIndex) > 0 else (len(b.objects) - 2 -1) # -2 because of stdin and stdin-stat, -1 for mode_version
             datalist.append(stdin)
         else:
-            afterLastFilenstatObj = max(fileargsposinObj_remove[-1]) + 1 if len(fileargsposinObj_remove) > 0 else len(b.objects) - 1 # -1 for model_version
+            afterLastFilenstatObj = max(filesNstatsIndex) + 1 if len(filesNstatsIndex) > 0 else (len(b.objects) - 1) # -1 for model_version
             # shadow-zesti ay have problem with stdin, use our hack on wrappe to capture that
             stdin_file = os.path.join(os.path.dirname(filename), "stdin-ktest-data")
             assert os.path.isfile(stdin_file), "The stdin exported in wrapper is missing of test: "+filename
@@ -617,7 +637,7 @@ def executeSemu (semuworkdir, semuOutDir, testSample, test2semudirMap, metaMutan
         semuExe = "klee-semu" if semuexedir is None else os.path.join(semuexedir, "klee-semu")
         runSemuCmd = " ".join([semuExe, kleeArgs, semukleearg, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"])
         sretcode = os.system(runSemuCmd)
-        if sretcode != 0 and sretcode != 256: # 256 for timeout
+        if sretcode != 0 :#and sretcode != 256: # 256 for timeout
             print "-- Returned Code:", sretcode, ". Command: ", runSemuCmd 
             error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
         #print sretcode, "@@@@ -- ", runSemuCmd  #DBG

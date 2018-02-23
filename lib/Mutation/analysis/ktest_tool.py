@@ -36,7 +36,7 @@ class KTest:
         args = []
         for i in range(numArgs):
             size, = struct.unpack('>i', f.read(4))
-            args.append(str(f.read(size).decode(encoding='ascii')))
+            args.append(str(f.read(size).decode(encoding='ascii', errors='ignore'))) # errors='ignore' not in new ktest-tool but in old(shadow)
             
         if version >= 2:
             symArgvs, = struct.unpack('>i', f.read(4))
