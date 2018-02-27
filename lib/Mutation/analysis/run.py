@@ -717,7 +717,7 @@ def main():
     parser.add_argument("--covTestThresh", type=int, default=10, help="Minimum number of tests covering a mutant for it to be selected for analysis")
     parser.add_argument("--skip_completed", action='append', default=[], choices=tasksList, help="Specify the tasks that have already been executed")
     parser.add_argument("--testSampleMode", type=str, default="DEV", choices=["DEV", "KLEE", "NUM"], help="choose how to sample subset for evaluation. DEV means use Developer test, NUM, mean a percentage of all tests")
-    parser.add_argument("--testSamplePercent", type=int, default=10, help="Specify the percentage of test suite to use for analysis, (require setting testSampleMode to NUM)")
+    parser.add_argument("--testSamplePercent", type=int, default=10, help="Specify the percentage of test suite to use for analysis") #, (require setting testSampleMode to NUM)")
     parser.add_argument("--semutimeout", type=int, default=86400, help="Specify the timeout for semu execution")
     parser.add_argument("--semumaxmemory", type=int, default=9000, help="Specify the max memory for semu execution")
     parser.add_argument("--semupreconditionlength", type=int, default=2, help="Specify precondition length semu execution")
@@ -859,9 +859,11 @@ def main():
     alltests = alltestsObj["DEVTESTS"] + alltestsObj["GENTESTS"]
 
     if testSampleMode == 'DEV':
-        testSamples = {'DEV': alltestsObj['DEVTESTS']}
+        sampl_size = max(1, testSamplePercent * len(alltestsObj['DEVTESTS']) / 100)
+        testSamples = {'DEV_'+str(testSamplePercent): random.sample(alltestsObj['DEVTESTS'], sampl_size)}
     elif testSampleMode == 'KLEE':
-        testSamples = {'KLEE': alltestsObj['GENTESTS']}
+        sampl_size = max(1, testSamplePercent * len(alltestsObj['GENTESTS']) / 100)
+        testSamples = {'KLEE_'+str(testSamplePercent): random.sample(alltestsObj['GENTESTS'], sampl_size)}
 
     semuOutputs = os.path.join(cacheDir, "semu_outputs")
     if not os.path.isdir(semuOutputs):

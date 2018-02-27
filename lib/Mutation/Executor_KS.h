@@ -518,6 +518,8 @@ private:
   llvm::SmallPtrSet<ExecutionState *, 5> ks_reachedWatchPoint;
   llvm::SmallPtrSet<ExecutionState *, 5> ks_terminatedBeforeWP;
   llvm::SmallPtrSet<ExecutionState *, 5> ks_reachedOutEnv;
+
+  llvm::SmallPtrSet<ExecutionState *, 5> ks_justTerminatedStates;
   
   llvm::Function * ks_entryFunction;
   
@@ -589,7 +591,7 @@ public:
 
   inline void ks_CheckAndBreakInfinitLoop(ExecutionState &curState, ExecutionState *&prevState, double &initTime);
 
-  inline bool ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size, bool isSeeding, uint64_t precond_offset=0);
+  inline bool ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, bool isSeeding, uint64_t precond_offset=0);
 
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS

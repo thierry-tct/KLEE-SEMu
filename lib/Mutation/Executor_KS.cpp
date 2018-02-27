@@ -2933,10 +2933,13 @@ void Executor::run(ExecutionState &initialState) {
         it = seedMap.upper_bound(lastState);
       }
 
-      if(false) // remove following statement XXX (done above)
+      /*
       //~KS
       std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it = 
         seedMap.upper_bound(lastState);
+      // @KLEE-SEMu
+      */
+      //~KS
       if (it == seedMap.end())
         it = seedMap.begin();
       lastState = it->first;
@@ -2945,9 +2948,6 @@ void Executor::run(ExecutionState &initialState) {
       KInstruction *ki = state.pc;
 
       // @KLEE-SEMu
-      //Size before executing instruction (help to know whether the state was terminated)
-      unsigned ks_terminatedPrevSize = ks_terminatedBeforeWP.size();
-      
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
         // remove from seedMap the last state if depth exceeded the precondition length
         if (state.depth >= semuPreconditionLength) {
@@ -2970,7 +2970,7 @@ void Executor::run(ExecutionState &initialState) {
 
       // @KLEE-SEMu
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-        if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize, true/*is Seeidng*/, precond_offset))
+        if (ks_CheckpointingMainCheck(state, ki, true/*is Seeidng*/, precond_offset))
           continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
       }
       //~KS
@@ -3018,7 +3018,21 @@ void Executor::run(ExecutionState &initialState) {
 
   searcher = constructUserSearcher(*this);
 
+  // @KLEE-SEMu
+  std::vector<ExecutionState *> newStates;
+  for (auto *s: states) {
+    if (ks_terminatedBeforeWP.count(s) > 0 
+        || ks_reachedWatchPoint.count(s) > 0 
+        || ks_reachedOutEnv.count(s) > 0)
+      continue;
+    newStates.push_back(s);
+  }
+  /*
+  //~KS
   std::vector<ExecutionState *> newStates(states.begin(), states.end());
+  // @KLEE-SEMu
+  */
+  //~KS
   searcher->update(0, newStates, std::vector<ExecutionState *>());
   
   // @KLEE-SEMu         //Temporary TODO
@@ -3032,9 +3046,6 @@ void Executor::run(ExecutionState &initialState) {
     KInstruction *ki = state.pc;   
     
     // @KLEE-SEMu
-    //Size before executing instruction (help to know whether the state was terminated)
-    unsigned ks_terminatedPrevSize = ks_terminatedBeforeWP.size();
-    
     //Handle infinite loop, This requires BFS search strategy XXX
 //#ifdef SEMU_INFINITE_LOOP_BREAK
     if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
@@ -3052,7 +3063,7 @@ void Executor::run(ExecutionState &initialState) {
 
     // @KLEE-SEMu
     if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-      if (ks_CheckpointingMainCheck(state, ki, ks_terminatedPrevSize, false/*is Seeding*/))
+      if (ks_CheckpointingMainCheck(state, ki, false/*is Seeding*/))
         continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
     }
     //~KS
@@ -3146,7 +3157,7 @@ void Executor::terminateStateEarly(ExecutionState &state,
                                    const Twine &message) {
   // @KLEE-SEMu
   if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-    ks_terminatedBeforeWP.insert(&state);
+    ks_justTerminatedStates.insert(&state);
     return;
   }
   if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::TESTGEN_MODE) {
@@ -3169,7 +3180,7 @@ void Executor::terminateStateEarly(ExecutionState &state,
 void Executor::terminateStateOnExit(ExecutionState &state) {
   // @KLEE-SEMu
   if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-    ks_terminatedBeforeWP.insert(&state);
+    ks_justTerminatedStates.insert(&state);
     return;
   }
   if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::TESTGEN_MODE) {
@@ -3295,7 +3306,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
   // @KLEE-SEMu
   if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
     if (!shouldExitOn(termReason)) {
-      ks_terminatedBeforeWP.insert(&state);
+      ks_justTerminatedStates.insert(&state);
       return;
     }
   }
@@ -4856,7 +4867,7 @@ inline void Executor::ks_CheckAndBreakInfinitLoop(ExecutionState &curState, Exec
 }
 
 /// Return true if the state comparison actually happened, false otherwise. This help to know if we need to call updateStates or not
-inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, unsigned terminated_prev_size, bool isSeeding, uint64_t precond_offset) {
+inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, bool isSeeding, uint64_t precond_offset) {
   // // FIXME: We just checked memory and some states will be killed if exeeded and we will have some problem in comparison
   // // FIXME: For now we assume that the memory limitmust not be exceeded, need to find a way to handle this later
   if (atMemoryLimit) {
@@ -4875,14 +4886,14 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   //  terminateStateEarly(curState, "@SEMU: unreachable instruction reached");
   //  ks_terminated = true;
   //} else {
-    ks_terminated = (terminated_prev_size < ks_terminatedBeforeWP.size());
+    ks_terminated = !ks_justTerminatedStates.empty();
     ks_OutEnvReached = ks_nextIsOutEnv (curState);
     ks_WPReached = ks_watchPointReached (curState, ki);
   //}
 
   if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
 
-    bool curTerminated = ks_terminatedBeforeWP.count(&curState) > 0;
+    bool curTerminated = ks_justTerminatedStates.count(&curState) > 0;
     
     //remove from searcher or seed map if the curState is concerned (guaranteed for WP and Out Env, but not term: termination while forking)
     if (ks_WPReached | ks_OutEnvReached | curTerminated)  {
@@ -4907,9 +4918,40 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           ks_reachedWatchPoint.insert(&curState);
       } 
     }
-    
+
+    // keep in ks_justTerminatedStates only the states that are in addedStates, to be removed
+    // from searcher and seedMap after the following updateStates 
+    static std::vector<ExecutionState *> addedNdeleted;
+    addedNdeleted.clear();
+    if (!ks_justTerminatedStates.empty()) {
+      //std::set_intersection(addedStates.begin(), addedStates.end(), ks_justTerminatedStates.begin(), ks_justTerminatedStates.end(), addedNdeleted.begin());
+      for (auto *s: addedStates)
+        if (ks_justTerminatedStates.count(s))
+          addedNdeleted.push_back(s);
+
+      // Update all terminated 
+      ks_terminatedBeforeWP.insert(ks_justTerminatedStates.begin(), ks_justTerminatedStates.end());
+      ks_justTerminatedStates.clear();
+    }
+
     // Put it here to make sure that any newly added state is considered (addesStates and removedStates are empty after)
     updateStates(0);
+
+    // Remove addedNdeleted form both searcher and seedMap
+    if (! addedNdeleted.empty()) {
+      if (isSeeding) {
+        for (auto *s: addedNdeleted) {
+          std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
+            seedMap.find(s);
+          if (it != seedMap.end()) {
+            seedMap.erase(it);
+          }
+        }
+      } else {
+        searcher->update(nullptr, std::vector<ExecutionState *>(), addedNdeleted);
+      }
+      addedNdeleted.clear();
+    }
 
     //Check if all reached and compare states
     if (precond_offset + 
