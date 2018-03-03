@@ -80,7 +80,7 @@ def getTestSamples(testListFile, samplePercent, matrix, discards={}, hasKleeTest
     # make samples for sizes samplePercent, 2*samplePercent, 3*samplePercent,..., 100
     if samplePercent > 0:
         random.shuffle(testlist)
-        for s in range(samplePercent, 101, samplePercent):
+        for s in [samplePercent]: #range(samplePercent, 101, samplePercent):
             samples[s] = testlist[:int(s * len(testlist) / 100.0)]
             assert len(samples[s]) > 0, "too few test to sample percentage"
     return samples, {'GENTESTS': kleetestlist, 'DEVTESTS':devtestlist}, unwrapped_testlist
@@ -209,7 +209,7 @@ def ktestToFile(ktestData, outfilename):
     where each argument is represented by a pair of argtype (argv or file or stdin and the corresponding size)
     IN KLEE, sym-files is taken into account only once (the last one)
 '''
-def parseTextKtest(filename):
+def parseZestiKtest(filename):
 
     datalist = []
     b = ktest_tool.KTest.fromfile(filename)
@@ -321,7 +321,7 @@ def parseTextKtest(filename):
     b.objects.append(b.objects[model_version_pos])
     del b.objects[model_version_pos]
     return b, datalist, filesNstatsIndex, maxFileSize, fileargsposinObj_remove, afterLastFilenstatObj
-#~ def parseTextKtest()
+#~ def parseZestiKtest()
 
 def bestFit(outMaxVals, outNonTaken, inVals):
     assert len(inVals) <= len(outMaxVals)
@@ -334,21 +334,23 @@ def bestFit(outMaxVals, outNonTaken, inVals):
     return enabledArgs
 #~ def bestFit()
 
-def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
-    #-----------
-    #schar = [chr(i) for i in range(ord('A'),ord('Z')+1)+range(ord('a'),ord('z')+1)]
-    #ShortNames = {'names':[z[0]+z[1] for z in itertools.product(schar,['']+schar)], 'pos':0}
-    schar = [chr(i) for i in range(ord('A'), 256)]  # From KLEE: 'void klee_init_fds()' in runtime/POSIX/fd_init.c
-    ShortNames = {'names':schar, 'pos':0}
-    def getShortname(dat=ShortNames): 
-        dat['pos'] += 1
-        if dat['pos'] >= len(dat['names']):
+class FileShortNames:
+    def __init__(self):
+        #schar = [chr(i) for i in range(ord('A'),ord('Z')+1)+range(ord('a'),ord('z')+1)]
+        #ShortNames = {'names':[z[0]+z[1] for z in itertools.product(schar,['']+schar)], 'pos':0}
+        self.ShortNames = [chr(i) for i in range(ord('A'), 256)]  # From KLEE: 'void klee_init_fds()' in runtime/POSIX/fd_init.c
+        self.pos = 0
+    def reinitialize_count (self):
+        self.pos = 0
+    def getShortname(self): 
+        self.pos += 1
+        if self.pos >= len(self.ShortNames):
             error_exit("too many file arguments, exeeded shortname list")
-        return dat['names'][dat['pos']-1]
-    #-------------
+        return self.ShortNames[self.pos-1]
+#~ class FileShortNames:
 
+def getSymArgsFromZestiKtests (ktestFilesList, testNamesList):
     assert len(ktestFilesList) == len(testNamesList), "Error: size mismatch btw ktest and names: "+str(len(ktestFilesList))+" VS "+str(len(testNamesList))
-    name2ktestMap = {}
     # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions(TODO double check)
     listTestArgs = []
     ktestContains = {"CORRESP_TESTNAME":[], "KTEST-OBJ":[]}
@@ -365,7 +367,7 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
             continue
 
         # sed because Zesti give argv, argv_1... while sym args gives arg0, arg1,...
-        ktestdat, testArgs, fileNstatInd, maxFsize, fileargind, afterFnS = parseTextKtest(ktestfile)
+        ktestdat, testArgs, fileNstatInd, maxFsize, fileargind, afterFnS = parseZestiKtest(ktestfile)
         listTestArgs.append(testArgs)
         ktestContains["CORRESP_TESTNAME"].append(testNamesList[ipos])
         ktestContains["KTEST-OBJ"].append(ktestdat)
@@ -381,7 +383,7 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
     # update file data in objects (shortname and size)
     nmax_files = max([len(fpv) for fpv in filenstatsInObj]) / 2 # divide by 2 beacause has stats
     if nmax_files > 0:
-        shortFnames = ShortNames['names'][:nmax_files]
+        shortFnames = FileShortNames().ShortNames[:nmax_files]
         for ktpos in range(len(ktestContains["CORRESP_TESTNAME"])):
             ktdat = ktestContains["KTEST-OBJ"][ktpos]
 
@@ -406,8 +408,8 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
                 find_ = filenstatsInObj[ktpos][fi_]
                 fsind_ = filenstatsInObj[ktpos][fi_ + 1]
                 assert ktdat.objects[find_][0] + '-stat' == ktdat.objects[fsind_][0]
-                ktdat.objects[find_] = (shortFnames[ni], ktdat.objects[find_][1] + '\0'*(maxFileSize - len(ktdat.objects[find_][1]))) #file
-                ktdat.objects[fsind_] = (shortFnames[ni] + '-stat', ktdat.objects[fsind_][1]) #file
+                ktdat.objects[find_] = (shortFnames[ni]+"-data", ktdat.objects[find_][1] + '\0'*(maxFileSize - len(ktdat.objects[find_][1]))) #file
+                ktdat.objects[fsind_] = (shortFnames[ni]+"-data" + '-stat', ktdat.objects[fsind_][1]) #file
 
     # Make a general form out of listTestArgs by inserting what is needed with size 0
     # Make use of the sym-args param that can unset a param (klee care about param order)
@@ -588,6 +590,336 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
         for s in commonArgs:
             ktdat.args += s.strip().split(' ') 
 
+    return commonArgs, ktestContains
+#~ getSymArgsFromZestiKtests()
+
+'''
+    the list of klee tests (ktest names) are il ktestsList. 
+    Each represent the location of the ktest w.r.t. teststopdir
+'''
+def loadAndGetSymArgsFromKleeKTests(ktestsList, teststopdir):
+    # load the ktests
+    commonArgs = None
+    tmpsplitcommon = None
+    stdin_fixed_common = None
+    ktestContains = {"CORRESP_TESTNAME":[], "KTEST-OBJ":[]}
+    for kt in ktestsList:
+        ktestfile = os.path.join(teststopdir, kt)
+        assert os.path.isfile(ktestfile), "Ktest file for test is missing :" + ktestfile
+
+        b = ktest_tool.KTest.fromfile(ktestfile)
+        if commonArgs is None:
+            commonArgs = [] 
+            # make chunk (sym-args together with its params)
+            anArg = None
+            tmpsplitcommon = b.args[1:]
+            for c in tmpsplitcommon:
+                if c.startswith('-sym') or c.startswith('--sym'):
+                    if anArg is not None:
+                        commonArgs.append(anArg)
+                    anArg = c
+                else:
+                    anArg += " " + c
+            if anArg is not None:
+                commonArgs.append(anArg)
+    
+            # XXX fix problem with klee regarding stdin
+            a_has_stdin = False
+            for sa in commonArgs:
+                if '-sym-stdin ' in sa:
+                    a_has_stdin = True
+                    break
+            if not a_has_stdin:
+                o_stdin_len = -1
+                for o in b.objects:
+                    if o[0] == 'stdin':
+                        o_stdin_len = len(o[1])
+                        break
+                if o_stdin_len >= 0:
+                    si_pos = len(commonArgs)-1 if '-sym-stdout' in commonArgs[-1] else len(commonArgs)
+                    commonArgs.insert(si_pos, "-sym-stdin "+str(o_stdin_len))
+                    stdin_fixed_common = []
+                    for s_a in commonArgs:
+                        stdin_fixed_common += s_a.split()
+            # make sure that model_version is the last object
+            assert b.objects[-1][0] == "model_version", "The last object is not 'model_version' in klee's ktest"
+        else:
+            assert tmpsplitcommon == b.args[1:], "Sym Args are not common among KLEE's ktests"
+            # handle case when problem with klee and stdin
+            if stdin_fixed_common is not None:
+                b.args[1:] = list(stdin_fixed_common)
+
+        ktestContains["KTEST-OBJ"].append(b)
+        ktestContains["CORRESP_TESTNAME"].append(kt)
+
+    return commonArgs, ktestContains
+#~ def loadAndGetSymArgsFromKleeKTests()
+
+'''
+    Use old and new from argv_old_new to update the argv in ktestContain
+    Sequence in ktestobject: 1) argv(arg<i>), 2) [<ShortName>-data, <ShortName>-data-stat], 3) [stdin, stdin-stat], 4) [stdout, stdout-stat], 5) model_version
+'''
+def updateObjects(argvinfo, ktestContains):
+    def isCmdArg(name):
+        if name == 'n_args' or name.startswith('argv') or name.startswith('arg'):
+            return True
+        return False
+    #~ def isCmdArg()
+
+    # list_new_sym_args = [[<nmin>,<nmax>,<size>],...]
+    def old2new_cmdargs(objSegment, list_new_sym_args):
+        res = []
+        nargs = len(objSegment) - 1 # First obj is n_args object
+        nums = [x[0] for x in list_new_sym_args]
+        n_elem = sum(nums)
+        assert n_elem <= nargs , "min sum do not match to nargs. n_args="+str(nargs)+", min sum="+str(n_elem)
+        for i in range(len(nums))[::-1]:
+            if n_elem >= nargs:
+                break
+            n_elem += list_new_sym_args[i][1] - nums[i]
+            nums[i] = list_new_sym_args[i][1]
+        assert n_elem == nargs, "n_elem must be equal to nargs here"
+
+        # put elements in res according to nums
+        ao_ind = 1
+        for i,n in enumerate(nums):
+            res.append(("n_args", struct.pack('<i', n)))
+            for j in range(ao_ind, ao_ind+n):
+                res.append((objSegment[j][0], objSegment[j][1] + '\0'*(list_new_sym_args[i][2] - len(objSegment[j][1]) + 1)))
+            ao_ind += n
+        assert ao_ind == len(objSegment)
+        return res
+    #~ def old2new_cmdargs()
+
+    assert len(argvinfo['old']) == len(argvinfo['new'])
+
+    argvinfo_new_extracted = []
+    for vl in argvinfo['new']:
+        argvinfo_new_extracted.append([])
+        for v in vl:
+            kw, nmin, nmax, size = v.split()        #assuming all args in new are sym-args (no sym-arg)
+            argvinfo_new_extracted[-1].append((int(nmin), int(nmax), int(size)))
+
+    for okt in ktestContains['KTEST-OBJ']:
+        kt_obj = okt.objects
+        # First process sym-files, sym-stdin and sym-stdout
+        pointer = -1 #model_version
+        # sym-stdout
+        if argvinfo['sym-std']['out-present']:
+            if not argvinfo['sym-std']['out-present-pre']:
+                kt_obj.insert(pointer, ('stdout', '\0'*1024))
+                kt_obj.insert(pointer, ('stdout-stat', '\0'*144))
+            pointer -= 2
+        
+        # sym-stdin
+        if argvinfo['sym-std']['in-present']:
+            if not argvinfo['sym-std']['in-present-pre']:
+                kt_obj.insert(pointer, ('stdin', '\0'*argvinfo['sym-std']['in-size']))
+                kt_obj.insert(pointer, ('stdin-stat', '\0'*144))
+                pointer -= 2
+            elif argvinfo['sym-std']['in-size-pre'] != argvinfo['sym-std']['in-size']:
+                stdin_stat_pos = pointer - 1 # first 2 because model_version is at position -1 and secaon because of stdout-stat
+                stdin_pos = stdin_stat_pos - 1
+                assert kt_obj[stdin_pos][0] == 'stdin', "Expected stdin as object just before stdout and model_version"
+                kt_obj[stdin_pos] = (kt_obj[stdin_pos][0], kt_obj[stdin_pos][1] + '\0'*(argvinfo['sym-std']['in-size'] - argvinfo['sym-std']['in-size-pre']))
+            pointer -= 2
+       
+        # sym-files
+        if argvinfo['sym-files']['nFiles'] > 0:
+            if argvinfo['sym-files']['nFiles-pre'] > 0 and argvinfo['sym-files']['size-pre'] != argvinfo['sym-files']['size']:
+                for f_p in range(pointer - 2*argvinfo['sym-files']['nFiles-pre'], pointer, 2):
+                    assert not isCmdArg(kt_obj[f_p][0]), "Expected sym file object, but found cmd arg: Pos="+str(f_p)+", object="+str(kt_obj[f_p])
+                    kt_obj[f_p] = (kt_obj[f_p][0], kt_obj[f_p][1] + '\0'*(argvinfo['sym-files']['size'] - argvinfo['sym-files']['size-pre']))
+
+            if argvinfo['sym-files']['nFiles-pre'] != argvinfo['sym-files']['nFiles']:
+                # add empty file at position
+                snames = FileShortNames().ShortNames[argvinfo['sym-files']['nFiles-pre']:argvinfo['sym-files']['nFiles']]
+                for sn in snames:
+                    kt_obj.insert(pointer, (sn+'-data', '\0'*argvinfo['sym-files']['size']))
+                    kt_obj.insert(pointer, (sn+'-data'+'-stat', '\0'*144))
+            pointer -= 2*argvinfo['sym-files']['nFiles']
+        
+        #sym cmdargv(arg)
+        obj_ind = 0
+        for arg_ind in range(len(argvinfo['old'])):
+            if argvinfo['old'][arg_ind] is None: #added ones, all are -sym-args, just add n_args=0
+                for sa in argvinfo['new'][arg_ind]:
+                    kt_obj.insert(obj_ind, ("n_args", struct.pack('<i', 0)))
+                    obj_ind += 1
+            else:
+                assert isCmdArg(kt_obj[obj_ind][0])
+                if '-sym-arg ' in argvinfo['old'][arg_ind]:
+                    assert len(argvinfo['new'][arg_ind]) == 1, "must be on sym-args here"
+                    kt_obj.insert(obj_ind, ("n_args", struct.pack('<i', 1)))
+                    obj_ind += 2 #Go after n_args and argv(arg)
+                else: #sym-args
+                    assert kt_obj[obj_ind][0] == 'n_args', "must ne n_args here"
+                    nargs = struct.unpack('<i', kt_obj[obj_ind][1])[0]
+                    if argvinfo['old'][arg_ind] != argvinfo['new'][arg_ind]:
+                        # put the args enabled as match to the right most in new
+                        tmppos_last = obj_ind + nargs 
+                        replacement = old2new_cmdargs(kt_obj[obj_ind:tmppos_last+1], argvinfo_new_extracted[arg_ind])
+                        kt_obj[obj_ind:tmppos_last+1] = replacement
+                        obj_ind += len(replacement)
+                    else:
+                        obj_ind += nargs + 1 #+1 for n_args obj
+
+        assert len(kt_obj) + pointer == obj_ind, "Some argv objects were not considered? ("+str(len(kt_obj))+", "+str(pointer)+", "+str(obj_ind)+")"
+#~ def updateObjects()
+
+'''
+'''
+def mergeZestiAndKleeKTests (outDir, ktestContains_zest, commonArgs_zest, ktestContains_klee, commonArgs_klee):
+    commonArgs = []
+    name2ktestMap = {}
+    ktestContains = {"CORRESP_TESTNAME":[], "KTEST-OBJ":[]}
+
+    if ktestContains_zest is None:
+        assert commonArgs_zest is None
+        assert ktestContains_klee is not None and commonArgs_klee is not None
+        ktestContains = ktestContains_klee
+        commonArgs = commonArgs_klee
+    elif ktestContains_klee is None:
+        assert commonArgs_klee is None
+        assert ktestContains_zest is not None and commonArgs_zest is not None
+        ktestContains = ktestContains_zest
+        commonArgs = commonArgs_zest
+    else:
+        def getSymArgvParams(symargstr):
+            outdict = {}
+            tz = symargstr.split()
+            if len(tz) == 2: #sym-arg
+                outdict['min'] = outdict['max'] = 1
+                outdict['size'] = int(tz[-1])
+            else: #sym-args
+                outdict['min'] = int(tz[-3])
+                outdict['max'] = int(tz[-2])
+                outdict['size'] = int(tz[-1])
+            return outdict
+
+
+        assert commonArgs_zest is not None and commonArgs_klee is not None
+        # Common Args must have either sym-arg or sym-args or sym-files or sym-stdin or sym-stdout
+        for common in [commonArgs_zest, commonArgs_klee]:
+            for a in common:
+                if "-sym-arg " in a or "-sym-args " in a or "-sym-files " in a or "-sym-stdin " in a or "-sym-stdout" in a:
+                    continue
+                error_exit ("Unsupported symbolic argument: "+a+", in "+str(common))
+
+        # create merged commonArgs and a map between both zest and klee commonargs to new commonargs
+        argv_zest = {'old':[x for x in commonArgs_zest if "-sym-arg" in x], 'new':[]}
+        argv_zest['new'] = [[] for x in argv_zest['old']]
+        argv_klee = {'old':[x for x in commonArgs_klee if "-sym-arg" in x], 'new':[]}
+        argv_klee['new'] = [[] for x in argv_klee['old']]
+        z_ind = 0
+        k_ind = 0
+        z_cur_inf = None
+        k_cur_inf = None
+        while True:
+            if z_ind < len(argv_zest['old']) and k_ind < len(argv_klee['old']):
+                if z_cur_inf is None:
+                    z_cur_inf = getSymArgvParams (argv_zest['old'][z_ind])
+                if k_cur_inf is None:
+                    k_cur_inf = getSymArgvParams (argv_klee['old'][k_ind])
+                m_min = min(z_cur_inf['min'], k_cur_inf['min'])
+                m_max = min(z_cur_inf['max'], k_cur_inf['max'])
+                M_size = max(z_cur_inf['size'], k_cur_inf['size'])
+                newarg = " ".join(["-sym-args", str(m_min), str(m_max), str(M_size)])
+
+                # add the new args to each as new, add also to commonArgs
+                commonArgs.append(newarg)
+                argv_zest['new'][z_ind].append(newarg)
+                argv_klee['new'][k_ind].append(newarg)
+
+                # Update the cur_infs and index
+                if z_cur_inf['max'] == m_max:
+                    z_cur_inf = None
+                    z_ind += 1
+                else:
+                    z_cur_inf['min'] = max(0, z_cur_inf['min'] - m_max)
+                    z_cur_inf['max'] = z_cur_inf['max'] - m_max
+                if k_cur_inf['max'] == m_max:
+                    k_cur_inf = None
+                    k_ind += 1
+                else:
+                    k_cur_inf['min'] = max(0, k_cur_inf['min'] - m_max)
+                    k_cur_inf['max'] = k_cur_inf['max'] - m_max
+
+            else:
+                # handle inequalities
+                if z_ind < len(argv_zest['old']):
+                    argv_klee['old'].append(None)
+                    argv_klee['new'].append([])
+                    if z_cur_inf is not None:
+                        newarg = " ".join("-sym-args", str(z_cur_inf['min']), str(z_cur_inf['max']), str(z_cur_inf['size']))
+                        commonArgs.append(newarg)
+                        argv_zest['new'][z_ind].append(newarg)
+                        argv_klee['new'][k_ind].append(newarg)
+                        z_ind += 1
+                    ineqs = [a.replace('sym-arg ', 'sym-args 0 1 ') for a in argv_zest['old'][z_ind:]] #replace sym-arg with sym-args 0 1 because not present in other
+                    commonArgs += ineqs
+                    argv_zest['new'][z_ind:] = [ineqs]
+                    argv_klee['new'][k_ind] += ineqs
+                    break
+                if k_ind < len(argv_klee['old']):
+                    argv_zest['old'].append(None)
+                    argv_zest['new'].append([])
+                    if k_cur_inf is not None:
+                        newarg = " ".join("-sym-args", str(k_cur_inf['min']), str(k_cur_inf['max']), str(k_cur_inf['size']))
+                        commonArgs.append(newarg)
+                        argv_klee['new'][k_ind].append(newarg)
+                        argv_zest['new'][z_ind].append(newarg)
+                        k_ind += 1
+                    ineqs = [a.replace('sym-arg ', 'sym-args 0 1 ') for a in argv_klee['old'][k_ind:]] #replace sym-arg with sym-args 0 1 because not present in other
+                    commonArgs += ineqs
+                    argv_klee['new'][k_ind:] = [ineqs]
+                    argv_zest['new'][z_ind] += ineqs
+                    break
+                break
+
+        # get sym-stdin, sym-stdout and symfiles
+        argv_zest["sym-files"] = {'nFiles-pre':0, 'nFiles':0, 'size-pre':0, 'size':0}
+        argv_klee["sym-files"] = {'nFiles-pre':0, 'nFiles':0, 'size-pre':0, 'size':0}
+        argv_zest["sym-std"] = {'in-present-pre': False, 'in-size-pre':0, 'out-present-pre':False, 'in-present': False, 'in-size':0, 'out-present':False}
+        argv_klee["sym-std"] = {'in-present-pre': False, 'in-size-pre':0, 'out-present-pre':False, 'in-present': False, 'in-size':0, 'out-present':False}
+        for common, s_argv in [(commonArgs_zest, argv_zest), (commonArgs_klee, argv_klee)]:
+            # klee considers the last sym-files and stdin so we just check from begining to end
+            for a in common:
+                if '-sym-files ' in a:
+                    unused, n_f, f_s = a.split()
+                    s_argv["sym-files"]["nFiles-pre"] = int(n_f)
+                    s_argv["sym-files"]["size-pre"] = int(f_s)
+                elif '-sym-stdin ' in a:
+                    s_argv['sym-std']['in-present-pre'] = True
+                    s_argv['sym-std']['in-size-pre'] = int(a.split()[-1])
+                elif '-sym-stdout' in a:
+                    s_argv['sym-std']['out-present-pre'] = True
+        argv_zest['sym-files']['nFiles'] = argv_klee['sym-files']['nFiles'] = max(argv_zest['sym-files']['nFiles-pre'], argv_klee['sym-files']['nFiles-pre'])
+        argv_zest['sym-files']['size'] = argv_klee['sym-files']['size'] = max(argv_zest['sym-files']['size-pre'], argv_klee['sym-files']['size-pre'])
+        argv_zest['sym-std']['in-size'] = argv_klee['sym-std']['in-size'] = max(argv_zest['sym-std']['in-size-pre'], argv_klee['sym-std']['in-size-pre'])
+        argv_zest['sym-std']['in-present'] = argv_klee['sym-std']['in-present'] = (argv_zest['sym-std']['in-present-pre'] or argv_klee['sym-std']['in-present-pre'])
+        argv_zest['sym-std']['out-present'] = argv_klee['sym-std']['out-present'] = (argv_zest['sym-std']['out-present-pre'] or argv_klee['sym-std']['out-present-pre'])
+
+        if argv_zest['sym-files']['nFiles'] > 0:
+            commonArgs.append(" ".join(['-sym-files', str(argv_zest['sym-files']['nFiles']), str(argv_zest['sym-files']['size'])]))
+        if argv_zest['sym-std']['in-present']:
+            commonArgs.append(" ".join(['-sym-stdin', str(argv_zest['sym-std']['in-size'])]))
+        if argv_zest['sym-std']['out-present']:
+            commonArgs.append("-sym-stdout")
+        
+        updateObjects (argv_zest, ktestContains_zest)
+        updateObjects (argv_klee, ktestContains_klee)
+
+        # Merge the two objects
+        ktestContains["CORRESP_TESTNAME"] = list(ktestContains_zest["CORRESP_TESTNAME"] + ktestContains_klee["CORRESP_TESTNAME"])
+        ktestContains["KTEST-OBJ"] = list(ktestContains_zest["KTEST-OBJ"] + ktestContains_klee["KTEST-OBJ"])
+
+        # Change the args list in each ktest object with the common symb args 
+        for ktdat in ktestContains["KTEST-OBJ"]:
+            ktdat.args = ktdat.args[:1]
+            for s in commonArgs:
+                ktdat.args += s.strip().split(' ') 
+
     # Write the new ktest files
     for i in range(len(ktestContains["CORRESP_TESTNAME"])):
         outFname = os.path.join(outDir, "test"+str(i)+".ktest")
@@ -595,7 +927,7 @@ def getSymArgsFromKtests (ktestFilesList, testNamesList, outDir):
         name2ktestMap[ktestContains["CORRESP_TESTNAME"][i]] = outFname
 
     return commonArgs, name2ktestMap
-#~ getSymArgsFromKtests()
+#~ def mergeZestiAndKleeKTests ()
 
 # put information from concolic run for the passed test set into a temporary dir, then possibly
 # Compute SEMU symbex and rank according to SEMU. outpout in outFilePath
@@ -713,7 +1045,7 @@ def main():
     parser.add_argument("--coverage", type=str, default=None, help="The mutant Coverage matrix")
     parser.add_argument("--zesti_exe_dir", type=str, default=None, help="The Optional directory containing the zesti executable (named klee). if not specified, the default klee must be zesti")
     parser.add_argument("--semu_exe_dir", type=str, default=None, help="The Optional directory containing the SEMu executable (named klee-semu). if not specified, must be available on the PATH")
-    parser.add_argument("--klee_tests_dir", type=str, default=None, help="The Optional directory containing the extra tests separately generated by KLEE")
+    parser.add_argument("--klee_tests_topdir", type=str, default=None, help="The Optional directory containing the extra tests separately generated by KLEE")
     parser.add_argument("--covTestThresh", type=int, default=10, help="Minimum number of tests covering a mutant for it to be selected for analysis")
     parser.add_argument("--skip_completed", action='append', default=[], choices=tasksList, help="Specify the tasks that have already been executed")
     parser.add_argument("--testSampleMode", type=str, default="DEV", choices=["DEV", "KLEE", "NUM"], help="choose how to sample subset for evaluation. DEV means use Developer test, NUM, mean a percentage of all tests")
@@ -732,7 +1064,7 @@ def main():
     martOut = args.martout
     matrix = args.matrix
     coverage = args.coverage
-    klee_tests_dir = args.klee_tests_dir
+    klee_tests_topdir = args.klee_tests_topdir
     zesti_exe_dir = args.zesti_exe_dir
     semu_exe_dir = args.semu_exe_dir
 
@@ -744,13 +1076,15 @@ def main():
     martOut = os.path.abspath(martOut) if martOut is not None else None 
     matrix = os.path.abspath(matrix) if matrix is not None else None
     coverage = os.path.abspath(coverage) if coverage is not None else None
-    klee_tests_dir = os.path.abspath(klee_tests_dir) if klee_tests_dir is not None else None
+    klee_tests_topdir = os.path.abspath(klee_tests_topdir) if klee_tests_topdir is not None else None
     zesti_exe_dir = os.path.abspath(zesti_exe_dir) if zesti_exe_dir is not None else None
     semu_exe_dir = os.path.abspath(semu_exe_dir) if semu_exe_dir is not None else None
 
     covTestThresh = args.covTestThresh
     testSampleMode = args.testSampleMode
-    assert testSampleMode == "DEV", "XXX: Other test sampling modes are not yet supported (KLEE and NUM require fixing symbargs, unless will implement Shadow base test gen)"
+    if testSampleMode in ["KLEE", "NUM"]:
+        assert klee_tests_topdir is not None, "klee_tests_topdir not give with KLEE or NUM test Smaple Mode"
+    #assert testSampleMode == "DEV", "XXX: Other test sampling modes are not yet supported (KLEE and NUM require fixing symbargs, unless will implement Shadow base test gen)"
 
     #assert len(set(args.skip_completed) - set(tasksList)) == 0, "specified wrong tasks: "+str(set(args.skip_completed) - set(tasksList))
     toExecute = [v for v in tasksList if v not in args.skip_completed]
@@ -822,7 +1156,7 @@ def main():
             test2zestidirMap = loadJson(test2zestidirMapFile)
             test2zestidirMap = prependRootTest2Dir(outDir, test2zestidirMap)
 
-    # TODO: TEST GEN part here. if klee_tests_dir is not None, means use the tests from klee to increase baseline and dev test to evaluate aproaches
+    # TODO: TEST GEN part here. if klee_tests_topdir is not None, means use the tests from klee to increase baseline and dev test to evaluate aproaches
     # prepare seeds and extract sym-args. Then store it in the cache
     semuworkdir = os.path.join(cacheDir, "SemuWorkDir")
     test2semudirMapFile = os.path.join(cacheDir, "test2semudirMap.json")
@@ -834,20 +1168,33 @@ def main():
             shutil.rmtree(semuworkdir)
         os.mkdir(semuworkdir)
 
-        # refactor the ktest fom zesti and put in semu workdir, together with the sym
-        zestKtests = []
-        for tc in test2zestidirMap.keys():
-            tcdir = test2zestidirMap[tc]
-            listKtestFiles = glob.glob(os.path.join(tcdir, "*.ktest"))
-            assert len(listKtestFiles) == 1, "Error: more than 1 or no ktest from Zesti for tests: "+tc+", zestiout: "+tcdir
-            for ktestfile in listKtestFiles:
-                zestKtests.append(ktestfile)
-        sym_args_param, test2semudirMap = getSymArgsFromKtests (zestKtests, test2zestidirMap.keys(), semuworkdir)
-        dumpJson([sym_args_param, stripRootTest2Dir(outDir, test2semudirMap)], test2semudirMapFile)
+        zest_sym_args_param = None
+        zestKTContains = None
+        klee_sym_args_param = None
+        kleeKTContains = None
+
+        if testSampleMode in ['DEV', 'NUM']:
+            zestKtests = []
+            for tc in test2zestidirMap.keys():
+                tcdir = test2zestidirMap[tc]
+                listKtestFiles = glob.glob(os.path.join(tcdir, "*.ktest"))
+                assert len(listKtestFiles) == 1, "Error: more than 1 or no ktest from Zesti for tests: "+tc+", zestiout: "+tcdir
+                for ktestfile in listKtestFiles:
+                    zestKtests.append(ktestfile)
+            # refactor the ktest fom zesti and put in semu workdir, together with the sym
+            zest_sym_args_param, zestKTContains = getSymArgsFromZestiKtests (zestKtests, test2zestidirMap.keys())
+
+        if testSampleMode in ['KLEE', 'NUM']:
+            unused, alltestsObj, unwrapped_testlist = getTestSamples(testList, 0, matrix)   # 0 to not sample
+            klee_sym_args_param, kleeKTContains = loadAndGetSymArgsFromKleeKTests (alltestsObj['GENTESTS'], klee_tests_topdir)
+            
+        sym_args_param, test2semudirMap = mergeZestiAndKleeKTests (semuworkdir, zestKTContains, zest_sym_args_param, kleeKTContains, klee_sym_args_param)
+        dumpJson([testSampleMode, sym_args_param, stripRootTest2Dir(outDir, test2semudirMap)], test2semudirMapFile)
     else:
         print "## Loading parametrized tests mapping from cache"
         assert os.path.isdir(semuworkdir), "Error: semuworkdir absent when TEST-GEN mode skipped"
-        sym_args_param, test2semudirMap = loadJson(test2semudirMapFile)
+        tmpSamplMode, sym_args_param, test2semudirMap = loadJson(test2semudirMapFile)
+        assert tmpSamplMode == testSampleMode, "Given test Sample Mode ("+testSampleMode+") is different from caches ("+tmpSamplMode+"); should not skip TEST_GET_TASK!"
         test2semudirMap = prependRootTest2Dir(outDir, test2semudirMap)
 
     # Get all test samples before starting experiment
@@ -858,12 +1205,18 @@ def main():
     dumpJson([testSamples, alltestsObj, unwrapped_testlist], os.path.join(cacheDir, "testsamples.json"))
     alltests = alltestsObj["DEVTESTS"] + alltestsObj["GENTESTS"]
 
+    assert testSamplePercent > 0, "testSamplePercent must be greater than 0"
     if testSampleMode == 'DEV':
         sampl_size = max(1, testSamplePercent * len(alltestsObj['DEVTESTS']) / 100)
         testSamples = {'DEV_'+str(testSamplePercent): random.sample(alltestsObj['DEVTESTS'], sampl_size)}
     elif testSampleMode == 'KLEE':
         sampl_size = max(1, testSamplePercent * len(alltestsObj['GENTESTS']) / 100)
         testSamples = {'KLEE_'+str(testSamplePercent): random.sample(alltestsObj['GENTESTS'], sampl_size)}
+    elif testSampleMode == 'NUM':
+        #already sampled above
+        assert len(testSampleMode) > 0
+    else:
+        error_exit ("inavlid test sampling mode: "+testSampleMode)
 
     semuOutputs = os.path.join(cacheDir, "semu_outputs")
     if not os.path.isdir(semuOutputs):
