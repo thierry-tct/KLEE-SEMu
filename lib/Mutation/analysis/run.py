@@ -235,12 +235,23 @@ def parseZestiKtest(filename):
         b.objects[firstFile_ind: firstFile_ind] = tmp_postFdat[::-1]
     #~
 
+    # ZESTI (shadow) has issues handling forward slash(/) as argument. I thinks that it is a file while maybe not
+    # XXX Fix that here. Since KLEE do not support directory it should be fine
+    if '/' in b.args[1:]:
+        for ind, (name,data) in enumerate(b.objects):
+            if name == '/':
+                if data == '\0'*4096:
+                    assert b.objects[ind+1][0] == '/-stat', "Stat not following file"
+                    del b.objects[ind:ind+2]
+                else:
+                    error_exit ("ERROR-BUG? data for forward slash not with data '\0'*4096 (zesti but workaround)")
+
     seenFileStatsPos = set()
     stdin = None
     model_version_pos = -1
     fileargsposinObj_remove = []
     filesNstatsIndex = []
-    maxFileSize = 0
+    maxFileSize = -1
     for ind,(name,data) in enumerate(b.objects):
         if ind in seenFileStatsPos:
             continue
@@ -354,7 +365,7 @@ def getSymArgsFromZestiKtests (ktestFilesList, testNamesList):
     # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions(TODO double check)
     listTestArgs = []
     ktestContains = {"CORRESP_TESTNAME":[], "KTEST-OBJ":[]}
-    maxFileSize = 0
+    maxFileSize = -1
     filenstatsInObj = []
     fileArgInd = []
     afterFileNStat = []
@@ -678,7 +689,7 @@ def updateObjects(argvinfo, ktestContains):
                 break
             n_elem += list_new_sym_args[i][1] - nums[i]
             nums[i] = list_new_sym_args[i][1]
-        assert n_elem == nargs, "n_elem must be equal to nargs here"
+        assert n_elem == nargs, "n_elem must be equal to nargs here. Got: "+str(n_elem)+" VS "+str(nargs)
 
         # put elements in res according to nums
         ao_ind = 1
@@ -906,7 +917,7 @@ def mergeZestiAndKleeKTests (outDir, ktestContains_zest, commonArgs_zest, ktestC
             commonArgs.append(" ".join(['-sym-stdin', str(argv_zest['sym-std']['in-size'])]))
         if argv_zest['sym-std']['out-present']:
             commonArgs.append("-sym-stdout")
-        
+
         updateObjects (argv_zest, ktestContains_zest)
         updateObjects (argv_klee, ktestContains_klee)
 
