@@ -851,7 +851,7 @@ def mergeZestiAndKleeKTests (outDir, ktestContains_zest, commonArgs_zest, ktestC
                     argv_klee['old'].append(None)
                     argv_klee['new'].append([])
                     if z_cur_inf is not None:
-                        newarg = " ".join("-sym-args", str(z_cur_inf['min']), str(z_cur_inf['max']), str(z_cur_inf['size']))
+                        newarg = " ".join(["-sym-args", str(z_cur_inf['min']), str(z_cur_inf['max']), str(z_cur_inf['size'])])
                         commonArgs.append(newarg)
                         argv_zest['new'][z_ind].append(newarg)
                         argv_klee['new'][k_ind].append(newarg)
@@ -865,7 +865,7 @@ def mergeZestiAndKleeKTests (outDir, ktestContains_zest, commonArgs_zest, ktestC
                     argv_zest['old'].append(None)
                     argv_zest['new'].append([])
                     if k_cur_inf is not None:
-                        newarg = " ".join("-sym-args", str(k_cur_inf['min']), str(k_cur_inf['max']), str(k_cur_inf['size']))
+                        newarg = " ".join(["-sym-args", str(k_cur_inf['min']), str(k_cur_inf['max']), str(k_cur_inf['size'])])
                         commonArgs.append(newarg)
                         argv_klee['new'][k_ind].append(newarg)
                         argv_zest['new'][z_ind].append(newarg)
