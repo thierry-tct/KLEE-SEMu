@@ -685,10 +685,12 @@ def updateObjects(argvinfo, ktestContains):
         n_elem = sum(nums)
         assert n_elem <= nargs , "min sum do not match to nargs. n_args="+str(nargs)+", min sum="+str(n_elem)
         for i in range(len(nums))[::-1]:
-            if n_elem >= nargs:
+            rem = nargs - n_elem
+            if rem <= 0:
                 break
-            n_elem += list_new_sym_args[i][1] - nums[i]
-            nums[i] = list_new_sym_args[i][1]
+            inc = min(rem, list_new_sym_args[i][1] - nums[i])
+            n_elem += inc
+            nums[i] += inc
         assert n_elem == nargs, "n_elem must be equal to nargs here. Got: "+str(n_elem)+" VS "+str(nargs)
 
         # put elements in res according to nums
