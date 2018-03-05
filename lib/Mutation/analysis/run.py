@@ -1213,23 +1213,28 @@ def main():
     # Get all test samples before starting experiment
     ## TODO TODO: Fix this when supporting other testSampleModes
     print "# Getting Test Samples .."
-    invalid_ktests = set(test2zestidirMap) - set (test2semudirMap)
-    testSamples, alltestsObj, unwrapped_testlist = getTestSamples(testList, testSamplePercent, matrix, discards=invalid_ktests) 
-    dumpJson([testSamples, alltestsObj, unwrapped_testlist], os.path.join(cacheDir, "testsamples.json"))
-    alltests = alltestsObj["DEVTESTS"] + alltestsObj["GENTESTS"]
+    if SEMU_EXECUTION in toExecute: 
+        invalid_ktests = set(test2zestidirMap) - set (test2semudirMap)
+        testSamples, alltestsObj, unwrapped_testlist = getTestSamples(testList, testSamplePercent, matrix, discards=invalid_ktests) 
+        alltests = alltestsObj["DEVTESTS"] + alltestsObj["GENTESTS"]
 
-    assert testSamplePercent > 0, "testSamplePercent must be greater than 0"
-    if testSampleMode == 'DEV':
-        sampl_size = max(1, testSamplePercent * len(alltestsObj['DEVTESTS']) / 100)
-        testSamples = {'DEV_'+str(testSamplePercent): random.sample(alltestsObj['DEVTESTS'], sampl_size)}
-    elif testSampleMode == 'KLEE':
-        sampl_size = max(1, testSamplePercent * len(alltestsObj['GENTESTS']) / 100)
-        testSamples = {'KLEE_'+str(testSamplePercent): random.sample(alltestsObj['GENTESTS'], sampl_size)}
-    elif testSampleMode == 'NUM':
-        #already sampled above
-        assert len(testSampleMode) > 0
+        assert testSamplePercent > 0, "testSamplePercent must be greater than 0"
+        if testSampleMode == 'DEV':
+            sampl_size = max(1, testSamplePercent * len(alltestsObj['DEVTESTS']) / 100)
+            testSamples = {'DEV_'+str(testSamplePercent): random.sample(alltestsObj['DEVTESTS'], sampl_size)}
+        elif testSampleMode == 'KLEE':
+            sampl_size = max(1, testSamplePercent * len(alltestsObj['GENTESTS']) / 100)
+            testSamples = {'KLEE_'+str(testSamplePercent): random.sample(alltestsObj['GENTESTS'], sampl_size)}
+        elif testSampleMode == 'NUM':
+            #already sampled above
+            assert len(testSampleMode) > 0
+        else:
+            error_exit ("inavlid test sampling mode: "+testSampleMode)
+
+        dumpJson([testSamples, alltestsObj, unwrapped_testlist], os.path.join(cacheDir, "testsamples.json"))
     else:
-        error_exit ("inavlid test sampling mode: "+testSampleMode)
+        print "## Loading test samples from cache"
+        testSamples, alltestsObj, unwrapped_testlist = loadJson(os.path.join(cacheDir, "testsamples.json"))
 
     semuOutputs = os.path.join(cacheDir, "semu_outputs")
     if not os.path.isdir(semuOutputs):
