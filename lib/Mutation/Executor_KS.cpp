@@ -4377,7 +4377,11 @@ inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const Executio
 #ifdef ENABLE_KLEE_SEMU_DEBUG
       llvm::errs() << "--> External call args differ.\n";
 #endif
-      inStateDiffExp.push_back(NeExpr::create(aArg, bArg));    //XXX: need to do 'or' of all the diff found hre befre returning true?
+      // the if to make sure that args expressions are of same type to avoid expr assert
+      if (aArg->getWidth()==bArg->getWidth())
+        inStateDiffExp.push_back(NeExpr::create(aArg, bArg));    //XXX: need to do 'or' of all the diff found hre befre returning true?
+      else
+        inStateDiffExp.push_back(ConstantExpr::alloc(1, Expr::Bool));
       //return true;
     }
   }
