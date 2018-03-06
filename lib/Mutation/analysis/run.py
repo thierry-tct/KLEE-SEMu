@@ -1169,9 +1169,10 @@ def main():
             del groundConsideredMutant_covtests[mid]
         print "# Number of Mutants after coverage filtering:", len(groundConsideredMutant_covtests)
         # consider the specified functions
-        afterFuncFilter = mutantsOfFunctions (candidateFunctionsJson, os.path.join(martOut, mutantInfoFile), create=False)
-        for mid in set(groundConsideredMutant_covtests) - afterFuncFilter:
-            del groundConsideredMutant_covtests[mid]
+        if candidateFunctionsJson is not None:
+            afterFuncFilter = mutantsOfFunctions (candidateFunctionsJson, os.path.join(martOut, mutantInfoFile), create=False)
+            for mid in set(groundConsideredMutant_covtests) - afterFuncFilter:
+                del groundConsideredMutant_covtests[mid]
         print "# Number of Mutants Considered:", len(groundConsideredMutant_covtests)
         assert len(groundConsideredMutant_covtests) > 10, " ".join(["We have only", str(len(groundConsideredMutant_covtests)), "mutant fullfiling testcover treshhold",str(covTestThresh),"(Expected >= 10)"])
         candidateMutantsFile = os.path.join(cacheDir, "candidateMutants.list")
