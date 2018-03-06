@@ -1254,7 +1254,6 @@ def main():
     if SEMU_EXECUTION in toExecute: 
         invalid_ktests = set(test2zestidirMap) - set (test2semudirMap)
         testSamples, alltestsObj, unwrapped_testlist = getTestSamples(testList, testSamplePercent, matrix, discards=invalid_ktests) 
-        alltests = alltestsObj["DEVTESTS"] + alltestsObj["GENTESTS"]
 
         assert testSamplePercent > 0, "testSamplePercent must be greater than 0"
         if testSampleMode == 'DEV':
@@ -1273,6 +1272,7 @@ def main():
     else:
         print "## Loading test samples from cache"
         testSamples, alltestsObj, unwrapped_testlist = loadJson(os.path.join(cacheDir, "testsamples.json"))
+    alltests = alltestsObj["DEVTESTS"] + alltestsObj["GENTESTS"]
 
     semuOutputs = os.path.join(cacheDir, "semu_outputs")
     if not os.path.isdir(semuOutputs):
