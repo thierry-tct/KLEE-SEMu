@@ -277,14 +277,14 @@ def computePoints(subjObj, refObj, refHardness=None, tieRandom=False, percentage
             tmp_rev_subj = []
             remsubj = set(subjObj[sscore])
             next_sel_len = len(subjMutsOrdered) + len(subjObj[sscore])
-            while checkpoints[c_ind] < next_sel_len:
+            while c_ind < len(checkpoints) and checkpoints[c_ind] < next_sel_len:
                 inter = set(refMutsOrdered[:checkpoints[c_ind]]) & remsubj
                 remsubj -= inter
                 tmp_rev_subj += list(inter)
                 c_ind += 1
             tmp_rev_subj += list(remsubj)
 
-            if checkpoints[c_ind] == next_sel_len:
+            if c_ind < len(checkpoints) and checkpoints[c_ind] == next_sel_len:
                 c_ind += 1
 
             subjMutsOrdered += list(reversed(tmp_rev_subj))
@@ -323,7 +323,7 @@ def getSemu_AND_OR_Classic(semu_dat, classic_dat, ground_dat, isAndNotOr):
     return semu_res, classic_res, ground_res
 #~ def getSemu_AND_OR_Classic():
 
-def getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, infoObj):
+def getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, infoObj, filterSemuToGround=True):
     for tech, tdata in [('semu', semuData_l), ('classic', classicData_l), ('ground', groundtruthData_l)]:
         nMuts = 0
         nHardLevels = 0
@@ -335,6 +335,27 @@ def getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, infoObj):
         nHardLevels /= len(tdata)
         infoObj[tech]["#Mutants"] = nMuts
         infoObj[tech]["#hardnessLevels"] = nHardLevels
+    
+    groundMuts = []
+    for v in groundtruthData_l:
+        for h in v:
+            groundMuts += v[h]
+    groundMuts = set(groundMuts)
+    nMuts = 0
+    nHardLevels = 0
+    for v in semuData_l:
+        for h in v.keys():
+            tmp = list(set(v[h]) & groundMuts)
+            nMuts += len(tmp)
+            nHardLevels += int(len(tmp) > 0)
+            if filterSemuToGround:
+                if len(tmp) == 0:
+                    del v[h]
+                else:
+                    v[h] = tmp
+    
+    infoObj['semu']['#MutantsAlsoInGround'] = nMuts / len(semuData_l)
+    infoObj['semu']['#hardnessLevelsAlsoInGround'] = nHardLevels / len(semuData_l)
 #~ def getAnalyseInfos()
 
 #SEMU_JSONs = ["semu"+var+".json" for var in ['-approxH', '-pairwise', '-merged_PairApprox']]
@@ -344,7 +365,12 @@ GROUNDTRUTH_JSONs = ["groundtruth.json"]
 
 RAND_REP = 100
 
-def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
+'''
+    Since Semu may actually be more accurate than ground, 
+    We use the parameter 'filterSemuNotInGround' to discard the mutants
+    of semu not in groundtruth, in order to have fair analysis
+'''
+def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None, filterSemuNotInGround=True):
     semuData_all_l = [loadJson(os.path.join(jsonsdir, semu_json))['Hardness'] for semu_json in SEMU_JSONs]
     classicData_all_l = [loadJson(os.path.join(jsonsdir, classic_json))['Hardness'] for classic_json in CLASSIC_JSONs]
     groundtruthData_all_l = [loadJson(os.path.join(jsonsdir, ground_json))['Hardness'] for ground_json in GROUNDTRUTH_JSONs]
@@ -371,7 +397,7 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
             continue
         
         # Get analysis information
-        getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, analyseInfo[title])
+        getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, analyseInfo[title], filterSemuToGround=filterSemuNotInGround)
         dumpJson(analyseInfo, os.path.join(jsonsdir, "analyse-info.json"))
 
         semuSelSizes = [[None] * RAND_REP for ii in range(len(semuData_l))]
@@ -419,7 +445,10 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None):
 
         print "Plotting ", title, "..."
         figDir = jsonsdir
-        visitedMutsPercent = {'semu':analyseInfo[title]['semu']['#Mutants']*100.0/analyseInfo[title]['ground']['#Mutants'], 'classic':analyseInfo[title]['classic']['#Mutants']*100.0/analyseInfo[title]['ground']['#Mutants']}
+        if filterSemuNotInGround:
+            visitedMutsPercent = {'semu':analyseInfo[title]['semu']['#MutantsAlsoInGround']*100.0/analyseInfo[title]['ground']['#Mutants'], 'classic':analyseInfo[title]['classic']['#Mutants']*100.0/analyseInfo[title]['ground']['#Mutants']}
+        else:
+            visitedMutsPercent = {'semu':analyseInfo[title]['semu']['#Mutants']*100.0/analyseInfo[title]['ground']['#Mutants'], 'classic':analyseInfo[title]['classic']['#Mutants']*100.0/analyseInfo[title]['ground']['#Mutants']}
         plot4((semuSelSizes,semuNHard), (classicSelSizes, classicNHard), (randSelSizes, randNHard), (groundtruthSelSize, groundtruthNHard), "Hard to Kill Mutant Among Selected", os.path.join(figDir, "comparison-"+title), vertline=visitedMutsPercent)
         hardnessPlot(gtHardness[0], gtHardness[1], os.path.join(figDir, "hardness-"+title))
     

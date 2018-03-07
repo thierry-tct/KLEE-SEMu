@@ -1030,6 +1030,15 @@ def prependRootTest2Dir (rootdir, test2dir):
     return res
 #~ def prependRootTest2Dir ()
 
+'''
+    Use this function to create the candidateFunctions.json
+    run these in python from the project rootdir (containing cmd):
+    >> import sys
+    >> sys.path.append(<full path to semu analyse dir>)
+    >> import run
+    >> indir = "inputs/"
+    >> run.mutantsOfFunctions(indir+"/candidateFunctions.json", indir+"/mutantsdata/mutantsInfos.json", create=True)
+'''
 def mutantsOfFunctions (candidateFunctionsJson, mutinfo, create=False):
     assert os.path.isfile(mutinfo), "mutant info file do not exist: "+mutinfo
     # load mutants info and get the list of mutants per function
