@@ -4510,7 +4510,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
   for (ExecutionState *es: mutParentStates) {
     correspOriginals.clear();
     es->ks_originalMutSisterStates->getAllStates(correspOriginals);
-    assert (correspOriginals.size() > 0 && "Error: Empty original state list");
+    assert (correspOriginals.size() > 0 && (std::string("Error: Empty original state list - Comparing with mutant ID: ")+std::to_string(es->ks_mutantID)).c_str());
 
     // TODO: CHECK WHY ORIGINAL FINISHES FIRST
     //for(auto xy: correspOriginals)llvm::errs()<<" "<<xy->ks_mutantID;llvm::errs()<<" **\n";

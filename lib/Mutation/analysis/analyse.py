@@ -289,6 +289,8 @@ def computePoints(subjObj, refObj, refHardness=None, tieRandom=False, percentage
 
             subjMutsOrdered += list(reversed(tmp_rev_subj))
 
+    #print ">>", subjMutsOrdered[:checkpoints[0]]
+
     for c in checkpoints:
         ss.append(c)
         nh.append(len(set(refMutsOrdered[:c]) & set(subjMutsOrdered[:c])))

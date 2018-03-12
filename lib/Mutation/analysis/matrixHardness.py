@@ -111,8 +111,15 @@ def getKillableMutants(matrixFile):
     Return a map of mutant and covering tests for mutants having more than thresh tests covering
     Do not return the mutants with number of covering tests cases less than threshold
 '''
-def getCoveredMutants(covMatFile, testTresh=1):
+def getCoveredMutants(covMatFile, testTresh_str='1'):
     M = loadMatrix(covMatFile, None, COVM_index_string)
+    nTests = len(M[COVM_index_string])
+    if testTresh_str[-1] == '%':
+        percent = float(testTresh_str[:-1])
+        assert (percent >= 0 and percent <= 100), "Invalid test coverage threshold percentage: "+str(percent)
+        testTresh = int(percent * nTests / 100)
+    else:
+        testTresh = int(testTresh_str)
     covMuts = {}
     for mid in  set(M) - {COVM_index_string}:
         tccov = TestsKilling(mid, M, COVM_index_string)
