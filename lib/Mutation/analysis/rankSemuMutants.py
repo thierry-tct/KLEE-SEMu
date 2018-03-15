@@ -42,7 +42,7 @@ def getOrigState_MaxDepth(pc):
     return os.path.dirname(pc)
 #~ def getOrigState_MaxDepth():
 
-def loadData(indir):
+def loadData(indir, maxtime):
     outObj = {}
     for mutfile in glob.glob(os.path.join(indir,"mutant-*.semu")):
         mutID = int(re.findall('\d+', os.path.basename(mutfile))[0])
@@ -50,6 +50,13 @@ def loadData(indir):
         # each file should haev at least one row of data
         assert mutID == df.loc[0, 'MutantID'], "Problem with input file, Mutant id mismatch - "+mutFile
         df = df.drop('MutantID', axis=1)
+
+        # Filter according to maxtime, only keep row written withing the maxtime
+        df = df.loc[df['ellapsedTime(s)'] <= maxtime]
+        if len(df) == 0: # At this time, this mutant was not 'semu killed'
+            continue
+        df = df.drop('ellapsedTime(s)', axis=1)
+
         tmpRowList = df.to_dict("records")
         outObj[mutID] = {}
         for row in tmpRowList:
@@ -290,12 +297,12 @@ def pairwise_state_Scores(inData):
     return outData
 #~ def pairwise_state_Scores()
 
-def libMain(semuOutDir, outFilename):
+def libMain(semuOutDir, outFilename, maxtime=float('inf')):
     assert (outFilename is not None), "Must specify output file"
 
     print "# Starting", semuOutDir, "..."
 
-    inDataObj = loadData(semuOutDir)
+    inDataObj = loadData(semuOutDir, maxtime=maxtime)
 
     outDataObj = computeScoresPairwise(inDataObj)
 

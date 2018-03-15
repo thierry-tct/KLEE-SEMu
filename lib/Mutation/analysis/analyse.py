@@ -325,6 +325,9 @@ def getSemu_AND_OR_Classic(semu_dat, classic_dat, ground_dat, isAndNotOr):
     return semu_res, classic_res, ground_res
 #~ def getSemu_AND_OR_Classic():
 
+'''
+    filterSemuToGround because it may happend that shadow/zesti generate invalid test which will be removed, Thus as the candidate mutants are computed using all tests in Matrix, it may happend that a mutant killed only by those test is considered equivalent by the groundtruth (which do not have those tests), but SEMU manage to kill those mutants, thus semu has mutants not in ground truth
+'''
 def getAnalyseInfos(semuData_l, classicData_l, groundtruthData_l, infoObj, filterSemuToGround=True):
     for tech, tdata in [('semu', semuData_l), ('classic', classicData_l), ('ground', groundtruthData_l)]:
         nMuts = 0
@@ -407,7 +410,7 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None, filterSemuN
         classicSelSizes = [[None] * RAND_REP for ii in range(len(classicData_l))]
         classicNHard = [[None] * RAND_REP for ii in range(len(classicData_l))]
         print "Processing Semu and Classic for", title, "..."
-        assert len(groundtruthData_l) == 1, "Mus have one groundtruth"
+        assert len(groundtruthData_l) == 1, "Must have one groundtruth"
         for r in range(RAND_REP):
             for si in range(len(semuData_l)):
                 semuSelSizes[si][r], semuNHard[si][r] = computePoints(semuData_l[si], groundtruthData_l[0])

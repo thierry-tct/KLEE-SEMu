@@ -147,8 +147,12 @@ cl::opt<unsigned> semuPreconditionLength("semu-precondition-length",
                                  cl::init(6), 
                                  cl::desc("Set number of conditions that will be taken from the test cases path conditions and used are precondition"));
 
+cl::opt<unsigned> semuNumTestGenPerMutant("semu-tests-gen-per-mutant", 
+                                 cl::init(0), 
+                                 cl::desc("Set number of test generated to kill ech mutant. (== 0) means do not generate test, only get state difference. (> 0) means generate test, do not get state differences. default is 0"));
+
 // Use shadow test case generation for mutants ()
-cl::opt<bool> semuShadowTestGeneration("semu-test-gen", 
+cl::opt<bool> semuShadowTestGeneration("semu-shadow-test-gen", 
                                           cl::init(false), 
                                           cl::desc("Enable Test generation using the shadow SE based approach"));
 
@@ -447,6 +451,9 @@ const Module *Executor::setModule(llvm::Module *module,
   
   // @KLEE-SEMu
   ExecutionState::ks_setMode(semuShadowTestGeneration ? ExecutionState::KS_Mode::TESTGEN_MODE: ExecutionState::KS_Mode::SEMU_MODE);
+  ks_outputTestsCases = (semuNumTestGenPerMutant > 0);
+  ks_outputStateDiffs = !ks_outputTestsCases;
+
   if (semuSetEntryFuncArgsSymbolic) {
     ks_entryFunction = module->getFunction(opts.EntryPoint);
     ks_setInitialSymbolics (*module, *ks_entryFunction);   
@@ -2865,6 +2872,8 @@ void Executor::run(ExecutionState &initialState) {
 
     ks_watchPointID = 0;
     ks_maxDepthID = 1;
+
+    ks_runStartTime = util::getWallTime();
     
     // In SEMU mode set optional user specified precondition, before any seeding
     // Precondition (bounded) symb ex for scalability, existing TC precond
@@ -2970,8 +2979,10 @@ void Executor::run(ExecutionState &initialState) {
 
       // @KLEE-SEMu
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-        if (ks_CheckpointingMainCheck(state, ki, true/*is Seeidng*/, precond_offset))
+        if (ks_CheckpointingMainCheck(state, ki, true/*is Seeidng*/, precond_offset)) {
+          processTimers(nullptr, MaxInstructionTime * numSeeds); // Make sure inst timer is reset
           continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
+        }
       }
       //~KS
 
@@ -3063,8 +3074,10 @@ void Executor::run(ExecutionState &initialState) {
 
     // @KLEE-SEMu
     if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-      if (ks_CheckpointingMainCheck(state, ki, false/*is Seeding*/))
+      if (ks_CheckpointingMainCheck(state, ki, false/*is Seeding*/)) {
+        processTimers(nullptr, MaxInstructionTime); //Make sure instruction timer is reset
         continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
+      }
     }
     //~KS
 
@@ -4595,8 +4608,9 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
 //XXX: For a mutant do we need to generate test for all difference with original or only one?
 bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect,
                                            std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly) {
-  static const bool outputTestCases = false;
-  static const bool doMaxSat = true;
+  static unsigned gentestid = 1;
+  bool outputTestCases = ks_outputTestsCases; //false;
+  bool doMaxSat = ks_outputStateDiffs; //true;
 
   std::vector<ref<Expr>> inStateDiffExp;
   bool diffFound = false;
@@ -4653,6 +4667,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             size_t clen = mState->constraints.size();
             mState->addConstraint (insdiff); //TODO TODO
             interpreterHandler->processTestCase(*mState, "", std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
+            ks_writeMutantTestsInfos(mState->ks_mutantID, gentestid++); //Write info needed to know which test for which mutant 
             if (mState->constraints.size() > clen) {
               mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
             } 
@@ -4757,12 +4772,13 @@ void Executor::ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id
   if (out_file_name.empty()) {
     mutantID2outfile[mutant_id] = out_file_name = 
            interpreterHandler->getOutputFilename(fnPrefix+std::to_string(mutant_id)+fnSuffix);
-    header.assign("MutantID,nSoftClauses,nMaxFeasibleDiffs,nMaxFeasibleEqs,Diff_Type,OrigState,WatchPointID,MaxDepthID\n");
+    header.assign("ellapsedTime(s),MutantID,nSoftClauses,nMaxFeasibleDiffs,nMaxFeasibleEqs,Diff_Type,OrigState,WatchPointID,MaxDepthID\n");
   }
 
+  unsigned ellapsedtime = util::getWallTime() - ks_runStartTime;
   std::ofstream ofs(out_file_name, std::ofstream::out | std::ofstream::app); 
   if (ofs.is_open()) {
-    ofs << header << mutant_id << "," << nSoftClauses << "," << nMaxFeasibleDiffs << "," << nMaxFeasibleEqs 
+    ofs << header << ellapsedtime<<","<<mutant_id << "," << nSoftClauses << "," << nMaxFeasibleDiffs << "," << nMaxFeasibleEqs 
         << "," << sDiff << "," << origState << "," << ks_watchPointID << "," << ks_maxDepthID <<"\n";
     ofs.close();
   } else {
@@ -4773,6 +4789,30 @@ void Executor::ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id
   }
 }
 
+void Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_id, unsigned testid) {
+  static const std::string fnPrefix("mutant-");
+  static const std::string fnSuffix(".ktestlist");
+  static std::map<ExecutionState::KS_MutantIDType, std::string> mutantID2outfile;
+  std::string header;
+  std::string out_file_name = mutantID2outfile[mutant_id];
+  if (out_file_name.empty()) {
+    mutantID2outfile[mutant_id] = out_file_name = 
+           interpreterHandler->getOutputFilename(fnPrefix+std::to_string(mutant_id)+fnSuffix);
+    header.assign("ellapsedTime(s),MutantID,ktest\n");
+  }
+
+  unsigned ellapsedtime = util::getWallTime() - ks_runStartTime;
+  std::ofstream ofs(out_file_name, std::ofstream::out | std::ofstream::app); 
+  if (ofs.is_open()) {
+    ofs << header << ellapsedtime << "," << mutant_id << "," << "test"<<std::setfill('0')<<std::setw(6)<<testid<<".ktest" << "\n";
+    ofs.close();
+  } else {
+    llvm::errs() << "Error: Unable to create test info file: " << out_file_name 
+                 << ". Mutant ID is:" << mutant_id << ".\n";
+    assert(false);
+    exit(1);
+  }
+}
 
 void Executor::ks_loadKQueryConstraints(std::vector<ConstraintManager> &outConstraintsList) {
   for (auto it=semuPrecondFiles.begin(), ie=semuPrecondFiles.end(); it != ie; ++it) {

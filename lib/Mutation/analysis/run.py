@@ -39,6 +39,9 @@ mutantInfoFile = "mutantsInfos.json"
 
 KLEE_TESTGEN_SCRIPT_TESTS = "MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh"
 
+FilterHardToKill = "FilterHardToKill"
+GenTestsToKill = "GenTestsToKill"
+
 def error_exit(errstr):
     print "\nERROR: "+errstr+'\n'
     assert False
@@ -93,31 +96,31 @@ def processMatrix (matrix, testSample, outname, candMutants_covTests, thisOutDir
     matrixHardness.libMain(matrix, testSample, candMutants_covTests, outFilePath)
 #~ def processMatrix()
 
-def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, kleeZestiSemuInBCLink, outpdir, zestiexedir, mode="zesti+symbex"):
+def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, kleeZestiSemuInBCLink, outpdir, zestiexedir): #, mode="zesti+symbex"):
     test2outdirMap = {}
 
     # copy bc
     kleeZestiSemuInBC = os.path.basename(kleeZestiSemuInBCLink) 
-    if mode == "zesti+symbex":
-        print "# Extracting tests Infos with ZESTI\n"
-        cmd = "llvm-gcc -c -std=c89 -emit-llvm "+MY_SCANF+" -o "+MY_SCANF+".bc"
-        ec = os.system(cmd)
-        if ec != 0:
-            error_exit("Error: failed to compile my_scanf to llvm for Zesti. Returned "+str(ec)+".\n >> Command: "+cmd)
-        ec = os.system("llvm-link "+kleeZestiSemuInBCLink+" "+MY_SCANF+".bc -o "+os.path.join(outpdir, kleeZestiSemuInBC))
-        if ec != 0:
-            error_exit("Error: failed to link myscanf and zesti bc. Returned "+str(ec))
-        os.remove(MY_SCANF+".bc")
+    #if mode == "zesti+symbex":
+    print "# Extracting tests Infos with ZESTI\n"
+    cmd = "llvm-gcc -c -std=c89 -emit-llvm "+MY_SCANF+" -o "+MY_SCANF+".bc"
+    ec = os.system(cmd)
+    if ec != 0:
+        error_exit("Error: failed to compile my_scanf to llvm for Zesti. Returned "+str(ec)+".\n >> Command: "+cmd)
+    ec = os.system("llvm-link "+kleeZestiSemuInBCLink+" "+MY_SCANF+".bc -o "+os.path.join(outpdir, kleeZestiSemuInBC))
+    if ec != 0:
+        error_exit("Error: failed to link myscanf and zesti bc. Returned "+str(ec))
+    os.remove(MY_SCANF+".bc")
 
-        # Verify that Zesti is accessible
-        zextmp = "klee"
-        if zestiexedir is None:
-           zextmp = os.path.join(zestiexedir, zextmp)
-        if os.system(zextmp+" --help | grep zest > /dev/null") != 0:
-            error_exit ("The available klee do not have Zesti: "+zextmp)
-    else:
-        print "# Running SEMU Concretely\n"
-        shutil.copy2(kleeZestiSemuInBCLink, os.path.join(outpdir, kleeZestiSemuInBC))
+    # Verify that Zesti is accessible
+    zextmp = "klee"
+    if zestiexedir is None:
+       zextmp = os.path.join(zestiexedir, zextmp)
+    if os.system(zextmp+" --help | grep zest > /dev/null") != 0:
+        error_exit ("The available klee do not have Zesti: "+zextmp)
+    #else:
+    #    print "# Running SEMU Concretely\n"
+    #    shutil.copy2(kleeZestiSemuInBCLink, os.path.join(outpdir, kleeZestiSemuInBC))
 
     # Install wrapper
     wrapper_fields = {
@@ -947,7 +950,7 @@ def mergeZestiAndKleeKTests (outDir, ktestContains_zest, commonArgs_zest, ktestC
 # put information from concolic run for the passed test set into a temporary dir, then possibly
 # Compute SEMU symbex and rank according to SEMU. outpout in outFilePath
 # semuworkdir contains all the seeds and we sample some for execution
-def executeSemu (semuworkdir, semuOutDirs, testSample, test2semudirMap, metaMutantBC, candidateMutantsFiles, symArgs, semuexedir, tuning, mergeThreadsDir=None, mode="zesti+symbex"):
+def executeSemu (semuworkdir, semuOutDirs, testSample, test2semudirMap, metaMutantBC, candidateMutantsFiles, symArgs, semuexedir, tuning, mergeThreadsDir=None, exemode=FilterHardToKill): #="zesti+symbex"):
     # Prepare the seeds to use
     threadsOutTop = os.path.dirname(semuOutDirs[0])
     if os.path.isdir(threadsOutTop):
@@ -969,90 +972,158 @@ def executeSemu (semuworkdir, semuOutDirs, testSample, test2semudirMap, metaMuta
             shutil.rmtree(semuOutDir)
 
     # aggregated for the sample tests (semuTC mode)
-    if mode == "zesti+symbex":
-        #symbexPreconditions = []
-        #for tc in testSample:
-        #    tcdir = test2semudirMap[tc]
-        #    for pathcondfile in glob.glob(os.path.join(tcdir, "*.pc")):
-        #        symbexPreconditions.append(pathcondfile)
-                # In the path condition file, replace argv with arg: XXX temporary, DBG
-        #        os.system(" ".join(["sed -i'' 's/argv_/arg/g; s/argv/arg0/g'", pathcondfile])) #DBG
-        # use the collected preconditions and run semy in symbolic mode
-        runSemuCmds = []
+    #if mode == "zesti+symbex":
+    #symbexPreconditions = []
+    #for tc in testSample:
+    #    tcdir = test2semudirMap[tc]
+    #    for pathcondfile in glob.glob(os.path.join(tcdir, "*.pc")):
+    #        symbexPreconditions.append(pathcondfile)
+            # In the path condition file, replace argv with arg: XXX temporary, DBG
+    #        os.system(" ".join(["sed -i'' 's/argv_/arg/g; s/argv/arg0/g'", pathcondfile])) #DBG
+    # use the collected preconditions and run semy in symbolic mode
+
+    filter_mutestgen = "" if exemode == FilterHardToKill else " -semu-tests-gen-per-mutant=5" #5 test per mutant
+
+    runSemuCmds = []
+    for thread_id in range(nThreads):
+        candidateMutantsFile = candidateMutantsFiles[thread_id]
+        semuOutDir = semuOutDirs[thread_id]
+        logFile = semuOutDir+".log"
+
+        kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp"
+        kleeArgs += ' ' + " ".join([par+'='+str(tuning['KLEE'][par]) for par in tuning['KLEE']])  #-max-time=50000 -max-memory=9000 --max-solver-time=300
+        kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -use-cex-cache " # -watchdog"
+        kleeArgs += " --output-dir="+semuOutDir
+        semukleearg = "-seed-out-dir="+semuSeedsDir
+        semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
+        semuArgs = " ".join([par+'='+str(tuning['SEMU'][par]) for par in tuning['SEMU']])  #" ".join(["-semu-precondition-length=3", "-semu-mutant-max-fork=2"])
+        #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
+        semuArgs += filter_mutestgen
+        if candidateMutantsFile is not None:
+            semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
+        
+        semuExe = "klee-semu" if semuexedir is None else os.path.join(semuexedir, "klee-semu")
+        runSemuCmd = " ".join([semuExe, kleeArgs, semukleearg, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"]) #,"2>&1"])
+        #sretcode = os.system(runSemuCmd)
+        runSemuCmd += " 2>"+logFile
+        runSemuCmds.append(runSemuCmd)
+
+    print "## Executing SEMU with", nThreads, "parallel threads. Execution log in <semu_out/Thread-<i>.log>"
+    threadpool = ThreadPool(nThreads)
+    sretcodes = threadpool.map(os.system, runSemuCmds)
+
+    for thread_id, sretcode in enumerate(sretcodes):
+        if sretcode != 0 :#and sretcode != 256: # 256 for timeout
+            print "-- Returned Code:", sretcode, ", for thread", thread_id,". Command: ", runSemuCmds[thread_id]
+            error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
+    if mergeThreadsDir is not None:
+        if os.path.isdir(mergeThreadsDir):
+            shutil.rmtree(mergeThreadsDir)
+        os.mkdir(mergeThreadsDir)
         for thread_id in range(nThreads):
-            candidateMutantsFile = candidateMutantsFiles[thread_id]
-            semuOutDir = semuOutDirs[thread_id]
-            logFile = semuOutDir+".log"
+            for mutoutfp in glob.glob(os.path.join(semuOutDirs[thread_id],"mutant-*.semu")):
+                merg_mutoutfp = os.path.join(mergeThreadsDir, os.path.basename(mutoutfp))
+                assert not os.path.isfile(merg_mutoutfp), "Same mutant was treated in different threads (BUG). Mutant id file is: "+os.path.basename(merg_mutoutfp)
+                # copy into merge, adding thread id to state (which is an address) to avoid considering different states with same address du to difference in execution threads, as one
+                with open(merg_mutoutfp, "w") as f_out:
+                    with open(mutoutfp, "r") as f_in:
+                        for line in f_in:
+                            f_out.write(line.replace(',0x', ','+str(thread_id)+'_0x'))
+    #print sretcode, "@@@@ -- ", runSemuCmd  #DBG
+    #exit(0)  #DBG
 
-            kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp"
-            kleeArgs += ' ' + " ".join([par+'='+str(tuning['KLEE'][par]) for par in tuning['KLEE']])  #-max-time=50000 -max-memory=9000 --max-solver-time=300
-            kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -use-cex-cache " # -watchdog"
-            kleeArgs += " --output-dir="+semuOutDir
-            semukleearg = "-seed-out-dir="+semuSeedsDir
-            semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
-            semuArgs = " ".join([par+'='+str(tuning['SEMU'][par]) for par in tuning['SEMU']])  #" ".join(["-semu-precondition-length=3", "-semu-mutant-max-fork=2"])
-            #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
-            if candidateMutantsFile is not None:
-                semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
-            
-            semuExe = "klee-semu" if semuexedir is None else os.path.join(semuexedir, "klee-semu")
-            runSemuCmd = " ".join([semuExe, kleeArgs, semukleearg, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"]) #,"2>&1"])
-            #sretcode = os.system(runSemuCmd)
-            runSemuCmd += " 2>"+logFile
-            runSemuCmds.append(runSemuCmd)
-
-        print "## Executing SEMU with", nThreads, "parallel threads. Execution log in <semu_out/Thread-<i>.log>"
-        threadpool = ThreadPool(nThreads)
-        sretcodes = threadpool.map(os.system, runSemuCmds)
-
-        for thread_id, sretcode in enumerate(sretcodes):
-            if sretcode != 0 :#and sretcode != 256: # 256 for timeout
-                print "-- Returned Code:", sretcode, ", for thread", thread_id,". Command: ", runSemuCmds[thread_id]
-                error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
-        if mergeThreadsDir is not None:
-            if os.path.isdir(mergeThreadsDir):
-                shutil.rmtree(mergeThreadsDir)
-            os.mkdir(mergeThreadsDir)
-            for thread_id in range(nThreads):
-                for mutoutfp in glob.glob(os.path.join(semuOutDirs[thread_id],"mutant-*.semu")):
-                    merg_mutoutfp = os.path.join(mergeThreadsDir, os.path.basename(mutoutfp))
-                    assert not os.path.isfile(merg_mutoutfp), "Same mutant was treated in different threads (BUG). Mutant id file is: "+os.path.basename(merg_mutoutfp)
-                    # copy into merge, adding thread id to state (which is an address) to avoid considering different states with same address du to difference in execution threads, as one
-                    with open(merg_mutoutfp, "w") as f_out:
-                        with open(mutoutfp, "r") as f_in:
-                            for line in f_in:
-                                f_out.write(line.replace(',0x', ','+str(thread_id)+'_0x'))
-        #print sretcode, "@@@@ -- ", runSemuCmd  #DBG
-        #exit(0)  #DBG
-    else:
-        error_exit("This mode is not needed. TODO remove it")
-        os.mkdir(semuOutDir)
-        mutDataframes = {}
-        for tc in testSample:
-            tcdir = test2semudirMap[tc]
-            for mutFilePath in glob.glob(os.path.join(tcdir, "mutant-*.semu")):
-                mutFile = os.path.basename(mutFilePath)
-                tmpdf = pd.read_csv(mutFilePath)
-                if mutFile not in mutDataframes:
-                    mutDataframes[mutFile] = tmpdf
-                else:
-                    mutDataframes[mutFile] = pd.concat([mutDataframes[mutFile], tmpdf])
-        for mutFile in mutDataframes:
-            aggrmutfilepath = os.path.join(semuOutDir, mutFile)
-            mutDataframes[mutFile].to_csv(aggrmutfilepath, index=False)
+    #else:
+    #    error_exit("This mode is not needed. TODO remove it")
+    #    os.mkdir(semuOutDir)
+    #    mutDataframes = {}
+    #    for tc in testSample:
+    #        tcdir = test2semudirMap[tc]
+    #        for mutFilePath in glob.glob(os.path.join(tcdir, "mutant-*.semu")):
+    #            mutFile = os.path.basename(mutFilePath)
+    #            tmpdf = pd.read_csv(mutFilePath)
+    #            if mutFile not in mutDataframes:
+    #                mutDataframes[mutFile] = tmpdf
+    #            else:
+    #                mutDataframes[mutFile] = pd.concat([mutDataframes[mutFile], tmpdf])
+    #    for mutFile in mutDataframes:
+    #        aggrmutfilepath = os.path.join(semuOutDir, mutFile)
+    #        mutDataframes[mutFile].to_csv(aggrmutfilepath, index=False)
 
     shutil.rmtree(semuSeedsDir)
 #~ def executeSemu()
 
-def processSemu (semuExecutionOutDir, outname, thisOutDir):
+# Maxtime is for experiment, allow to only consider the data wrtten within the maxtime execution of semu
+def processSemu (semuExecutionOutDir, outname, thisOutDir, maxtime=float('inf')):
     outFilePath = os.path.join(thisOutDir, outname)
     # extract for Semu accordincgto sample
-    rankSemuMutants.libMain(semuExecutionOutDir, outFilePath)
+    rankSemuMutants.libMain(semuExecutionOutDir, outFilePath, maxtime=maxtime)
 #~ def processSemu()
 
 def analysis_plot(thisOut, groundConsideredMutant_covtests):
     analyse.libMain(thisOut, mutantListForRandom=groundConsideredMutant_covtests)
 #~ def analysis_plot()
+
+'''
+    For mutant killing test generation Mode
+    take the ktests in the folders of semuoutputs, the put then together removing duplicates
+    The result is put in newly created dir mfi_ktests_dir. The .ktestlist files of each mutant are updated
+'''
+def fdupeGeneratedTest (mfi_ktests_dir, semuoutputs):
+    if os.path.isdir(mfi_ktests_dir):
+        shutil.rmtree(mfi_ktests_dir)
+    os.mkdir(mfi_ktests_dir)
+    ktests = {}
+    for fold in semuoutputs:
+        kt_fold = glob.glob(fold+"/*.ktest")
+        mut_fold = glob.glob(fold+"/mutant-*.ktestlist")
+        for ktp in kt_fold:
+            assert ktp not in ktests
+            ktests[ktp] = []
+        for minf in mut_fold:
+            df = pd.read_csv(minf)
+            for index, row in df.iterrows():
+                 et = row["ellapsedTime(s)"]
+                 mid = row["MutantID"]
+                 ktp = os.path.join(fold, row["ktest"])
+                 assert ktp in ktests
+                 ktests[ktp].append((mid, et))
+                  
+    # Use fdupes across the dirs in semuoutputs to remove duplicates and update test infos
+    fdupesout = mfi_ktests_dir+".tmp"
+    fdupcmd = " ".join(["fdupes -1"]+semuoutputs+[">",fdupesout])
+    if os.system(fdupcmd) != 0:
+        error_exit ("fdupes failed. cmd: "+fdupcmd)
+    assert os.path.isfile(fdupesout), "Fdupes failed to produce output"
+    with open(fdupesout) as fp:
+        for line in fp:
+            la = line.strip().split()
+            assert ls[0] not in dupmap
+            remain = la[0]
+            dups = la[1:]
+            assert remain in ktests
+            for dpkt in dups:
+                ktests[remains] += ktests[dpkt]
+                del ktests[dpkt]
+    os.remove(fdupesout)
+    for ktp in ktests:
+        sort(ktests[ktp], key=lambda x:x[0]) # sort according to mutant ids
+    
+    # Copy non duplicates into mfi_ktests_dir
+    finalObj = {}
+    etimeObj = {'ellapsedTime(s)':[], 'ktest':[]}
+    testid = 1
+    for ktp in ktests:
+        newtname = "test"+str(testid)+".ktest"
+        testid += 1
+        shutil.copy2(ktp, os.path.join(mfi_ktests_dir, newtname))
+        finalObj[newtname] = ktests[ktp]
+        etimeObj['ktest'].append(newtname)
+        etimeObj['ellapsedTime(s)'].append(min([float(v[1]) for v in ktests[ktp]]))
+
+    etdf = pd.DataFrame(etimeObj)
+    etdf.to_csv(os.path.join(mfi_ktests_dir, "tests_by_ellapsedtime.csv"), index=False)
+    dumpJson(finalObj, os.path.join(mfi_ktests_dir, "mutant_ktests_mapping.json"))
+#~ def fdupeGeneratedTest ()
 
 def stripRootTest2Dir (rootdir, test2dir):
     res = {}
@@ -1108,6 +1179,28 @@ def mutantsOfFunctions (candidateFunctionsJson, mutinfo, create=False):
         return mutbyfunc
 # def mutantsOfFunctions()
 
+'''
+    Read path files and extract the path lengths
+'''
+def getPathLengthsMinMaxOfKLeeTests(kleeteststopdir, errmsg):
+    assert kleeteststopdir is not None and os.path.isdir(kleeteststopdir), "Klee ktest dir must be specified and existing here: "+kleeteststopdir+". \n"+errmsg
+
+    kleetestsdir = os.path.join(kleeteststopdir, KLEE_TESTGEN_SCRIPT_TESTS+"-out/klee-out-0")
+    assert os.path.isdir(kleetestsdir), "kleetestsdir not existing: "+kleetestsdir
+
+    pathfiles = glob.glob(os.path.join(kleetestsdir, "*.path"))
+    pathfiles = [v for v in pathfiles if not v.endswith(".sym.path")] #Only consider path files, not .sym.path files
+    assert len(pathfiles) > 0, "No path files in klee out folder: "+kleetestsdir+". \n"+errmsg
+    plen = []
+    for p in pathfiles:
+        num_lines = sum(1 for line in open(p))
+        plen.append(num_lines)
+    minlen = min(plen)
+    maxlen = max(plen)
+    assert maxlen > 0, "maxlen not greater than 0"
+    return minlen, maxlen
+#~ def getPathLengthsMinMaxOfKLeeTests()
+
 def assignSemuJobs(mutantsbyfuncs, nMaxBlocks):
     nBlocks = min(nMaxBlocks, len(mutantsbyfuncs))
     mutantsBlocks = [[] for i in range(nBlocks)]
@@ -1126,13 +1219,13 @@ def assignSemuJobs(mutantsbyfuncs, nMaxBlocks):
 def main():
     global WRAPPER_TEMPLATE 
     global MY_SCANF
-    runMode = "zesti+symbex" #semuTC
+    #runMode = "zesti+symbex" #semuTC
     #runMode = "semuTC"
-    if runMode == "zesti+symbex":
-        WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ZESTI_CONCOLIC_WRAPPER))
-        MY_SCANF = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "FixScanfForShadow/my_scanf.c"))
-    else:
-        WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), SEMU_CONCOLIC_WRAPPER))
+    #if runMode == "zesti+symbex":
+    WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), ZESTI_CONCOLIC_WRAPPER))
+    MY_SCANF = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "FixScanfForShadow/my_scanf.c"))
+    #else:
+    #    WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), SEMU_CONCOLIC_WRAPPER))
 
     ZESTI_DEV_TASK = 'ZESTI_DEV_TASK'
     TEST_GEN_TASK = 'TEST_GEN_TASK'
@@ -1143,6 +1236,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("outTopDir", help="topDir for output (required)")
+    parser.add_argument("--executionMode", type=str, default=FilterHardToKill, choices=[FilterHardToKill, GenTestsToKill], help="The execution mode for this script (Find hard mutants of generate test to kill mutants.)")
     parser.add_argument("--exepath", type=str, default=None, help="The path to executable in project")
     parser.add_argument("--runtest", type=str, default=None, help="The test running script")
     parser.add_argument("--testlist", type=str, default=None, help="The test list file")
@@ -1159,8 +1253,8 @@ def main():
     parser.add_argument("--testSamplePercent", type=float, default=10, help="Specify the percentage of test suite to use for analysis") #, (require setting testSampleMode to NUM)")
     parser.add_argument("--semutimeout", type=int, default=86400, help="Specify the timeout for semu execution")
     parser.add_argument("--semumaxmemory", type=int, default=9000, help="Specify the max memory for semu execution")
-    parser.add_argument("--semupreconditionlength", type=int, default=2, help="Specify precondition length semu execution")
-    parser.add_argument("--semumutantmaxfork", type=int, default=2, help="Specify hard checkpoint for mutants (or post condition checkpoint) as PC length, in semu execution")
+    parser.add_argument("--semupreconditionlength", type=str, default='2', help="Specify precondition length semu execution")
+    parser.add_argument("--semumutantmaxfork", type=str, default='2', help="Specify hard checkpoint for mutants (or post condition checkpoint) as PC length, in semu execution")
     parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
     parser.add_argument("--nummaxparallel", type=int, default=1, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
     args = parser.parse_args()
@@ -1179,6 +1273,7 @@ def main():
 
     # get abs path in case not
     outDir = os.path.abspath(outDir)
+    executionMode = args.executionMode
     exePath = os.path.abspath(exePath) if exePath is not None else None 
     runtestScript = os.path.abspath(runtestScript) if runtestScript is not None else None 
     testList = os.path.abspath(testList) if testList is not None else None 
@@ -1211,9 +1306,25 @@ def main():
     assert testSamplePercent > 0 and testSamplePercent <= 100, "Error: Invalid testSamplePercent"
 
     # Parameter tuning for Semu execution (timeout, to precondition depth)
+    ## get precondition and mutantmaxfork from klee tests if specified as percentage
+    if args.semupreconditionlength[-1] == '%' or args.semumutantmaxfork[-1] == '%':
+        minpath_len, max_pathlen = getPathLengthsMinMaxOfKLeeTests(klee_tests_topdir, "Expecting path file for longest ktest path extraction in klee-test-dir")
+    
+    if args.semupreconditionlength[-1] == '%':
+        args_semupreconditionlength = int(float(args.semupreconditionlength[:-1]) * max_pathlen / 100.0)
+    else:
+        args_semupreconditionlength = int(args.semupreconditionlength)
+
+    if args.semumutantmaxfork[-1] == '%':
+        args_semumutantmaxfork = int(float(args.semumutantmaxfork[:-1]) * max_pathlen / 100.0)
+    else:
+        args_semumutantmaxfork= int(args.semumutantmaxfork)
+    args_semumutantmaxfork = max(1, args_semumutantmaxfork)
+    print "#>> SEMU Symbex - Precondition Param:", args_semupreconditionlength, ", Checkpoint Param:", args_semumutantmaxfork
+        
     semuTuning = {
                     'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
-                    'SEMU':{"-semu-precondition-length":args.semupreconditionlength, "-semu-mutant-max-fork":args.semumutantmaxfork, "-semu-loop-break-delay":args.semuloopbreaktimeout }
+                    'SEMU':{"-semu-precondition-length":args_semupreconditionlength, "-semu-mutant-max-fork":args_semumutantmaxfork, "-semu-loop-break-delay":args.semuloopbreaktimeout }
                  }
 
     # Create outdir if absent
@@ -1223,14 +1334,20 @@ def main():
         os.mkdir(cacheDir)
 
     # Get candidate mutants
+    ## In filtering Mode, get killable mutant with threshold test coverage
+    ## In test generation for killing mutants Mode, get test equivalent mutants, w.r.t the specified test sample percent and testSampleMode
     candidateMutantsFile = None
     groundConsideredMutant_covtests = None
     list_groundConsideredMutant_covtests = []
     if matrix is not None:
-        groundKilledMutants = set(matrixHardness.getKillableMutants(matrix)) 
+        if executionMode == FilterHardToKill:
+            ground_UNK_K_illedMutants = set(matrixHardness.getKillableMutants(matrix)) 
+        else:
+            ground_UNK_K_illedMutants = set(matrixHardness.getUnKillableMutants(matrix)) 
+
         groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, testTresh_str = covTestThresh)
         # keep only covered by treshold at least, and killed
-        for mid in set(groundConsideredMutant_covtests) - groundKilledMutants:
+        for mid in set(groundConsideredMutant_covtests) - ground_UNK_K_illedMutants:
             del groundConsideredMutant_covtests[mid]
         print "# Number of Mutants after coverage filtering:", len(groundConsideredMutant_covtests)
         
@@ -1257,7 +1374,9 @@ def main():
         
         print "# Number of Mutants Considered:", sum([len(x) for x in list_groundConsideredMutant_covtests]), ". With", len(paraAssign), "Semu executions in parallel"
 
-        assert sum([len(x) for x in list_groundConsideredMutant_covtests]) > 10, " ".join(["We have only", str(sum([len(x) for x in list_groundConsideredMutant_covtests])), "mutant fullfiling testcover treshhold",str(covTestThresh),"(Expected >= 10)"])
+        minMutNum = 10 if executionMode == FilterHardToKill else 1
+
+        assert sum([len(x) for x in list_groundConsideredMutant_covtests]) > minMutNum, " ".join(["We have only", str(sum([len(x) for x in list_groundConsideredMutant_covtests])), "mutants fullfiling testcover treshhold",str(covTestThresh),"(Expected >= "+str(minMutNum)+")"])
         list_candidateMutantsFiles = []
         for th_id, mcd in enumerate(list_groundConsideredMutant_covtests):
             candidateMutantsFile = os.path.join(cacheDir, "candidateMutants_"+str(th_id)+".list")
@@ -1268,16 +1387,16 @@ def main():
 
     # get ktest using Zesti  --  Semu for all tests
     if martOut is not None:
-        if runMode == 'zesti+symbex':
-            print "# Running Zesti to extract Dev tests"
-        else:
-            print "# Running Semu..."
+        #if runMode == 'zesti+symbex':
+        print "# Running Zesti to extract Dev tests"
+        #else:
+        #    print "# Running Semu..."
         zestiInBC = os.path.basename(exePath) + ZestiBCSuff
         zestiInBCLink = os.path.join(martOut, zestiInBC)
         kleeSemuInBC = os.path.basename(exePath) + KleeSemuBCSuff
         kleeSemuInBCLink = os.path.join(martOut, kleeSemuInBC)
         zestioutdir = os.path.join(cacheDir, "ZestiOutDir")
-        inBCFilePath = zestiInBCLink if runMode == "zesti+symbex" else kleeSemuInBCLink
+        inBCFilePath = zestiInBCLink #if runMode == "zesti+symbex" else kleeSemuInBCLink
         test2zestidirMapFile = os.path.join(cacheDir, "test2zestidirMap.json")
         if ZESTI_DEV_TASK in toExecute:
             # Prepare outdir and copy bc
@@ -1286,7 +1405,7 @@ def main():
             os.mkdir(zestioutdir)
 
             unused, alltestsObj, unwrapped_testlist = getTestSamples(testList, 0, matrix)   # 0 to not sample
-            test2zestidirMap = runZestiOrSemuTC (unwrapped_testlist, alltestsObj['DEVTESTS'], exePath, runtestScript, inBCFilePath, zestioutdir, zesti_exe_dir, mode=runMode) #mode can also be "semuTC"
+            test2zestidirMap = runZestiOrSemuTC (unwrapped_testlist, alltestsObj['DEVTESTS'], exePath, runtestScript, inBCFilePath, zestioutdir, zesti_exe_dir) #, mode=runMode) #mode can also be "semuTC"
             dumpJson(stripRootTest2Dir(outDir, test2zestidirMap), test2zestidirMapFile)
         else:
             print "## Loading zesti test mapping from Cache"
@@ -1361,9 +1480,9 @@ def main():
         testSamples, alltestsObj, unwrapped_testlist = loadJson(os.path.join(cacheDir, "testsamples.json"))
     alltests = alltestsObj["DEVTESTS"] + alltestsObj["GENTESTS"]
 
-    semuOutputs = os.path.join(cacheDir, "semu_outputs")
-    if not os.path.isdir(semuOutputs):
-        os.mkdir(semuOutputs)
+    semuOutputsTop = os.path.join(cacheDir, "semu_outputs")
+    if not os.path.isdir(semuOutputsTop):
+        os.mkdir(semuOutputsTop)
 
     # process and analyse for each test Sample with each approach
     for ts_size in testSamples:
@@ -1373,41 +1492,90 @@ def main():
         thisOut_list = [this_Out+"-"+str(i) for i in range(len(list_candidateMutantsFiles))]
         mergeSemuThisOut = this_Out+".semumerged"
 
-        se_output = os.path.join(semuOutputs, outFolder, "Thread")
+        se_output = os.path.join(semuOutputsTop, outFolder, "Thread")
         semuoutputs = [se_output+"-"+str(i) for i in range(len(list_candidateMutantsFiles))]
-        mergeSemuThreadsDir = se_output+".semumerged"
+        # No merge on Test Gen mode
+        mergeSemuThreadsDir = se_output+".semumerged" if executionMode == FilterHardToKill else None
 
         # Execute SEMU
         if SEMU_EXECUTION in toExecute: 
             if martOut is not None:
-                executeSemu (semuworkdir, semuoutputs, testSamples[ts_size], test2semudirMap, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, mode=runMode) 
+                executeSemu (semuworkdir, semuoutputs, testSamples[ts_size], test2semudirMap, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, exemode=executionMode) 
 
-        for groundConsMut_cov, thisOut, semuoutput in zip(list_groundConsideredMutant_covtests+[groundConsideredMutant_covtests], thisOut_list+[mergeSemuThisOut], semuoutputs+[mergeSemuThreadsDir]):
-            # process with each approach
+        if executionMode == FilterHardToKill:
+            if len(thisOut_list) == 1 and os.path.isdir(mergeSemuThreadsDir): #only have one thread, only process that
+                zips = [(groundConsideredMutant_covtests, mergeSemuThisOut, mergeSemuThreadsDir)]
+            else:
+                zips = zip(list_groundConsideredMutant_covtests+[groundConsideredMutant_covtests], thisOut_list+[mergeSemuThisOut], semuoutputs+[mergeSemuThreadsDir])
+            for groundConsMut_cov, thisOut, semuoutput in zips:
+                # process with each approach
+                if COMPUTE_TASK in toExecute: 
+                    print "# Procesing for test size", ts_size, "..."
+
+                    if martOut is not None or matrix is not None:
+                        if os.path.isdir(thisOut):
+                            shutil.rmtree(thisOut)
+                        os.mkdir(thisOut)
+
+                    # process for matrix
+                    if matrix is not None:
+                        processMatrix (matrix, alltests, 'groundtruth', groundConsMut_cov, thisOut) 
+                        processMatrix (matrix, testSamples[ts_size], 'classic', groundConsMut_cov, thisOut) 
+
+                    # process for SEMU
+                    if martOut is not None:
+                        processSemu (semuoutput, "semu", thisOut)
+
+                # Analysing for each test Sample 
+                if ANALYSE_TASK in toExecute:
+                    print "# Analysing for test size", ts_size, "..."
+
+                    # Make final Analysis and plot
+                    if martOut is not None and matrix is not None:
+                        analysis_plot(thisOut, None) #groundConsideredMutant_covtests.keys()) # None to not plot random
+        else:
+            mfi_mutants_list = os.path.join(this_Out, "mfirun_mutants_list.txt")
+            mfi_ktests_dir = os.path.join(this_Out, "mfirun_ktests_dir")
+            mfi_execution_output = os.path.join(this_Out, "mfirun_output")
             if COMPUTE_TASK in toExecute: 
-                print "# Procesing for test size", ts_size, "..."
+                if not os.path.isdir(this_Out):
+                    os.mkdir(this_Out)
+                if os.path.isdir(mfi_execution_output):
+                    print ""
+                    choice = raw_input("Are you sure you want to clean existing mfi_execution_output? [y/N] ")
+                    if choice.lower() in ['y', 'yes']:
+                        shutil.rmtree(mfi_execution_output)
 
-                if martOut is not None or matrix is not None:
-                    if os.path.isdir(thisOut):
-                        shutil.rmtree(thisOut)
-                    os.mkdir(thisOut)
+                if not os.path.isdir(mfi_execution_output):
+                    with open(mfi_mutants_list, "w") as fp:
+                        for mid in groundConsideredMutant_covtests:
+                            fp.write(str(mid)+'\n')
+                    fdupeGeneratedTest (mfi_ktests_dir, semuoutputs)
 
-                # process for matrix
-                if matrix is not None:
-                    processMatrix (matrix, alltests, 'groundtruth', groundConsMut_cov, thisOut) 
-                    processMatrix (matrix, testSamples[ts_size], 'classic', groundConsMut_cov, thisOut) 
-
-                # process for SEMU
-                if martOut is not None:
-                    processSemu (semuoutput, "semu", thisOut)
-
-            # Analysing for each test Sample 
             if ANALYSE_TASK in toExecute:
-                print "# Analysing for test size", ts_size, "..."
-
-                # Make final Analysis and plot
-                if martOut is not None and matrix is not None:
-                    analysis_plot(thisOut, None) #groundConsideredMutant_covtests.keys()) # None to not plot random
+                nGenTests_ = len(glob.glob(mfi_ktests_dir+"/*.ktest"))
+                if nGenTests_ > 0 and not os.path.isdir(mfi_execution_output):
+                    print "\n--------------------------------------------------"
+                    print ">> There are a total of", nGenTests_, "tests to run"
+                    print ">> You now need to execute the generated tests using MFI (externale mode)"
+                    print ">> For MFI, use the following:"
+                    print ">>   mfi_mutants_list:", mfi_mutants_list
+                    print ">>   mfi_ktests_dir:", mfi_ktests_dir
+                    print ">>   mfi_execution_output:", mfi_execution_output
+                    print "--------------------------------------------------"
+                    print "@ Rexecute this when done."
+                else:
+                    nMutants = len(groundConsideredMutant_covtests)
+                    outjsonfile = os.path.join(this_Out, "MS-increase")
+                    if nGenTests_ > 0:
+                        sm_file = os.path.join(mfi_execution_output, "data", "matrices")
+                        nnewKilled = len(matrixHardness.getKillableMutants(sm_file))
+                    else:
+                        nnewKilled = 0
+                    outobj_ = {"#Mutants": nMutants, "#Killed": nnewKilled, "#GenTests":nGenTests_, "MS-INC":(nnewKilled * 100.0 / nMutants)}
+                    dumpJson(outobj_, outjsonfile)
+                    print "Kill Mutant TestGen Analyse Result:", outobj_
+        print "@ DONE!"
 
 #~ def main()
 

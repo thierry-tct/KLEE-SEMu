@@ -107,6 +107,15 @@ def getKillableMutants(matrixFile):
     return killablesMuts
 #~ def getKillableMutants()
 
+def getUnKillableMutants(matrixFile):
+    M = loadMatrix(matrixFile, None, SM_index_string)
+    unkillablesMuts = []
+    for mid in  set(M) - {SM_index_string}:
+        if len(TestsKilling(mid, M)) == 0:
+            unkillablesMuts.append(mid)
+    return unkillablesMuts
+#~ def getUnKillableMutants()
+
 '''
     Return a map of mutant and covering tests for mutants having more than thresh tests covering
     Do not return the mutants with number of covering tests cases less than threshold

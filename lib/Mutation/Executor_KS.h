@@ -530,6 +530,11 @@ private:
   unsigned long ks_watchPointID=0;
   unsigned long ks_maxDepthID=1;
 
+  double ks_runStartTime;
+
+  bool ks_outputTestsCases;
+  bool ks_outputStateDiffs;
+
 #ifdef KS_Z3MAXSAT_SOLVER__H
   // Partial Max Sat Solver
   // Make this with cache
@@ -586,6 +591,8 @@ public:
                                 unsigned nMaxFeasibleEqs,
                                 int sDiff,
                                 ExecutionState const *origState);  
+
+  void ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_id, unsigned testid); 
 
   void ks_loadKQueryConstraints(std::vector<ConstraintManager> &outConstraintsList);
 
