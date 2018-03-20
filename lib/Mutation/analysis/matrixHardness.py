@@ -13,6 +13,14 @@ def error_exit(errstr):
     exit(1)
 #~ error_exit()
 
+def loadJson (filename):
+    with open(filename) as f:
+        return json.load(f)
+
+def dumpJson (data, filename):
+    with open(filename, 'w') as f:
+        json.dump(data, f)
+
 PASS = ["0"]
 FAIL = ["1"]
 SM_index_string = "ktestSM"
@@ -122,7 +130,7 @@ def getUnKillableMutants(matrixFile, testset=None):
     Return a map of mutant and covering tests for mutants having more than thresh tests covering
     Do not return the mutants with number of covering tests cases less than threshold
 '''
-def getCoveredMutants(covMatFile, testTresh_str='1'):
+def getCoveredMutants(covMatFile, mutantInfo, testTresh_str='1'):
     M = loadMatrix(covMatFile, None, COVM_index_string)
     nTests = len(M[COVM_index_string])
     if testTresh_str[-1] == '%':
@@ -132,10 +140,15 @@ def getCoveredMutants(covMatFile, testTresh_str='1'):
     else:
         testTresh = int(testTresh_str)
     covMuts = {}
-    for mid in  set(M) - {COVM_index_string}:
+    mutsincovmatrix = set(M) - {COVM_index_string}
+    for mid in mutsincovmatrix:
         tccov = TestsKilling(mid, M, COVM_index_string)
         if len(tccov) >= testTresh:
             covMuts[mid] = tccov
+    if testTresh == 0:  # even non covered mutants are considered
+        mInfObj = loadJson(mutantInfo)
+        for mid in set([int(m) for m in mInfObj.keys()]) - mutsincovmatrix:
+            covMuts[mid] = []
     return covMuts
 #~ def getKillableMutants()
 

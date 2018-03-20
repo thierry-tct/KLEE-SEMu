@@ -1068,10 +1068,11 @@ def analysis_plot(thisOut, groundConsideredMutant_covtests):
     take the ktests in the folders of semuoutputs, the put then together removing duplicates
     The result is put in newly created dir mfi_ktests_dir. The .ktestlist files of each mutant are updated
 '''
-def fdupeGeneratedTest (mfi_ktests_dir, semuoutputs):
-    if os.path.isdir(mfi_ktests_dir):
-        shutil.rmtree(mfi_ktests_dir)
-    os.mkdir(mfi_ktests_dir)
+def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
+    assert mfi_ktests_dir_top in mfi_ktests_dir
+    if os.path.isdir(mfi_ktests_dir_top):
+        shutil.rmtree(mfi_ktests_dir_top)
+    os.makedirs(mfi_ktests_dir)
     ktests = {}
     for fold in semuoutputs:
         kt_fold = glob.glob(fold+"/*.ktest")
@@ -1119,6 +1120,10 @@ def fdupeGeneratedTest (mfi_ktests_dir, semuoutputs):
         finalObj[newtname] = ktests[ktp]
         etimeObj['ktest'].append(newtname)
         etimeObj['ellapsedTime(s)'].append(min([float(v[1]) for v in ktests[ktp]]))
+
+    # copy 'info' file
+    if len(semuoutputs) > 0:
+        shutil.copy2(os.path.join(semuoutputs[0], "info"), mfi_ktests_dir)
 
     etdf = pd.DataFrame(etimeObj)
     etdf.to_csv(os.path.join(mfi_ktests_dir, "tests_by_ellapsedtime.csv"), index=False)
@@ -1438,15 +1443,18 @@ def main():
     groundConsideredMutant_covtests = None
     list_groundConsideredMutant_covtests = []
     if matrix is not None:
+        groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, os.path.join(martOut, mutantInfoFile), testTresh_str = covTestThresh)
+
         if executionMode == FilterHardToKill:
-            ground_UNK_K_illedMutants = set(matrixHardness.getKillableMutants(matrix)) 
+            ground_KilledMutants = set(matrixHardness.getKillableMutants(matrix)) 
+            toremoveMuts = set(groundConsideredMutant_covtests) - ground_KilledMutants
         else:
             assert len(testSamples.keys()) == 1, "TestSamples must have only one key (correspond to one experiment - one set of mutants and tests)"
-            ground_UNK_K_illedMutants = set(matrixHardness.getUnKillableMutants(matrix, testset=set(testSamples[testSamples.keys()[0]]))) 
-
-        groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, testTresh_str = covTestThresh)
+            ground_KilledMutants = set(matrixHardness.getKillableMutants(matrix, testset=set(testSamples[testSamples.keys()[0]]))) 
+            toremoveMuts = ground_KilledMutants
+            
         # keep only covered by treshold at least, and killed
-        for mid in set(groundConsideredMutant_covtests) - ground_UNK_K_illedMutants:
+        for mid in toremoveMuts:
             del groundConsideredMutant_covtests[mid]
         print "# Number of Mutants after coverage filtering:", len(groundConsideredMutant_covtests)
         
@@ -1540,7 +1548,8 @@ def main():
                         analysis_plot(thisOut, None) #groundConsideredMutant_covtests.keys()) # None to not plot random
         else:
             mfi_mutants_list = os.path.join(this_Out, "mfirun_mutants_list.txt")
-            mfi_ktests_dir = os.path.join(this_Out, "mfirun_ktests_dir")
+            mfi_ktests_dir_top = os.path.join(this_Out, "mfirun_ktests_dir")
+            mfi_ktests_dir = os.path.join(mfi_ktests_dir_top, KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0")
             mfi_execution_output = os.path.join(this_Out, "mfirun_output")
             if COMPUTE_TASK in toExecute: 
                 print "# Compute task Procesing for test size", ts_size, "..."
@@ -1551,14 +1560,21 @@ def main():
                     choice = raw_input("Are you sure you want to clean existing mfi_execution_output? [y/N] ")
                     if choice.lower() in ['y', 'yes']:
                         shutil.rmtree(mfi_execution_output)
+                        print "## Previous outdir removed"
+                    else:
+                        print "\n#> Not deleting previous out, use skip compute task if just want to analyse"
+                        exit(1)
 
                 if not os.path.isdir(mfi_execution_output):
                     with open(mfi_mutants_list, "w") as fp:
                         for mid in groundConsideredMutant_covtests:
                             fp.write(str(mid)+'\n')
-                    fdupeGeneratedTest (mfi_ktests_dir, semuoutputs)
+                    fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs)
 
             if ANALYSE_TASK in toExecute:
+                outjsonfile = os.path.join(this_Out, "MS-increase")
+                if os.path.isfile(outjsonfile):
+                    os.remove(outjsonfile)
                 nGenTests_ = len(glob.glob(mfi_ktests_dir+"/*.ktest"))
                 if nGenTests_ > 0 and not os.path.isdir(mfi_execution_output):
                     print "\n--------------------------------------------------"
@@ -1566,15 +1582,20 @@ def main():
                     print ">> You now need to execute the generated tests using MFI (externale mode)"
                     print ">> For MFI, use the following:"
                     print ">>   mfi_mutants_list:", mfi_mutants_list
-                    print ">>   mfi_ktests_dir:", mfi_ktests_dir
+                    print ">>   mfi_ktests_dir_top:", mfi_ktests_dir_top
                     print ">>   mfi_execution_output:", mfi_execution_output
+                    print "...................................."
+                    print "echo 5 > mfi_executing.state"
+                    print "MFI_OVERRIDE_OUTPUT="+mfi_execution_output,
+                    print "MFI_OVERRIDE_MUTANTSLIST="+mfi_mutants_list,
+                    print "MFI_OVERRIDE_GENTESTSDIR="+mfi_ktests_dir_top, 
+                    print "<Run MFI command>"
                     print "--------------------------------------------------"
-                    print "@ Rexecute this when done."
+                    print "@ Rexecute this when done (skipping every task except analyse task)."
                 else:
                     nMutants = len(groundConsideredMutant_covtests)
-                    outjsonfile = os.path.join(this_Out, "MS-increase")
                     if nGenTests_ > 0:
-                        sm_file = os.path.join(mfi_execution_output, "data", "matrices")
+                        sm_file = os.path.join(mfi_execution_output, "data", "matrices", "SM.dat")
                         nnewKilled = len(matrixHardness.getKillableMutants(sm_file))
                     else:
                         nnewKilled = 0
