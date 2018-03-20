@@ -4362,9 +4362,17 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
   }
 }
 
+bool Executor::ks_checkfeasiblewithsolver(ExecutionState &state, ref<Expr> bool_expr) {
+  bool result;
+  bool success = solver->mayBeTrue(state, bool_expr, result);
+  assert(success && "KS: Unhandled solver failure");
+  (void) success;
+  return result;
+}
+
 ////>
 // TODO TODO: Handle state comparison in here
-inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp) {
+inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp, KScheckFeasible &feasibleChecker) {
   CallInst *acins = dyn_cast<CallInst>(a.pc->inst);
   CallInst *bcins = dyn_cast<CallInst>(b.pc->inst);
   if (!(acins && bcins)) {
@@ -4391,10 +4399,13 @@ inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const Executio
       llvm::errs() << "--> External call args differ.\n";
 #endif
       // the if to make sure that args expressions are of same type to avoid expr assert
-      if (aArg->getWidth()==bArg->getWidth())
-        inStateDiffExp.push_back(NeExpr::create(aArg, bArg));    //XXX: need to do 'or' of all the diff found hre befre returning true?
-      else
+      if (aArg->getWidth()==bArg->getWidth()) {
+        ref<Expr> tmpexpr = NeExpr::create(aArg, bArg);
+        if (feasibleChecker.isFeasible(tmpexpr)) 
+          inStateDiffExp.push_back(tmpexpr);    //XXX: need to do 'or' of all the diff found hre befre returning true?
+      } else {
         inStateDiffExp.push_back(ConstantExpr::alloc(1, Expr::Bool));
+      }
       //return true;
     }
   }
@@ -4608,6 +4619,8 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
 //XXX: For a mutant do we need to generate test for all difference with original or only one?
 bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect,
                                            std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly) {
+  static const bool usethesolverfordiff = true;
+
   static unsigned gentestid = 1;
   bool outputTestCases = ks_outputTestsCases; //false;
   bool doMaxSat = ks_outputStateDiffs; //true;
@@ -4618,24 +4631,26 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
   if (!outEnvOnly || ks_reachedOutEnv.count(mState) > 0) {
     for (auto mSisState: mSisStatesVect) {
       bool result;
-      bool success = solver->mayBeTrue(*mState, origSuffConstr.at(mSisState), result);
+      ref<Expr> origpathPrefix = origSuffConstr.at(mSisState);
+      bool success = solver->mayBeTrue(*mState, origpathPrefix, result);
       assert(success && "KS: Unhandled solver failure");
       (void) success;
       if (result) {
         // Clear diff expr list
         inStateDiffExp.clear();
+        KScheckFeasible feasibleChecker(this, mState, origpathPrefix, usethesolverfordiff);
 
         // compare these
         int sDiff = ExecutionState::KS_StateDiff_t::ksNO_DIFF; 
 
         if (/*mState->pc &&*/ (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
-          sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
+          sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp, feasibleChecker) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
           // XXX: we also compare states (ks_compareStateWith) here or not?
 
           if (!ExecutionState::ks_isNoDiff(sDiff))
-            sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, false/*post...*/);
+            sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, &feasibleChecker, false/*post...*/);
         } else {
-          sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, true/*post...*/);
+          sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, &feasibleChecker, true/*post...*/);
           // XXX if mutant terminated and not original or vice versa, set the main return diff
           // TODO: Meke this more efficient
           if (ks_terminatedBeforeWP.count(mSisState) != ks_terminatedBeforeWP.count(mState))
@@ -4659,18 +4674,32 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
   #endif
           if (outputTestCases && ExecutionState::ks_isCriticalDiff(sDiff)) {
             // generate test case of this difference.
-            ref<Expr> insdiff = origSuffConstr.at(mSisState);
+            ref<Expr> insdiff = origpathPrefix;
             // TODO: improve this so the test constraint is smaller: remove condition for variable
             // that are not of the output (not returned nor printed)
-            /* //TODO: Should this be included? in introduce error in some test generation (during solving)
-              for (auto &expr: inStateDiffExp) 
+            /**/ //TODO: Should this be included? in introduce error in some test generation (during solving)
+            //llvm::errs() << "============================= begin\n";
+            //Try with and of all conditions
+            insdiff = origpathPrefix;
+            for (auto &expr: inStateDiffExp) { 
+              //expr->dump(); 
               insdiff = AndExpr::create(insdiff, expr);
-              */
+            }
+            if (!ks_checkfeasiblewithsolver(*mState, insdiff)) {
+              //use OR since it is infeasible with and (OR must be feasible because each clause is independently feasible)
+              insdiff = ConstantExpr::alloc(0, Expr::Bool);
+              for (auto &expr: inStateDiffExp)
+                insdiff = OrExpr::create(insdiff, expr);
+              insdiff = AndExpr::create(insdiff, origpathPrefix);
+            }
+            //llvm::errs() << "============================= end\n";
+            /*  */
             size_t clen = mState->constraints.size();
             mState->addConstraint (insdiff); //TODO TODO
             interpreterHandler->processTestCase(*mState, nullptr, nullptr); //std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
             ks_writeMutantTestsInfos(mState->ks_mutantID, gentestid++); //Write info needed to know which test for which mutant 
             if (mState->constraints.size() > clen) {
+              assert (mState->constraints.size() = clen + 1 && "Expect only one more contraint here, the just added one");
               mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
             } 
             //return true;

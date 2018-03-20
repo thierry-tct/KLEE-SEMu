@@ -510,6 +510,29 @@ public:
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
   
   // @KLEE-SEMu
+  class KScheckFeasible: public ExecutionState::KScheckFeasibleBase {
+  private:
+    Executor *executor;
+    ExecutionState *mutState;
+    ref<Expr> originalCommonPrefix;
+    bool usethesolver;
+  public:
+    KScheckFeasible(Executor *ex, ExecutionState *ms, ref<Expr> origPref, bool usesolver): 
+      executor(ex), 
+      mutState(ms), 
+      originalCommonPrefix(origPref),
+      usethesolver(usesolver) {}
+    bool isFeasible(ref<Expr> bool_expr) {
+      if (!usethesolver || bool_expr->isTrue()) 
+        return true; 
+      return executor->ks_checkfeasiblewithsolver(*mutState, 
+                                                  AndExpr::create(originalCommonPrefix, 
+                                                                  bool_expr));
+    }
+  };
+
+  bool ks_checkfeasiblewithsolver(ExecutionState &state, ref<Expr> bool_expr);
+
 private:
   const char *ks_mutantIDSelectorName = "klee_semu_GenMu_Mutant_ID_Selector";
   const char *ks_mutantIDSelectorName_Func = "klee_semu_GenMu_Mutant_ID_Selector_Func";
@@ -573,7 +596,7 @@ public:
   
   inline llvm::Instruction * ks_makeArgSym (llvm::Module &module, llvm::GlobalVariable * &emptyStrAddr, llvm::Instruction *insAfter, llvm::Value *memAddr, llvm::Type *valtype);
   
-  bool ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp);
+  bool ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp, KScheckFeasible &feasibleChecker);
   
   bool ks_isOutEnvCall (llvm::CallInst *ci, ExecutionState *state=nullptr);
 
