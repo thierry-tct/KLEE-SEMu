@@ -1085,7 +1085,7 @@ def fdupeGeneratedTest (mfi_ktests_dir, semuoutputs):
                  et = row["ellapsedTime(s)"]
                  mid = row["MutantID"]
                  ktp = os.path.join(fold, row["ktest"])
-                 assert ktp in ktests
+                 assert ktp in ktests, "test not in ktests: "+str(ktests)+", test: "+ktp
                  ktests[ktp].append((mid, et))
                   
     # Use fdupes across the dirs in semuoutputs to remove duplicates and update test infos
@@ -1097,16 +1097,16 @@ def fdupeGeneratedTest (mfi_ktests_dir, semuoutputs):
     with open(fdupesout) as fp:
         for line in fp:
             la = line.strip().split()
-            assert ls[0] not in dupmap
+            #assert la[0] not in dupmap, "fdupe line: "+la[0]+", is not in dupmap: "+str(dupmap)
             remain = la[0]
             dups = la[1:]
             assert remain in ktests
             for dpkt in dups:
-                ktests[remains] += ktests[dpkt]
+                ktests[remain] += ktests[dpkt]
                 del ktests[dpkt]
     os.remove(fdupesout)
     for ktp in ktests:
-        sort(ktests[ktp], key=lambda x:x[0]) # sort according to mutant ids
+        ktests[ktp].sort(key=lambda x:x[0]) # sort according to mutant ids
     
     # Copy non duplicates into mfi_ktests_dir
     finalObj = {}
@@ -1333,57 +1333,6 @@ def main():
         os.mkdir(outDir)
         os.mkdir(cacheDir)
 
-    # Get candidate mutants
-    ## In filtering Mode, get killable mutant with threshold test coverage
-    ## In test generation for killing mutants Mode, get test equivalent mutants, w.r.t the specified test sample percent and testSampleMode
-    candidateMutantsFile = None
-    groundConsideredMutant_covtests = None
-    list_groundConsideredMutant_covtests = []
-    if matrix is not None:
-        if executionMode == FilterHardToKill:
-            ground_UNK_K_illedMutants = set(matrixHardness.getKillableMutants(matrix)) 
-        else:
-            ground_UNK_K_illedMutants = set(matrixHardness.getUnKillableMutants(matrix)) 
-
-        groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, testTresh_str = covTestThresh)
-        # keep only covered by treshold at least, and killed
-        for mid in set(groundConsideredMutant_covtests) - ground_UNK_K_illedMutants:
-            del groundConsideredMutant_covtests[mid]
-        print "# Number of Mutants after coverage filtering:", len(groundConsideredMutant_covtests)
-        
-        # consider the specified functions
-        afterFuncFilter_byfunc = mutantsOfFunctions (candidateFunctionsJson, os.path.join(martOut, mutantInfoFile), create=False)
-        # make considered mutants and afterFuncFilter_byfunc be in sync
-        gCM_c_set = set(groundConsideredMutant_covtests)
-        intersect_ga = set()
-        for func in afterFuncFilter_byfunc.keys():
-            tmpa = set(afterFuncFilter_byfunc[func]) & gCM_c_set
-            if len(tmpa) > 0:
-                afterFuncFilter_byfunc[func] = list(tmpa)
-                intersect_ga |= tmpa
-            else:
-                del afterFuncFilter_byfunc[func]
-
-        for mid in gCM_c_set - intersect_ga:
-            del groundConsideredMutant_covtests[mid]
-
-        paraAssign = assignSemuJobs(afterFuncFilter_byfunc, args.nummaxparallel)
-        for pj in paraAssign:
-            pjs = set(pj)
-            list_groundConsideredMutant_covtests.append({mid: groundConsideredMutant_covtests[mid] for mid in groundConsideredMutant_covtests if mid in pjs})
-        
-        print "# Number of Mutants Considered:", sum([len(x) for x in list_groundConsideredMutant_covtests]), ". With", len(paraAssign), "Semu executions in parallel"
-
-        minMutNum = 10 if executionMode == FilterHardToKill else 1
-
-        assert sum([len(x) for x in list_groundConsideredMutant_covtests]) > minMutNum, " ".join(["We have only", str(sum([len(x) for x in list_groundConsideredMutant_covtests])), "mutants fullfiling testcover treshhold",str(covTestThresh),"(Expected >= "+str(minMutNum)+")"])
-        list_candidateMutantsFiles = []
-        for th_id, mcd in enumerate(list_groundConsideredMutant_covtests):
-            candidateMutantsFile = os.path.join(cacheDir, "candidateMutants_"+str(th_id)+".list")
-            list_candidateMutantsFiles.append(candidateMutantsFile)
-            with open(candidateMutantsFile, "w") as f:
-                for mid in mcd.keys():
-                    f.write(str(mid)+"\n")
 
     # get ktest using Zesti  --  Semu for all tests
     if martOut is not None:
@@ -1480,6 +1429,62 @@ def main():
         testSamples, alltestsObj, unwrapped_testlist = loadJson(os.path.join(cacheDir, "testsamples.json"))
     alltests = alltestsObj["DEVTESTS"] + alltestsObj["GENTESTS"]
 
+    assert len(testSamples.keys()) == 1, "TestSamples must have only one key (correspond to one experiment - one set of mutants and tests)"
+
+    # Get candidate mutants -----------------------------------------
+    ## In filtering Mode, get killable mutant with threshold test coverage
+    ## In test generation for killing mutants Mode, get test equivalent mutants, w.r.t the specified test sample percent and testSampleMode
+    candidateMutantsFile = None
+    groundConsideredMutant_covtests = None
+    list_groundConsideredMutant_covtests = []
+    if matrix is not None:
+        if executionMode == FilterHardToKill:
+            ground_UNK_K_illedMutants = set(matrixHardness.getKillableMutants(matrix)) 
+        else:
+            assert len(testSamples.keys()) == 1, "TestSamples must have only one key (correspond to one experiment - one set of mutants and tests)"
+            ground_UNK_K_illedMutants = set(matrixHardness.getUnKillableMutants(matrix, testset=set(testSamples[testSamples.keys()[0]]))) 
+
+        groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, testTresh_str = covTestThresh)
+        # keep only covered by treshold at least, and killed
+        for mid in set(groundConsideredMutant_covtests) - ground_UNK_K_illedMutants:
+            del groundConsideredMutant_covtests[mid]
+        print "# Number of Mutants after coverage filtering:", len(groundConsideredMutant_covtests)
+        
+        # consider the specified functions
+        afterFuncFilter_byfunc = mutantsOfFunctions (candidateFunctionsJson, os.path.join(martOut, mutantInfoFile), create=False)
+        # make considered mutants and afterFuncFilter_byfunc be in sync
+        gCM_c_set = set(groundConsideredMutant_covtests)
+        intersect_ga = set()
+        for func in afterFuncFilter_byfunc.keys():
+            tmpa = set(afterFuncFilter_byfunc[func]) & gCM_c_set
+            if len(tmpa) > 0:
+                afterFuncFilter_byfunc[func] = list(tmpa)
+                intersect_ga |= tmpa
+            else:
+                del afterFuncFilter_byfunc[func]
+
+        for mid in gCM_c_set - intersect_ga:
+            del groundConsideredMutant_covtests[mid]
+
+        paraAssign = assignSemuJobs(afterFuncFilter_byfunc, args.nummaxparallel)
+        for pj in paraAssign:
+            pjs = set(pj)
+            list_groundConsideredMutant_covtests.append({mid: groundConsideredMutant_covtests[mid] for mid in groundConsideredMutant_covtests if mid in pjs})
+        
+        print "# Number of Mutants Considered:", sum([len(x) for x in list_groundConsideredMutant_covtests]), ". With", len(paraAssign), "Semu executions in parallel"
+
+        minMutNum = 10 if executionMode == FilterHardToKill else 1
+
+        assert sum([len(x) for x in list_groundConsideredMutant_covtests]) > minMutNum, " ".join(["We have only", str(sum([len(x) for x in list_groundConsideredMutant_covtests])), "mutants fullfiling testcover treshhold",str(covTestThresh),"(Expected >= "+str(minMutNum)+")"])
+        list_candidateMutantsFiles = []
+        for th_id, mcd in enumerate(list_groundConsideredMutant_covtests):
+            candidateMutantsFile = os.path.join(cacheDir, "candidateMutants_"+str(th_id)+".list")
+            list_candidateMutantsFiles.append(candidateMutantsFile)
+            with open(candidateMutantsFile, "w") as f:
+                for mid in mcd.keys():
+                    f.write(str(mid)+"\n")
+    #---------------------------------------------------
+
     semuOutputsTop = os.path.join(cacheDir, "semu_outputs")
     if not os.path.isdir(semuOutputsTop):
         os.mkdir(semuOutputsTop)
@@ -1538,6 +1543,7 @@ def main():
             mfi_ktests_dir = os.path.join(this_Out, "mfirun_ktests_dir")
             mfi_execution_output = os.path.join(this_Out, "mfirun_output")
             if COMPUTE_TASK in toExecute: 
+                print "# Compute task Procesing for test size", ts_size, "..."
                 if not os.path.isdir(this_Out):
                     os.mkdir(this_Out)
                 if os.path.isdir(mfi_execution_output):

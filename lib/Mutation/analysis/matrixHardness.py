@@ -98,20 +98,22 @@ def TestsKilling(mutant, dataAll, X_index_string=SM_index_string):
     return list(tests)
 #~ def TestsKilling()
 
-def getKillableMutants(matrixFile):
+def getKillableMutants(matrixFile, testset=None):
     M = loadMatrix(matrixFile, None, SM_index_string)
+    basetests = testset if testset is not None else set(M[SM_index_string])
     killablesMuts = []
     for mid in  set(M) - {SM_index_string}:
-        if len(TestsKilling(mid, M)) > 0:
+        if len(basetests & set(TestsKilling(mid, M))) > 0:
             killablesMuts.append(mid)
     return killablesMuts
 #~ def getKillableMutants()
 
-def getUnKillableMutants(matrixFile):
+def getUnKillableMutants(matrixFile, testset=None):
     M = loadMatrix(matrixFile, None, SM_index_string)
+    basetests = testset if testset is not None else set(M[SM_index_string])
     unkillablesMuts = []
     for mid in  set(M) - {SM_index_string}:
-        if len(TestsKilling(mid, M)) == 0:
+        if len(basetests & set(TestsKilling(mid, M))) == 0:
             unkillablesMuts.append(mid)
     return unkillablesMuts
 #~ def getUnKillableMutants()

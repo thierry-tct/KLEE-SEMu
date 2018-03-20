@@ -4662,11 +4662,13 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             ref<Expr> insdiff = origSuffConstr.at(mSisState);
             // TODO: improve this so the test constraint is smaller: remove condition for variable
             // that are not of the output (not returned nor printed)
-            for (auto &expr: inStateDiffExp) 
+            /* //TODO: Should this be included? in introduce error in some test generation (during solving)
+              for (auto &expr: inStateDiffExp) 
               insdiff = AndExpr::create(insdiff, expr);
+              */
             size_t clen = mState->constraints.size();
             mState->addConstraint (insdiff); //TODO TODO
-            interpreterHandler->processTestCase(*mState, "", std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
+            interpreterHandler->processTestCase(*mState, nullptr, nullptr); //std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
             ks_writeMutantTestsInfos(mState->ks_mutantID, gentestid++); //Write info needed to know which test for which mutant 
             if (mState->constraints.size() > clen) {
               mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
