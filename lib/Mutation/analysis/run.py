@@ -1193,8 +1193,8 @@ def getPathLengthsMinMaxOfKLeeTests(kleeteststopdir, errmsg):
     kleetestsdir = os.path.join(kleeteststopdir, KLEE_TESTGEN_SCRIPT_TESTS+"-out/klee-out-0")
     assert os.path.isdir(kleetestsdir), "kleetestsdir not existing: "+kleetestsdir
 
-    pathfiles = glob.glob(os.path.join(kleetestsdir, "*.path"))
-    pathfiles = [v for v in pathfiles if not v.endswith(".sym.path")] #Only consider path files, not .sym.path files
+    pathfiles = glob.glob(os.path.join(kleetestsdir, "*.sym.path"))
+    #pathfiles = [v for v in pathfiles if not v.endswith(".sym.path")] #Only consider path files, not .sym.path files
     assert len(pathfiles) > 0, "No path files in klee out folder: "+kleetestsdir+". \n"+errmsg
     plen = []
     for p in pathfiles:
