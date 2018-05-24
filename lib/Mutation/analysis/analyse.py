@@ -375,7 +375,7 @@ RAND_REP = 100
     We use the parameter 'filterSemuNotInGround' to discard the mutants
     of semu not in groundtruth, in order to have fair analysis
 '''
-def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None, filterSemuNotInGround=True):
+def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None, fdupesDuplicatesFile=None, filterSemuNotInGround=True):
     semuData_all_l = [loadJson(os.path.join(jsonsdir, semu_json))['Hardness'] for semu_json in SEMU_JSONs]
     classicData_all_l = [loadJson(os.path.join(jsonsdir, classic_json))['Hardness'] for classic_json in CLASSIC_JSONs]
     groundtruthData_all_l = [loadJson(os.path.join(jsonsdir, ground_json))['Hardness'] for ground_json in GROUNDTRUTH_JSONs]
@@ -427,9 +427,17 @@ def libMain(jsonsdir, mutantListForRandom=None, mutantInfoFile=None, filterSemuN
         groundtruthSelSize = [groundtruthSelSize]
         groundtruthNHard = [groundtruthNHard]
 
+        assert mutantInfoFile is None or mutantListForRandom is None, "Must not specify mutant Infofile and list from random at the same time"
+
         mutsShuffled = None
         if mutantInfoFile is not None:
             mutsShuffled = [int(m) for m in loadJson(mutantInfoFile).keys()]
+            if fdupesDuplicatesFile is not None:
+                mutsShuffled = set(mutsShuffled)
+                fd_obj = loadJson(fdupesDuplicatesFile)
+                for remain in fd_obj:
+                    mutsShuffled -= set(fd_obj[remain])
+                mutsShuffled = list(mutsShuffled)
         if mutantListForRandom is not None:
             mutsShuffled = list(mutantListForRandom)
         if mutsShuffled is not None:
@@ -463,6 +471,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("jsonsdir", help="directory Containing both Json files")
     parser.add_argument("--mutantsinfofile", type=str, default=None, help="Pass the mutant info fie so that random selection can be executed")
+    parser.add_argument("--fdupesduplicatesfile", type=str, default=None, help="Pass the file containing duplucates infos from fdupes (useful when mutantsinfofile is passed)")
     parser.add_argument("--mutantlistforrandom", type=str, default=None, help="Pass the candidate mutants list so that random selection can be executed")
     args = parser.parse_args()
     
@@ -474,7 +483,9 @@ def main():
                 if len(midstr.strip()) > 0:
                     candMutsList.append(int(midstr.strip()))
 
-    libMain(args.jsonsdir, mutantListForRandom=candMutsList, mutantInfoFile=args.mutantsinfofile)
+    assert candMutsList is None or args.mutantsinfofile is None, "Must not specify mutant Infofile and list from random at the same time"
+
+    libMain(args.jsonsdir, mutantListForRandom=candMutsList, mutantInfoFile=args.mutantsinfofile, fdupesDuplicatesFile=args.fdupesduplicatesfile)
 #~ main()
 
 if __name__ == "__main__":

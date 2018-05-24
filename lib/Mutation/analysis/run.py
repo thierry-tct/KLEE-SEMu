@@ -36,6 +36,7 @@ SEMU_CONCOLIC_WRAPPER = "wrapper-call-semu-concolic.in"
 ZESTI_CONCOLIC_WRAPPER = "wrapper-call-zesti-concolic.in"
 MY_SCANF = None
 mutantInfoFile = "mutantsInfos.json"
+fdupesDuplicatesFile = "fdupes_duplicates.json"
 
 KLEE_TESTGEN_SCRIPT_TESTS = "MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh"
 
@@ -1153,10 +1154,16 @@ def prependRootTest2Dir (rootdir, test2dir):
     >> indir = "inputs/"
     >> run.mutantsOfFunctions(indir+"/candidateFunctions.json", indir+"/mutantsdata/mutantsInfos.json", create=True)
 '''
-def mutantsOfFunctions (candidateFunctionsJson, mutinfo, create=False):
+def mutantsOfFunctions (candidateFunctionsJson, mutinfo, fdupes_dupfile, create=False):
     assert os.path.isfile(mutinfo), "mutant info file do not exist: "+mutinfo
     # load mutants info and get the list of mutants per function
     mInf = loadJson(mutinfo)
+    if fdupes_dupfile is not None:
+        fdupesObj = loadJson(fdupes_dupfile)
+        # remove fdupes dups from mut info
+        for remain_m in fdupesObj:
+            for todel_m in fdupesObj[remain_m]:
+                del mInf[todel_m]
     mutbyfunc = {}
     for mid in mInf:
         if mInf[mid]["FuncName"] not in mutbyfunc:
@@ -1443,7 +1450,7 @@ def main():
     groundConsideredMutant_covtests = None
     list_groundConsideredMutant_covtests = []
     if matrix is not None:
-        groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, os.path.join(martOut, mutantInfoFile), testTresh_str = covTestThresh)
+        groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, os.path.join(martOut, mutantInfoFile), os.path.join(martOut, fdupesDuplicatesFile), testTresh_str = covTestThresh)
 
         if executionMode == FilterHardToKill:
             ground_KilledMutants = set(matrixHardness.getKillableMutants(matrix)) 
@@ -1459,7 +1466,7 @@ def main():
         print "# Number of Mutants after coverage filtering:", len(groundConsideredMutant_covtests)
         
         # consider the specified functions
-        afterFuncFilter_byfunc = mutantsOfFunctions (candidateFunctionsJson, os.path.join(martOut, mutantInfoFile), create=False)
+        afterFuncFilter_byfunc = mutantsOfFunctions (candidateFunctionsJson, os.path.join(martOut, mutantInfoFile), os.path.join(martOut, fdupesDuplicatesFile), create=False)
         # make considered mutants and afterFuncFilter_byfunc be in sync
         gCM_c_set = set(groundConsideredMutant_covtests)
         intersect_ga = set()

@@ -130,7 +130,7 @@ def getUnKillableMutants(matrixFile, testset=None):
     Return a map of mutant and covering tests for mutants having more than thresh tests covering
     Do not return the mutants with number of covering tests cases less than threshold
 '''
-def getCoveredMutants(covMatFile, mutantInfo, testTresh_str='1'):
+def getCoveredMutants(covMatFile, mutantInfo, fdupes_dup, testTresh_str='1'):
     M = loadMatrix(covMatFile, None, COVM_index_string)
     nTests = len(M[COVM_index_string])
     if testTresh_str[-1] == '%':
@@ -147,10 +147,16 @@ def getCoveredMutants(covMatFile, mutantInfo, testTresh_str='1'):
             covMuts[mid] = tccov
     if testTresh == 0:  # even non covered mutants are considered
         mInfObj = loadJson(mutantInfo)
+        if fdupes_dup is not None:
+            fdupesObj = loadJson(fdupes_dup)
+            # remove fdupes dups from mut info
+            for remain_m in fdupesObj:
+                for todel_m in fdupesObj[remain_m]:
+                    del mInfObj[todel_m]
         for mid in set([int(m) for m in mInfObj.keys()]) - mutsincovmatrix:
             covMuts[mid] = []
     return covMuts
-#~ def getKillableMutants()
+#~ def getCoveredMutants()
 
 def computeHardness(matrixdata, mutantCovDict):
     outData = {'Relative-Equivalent': [], 'Hardness': {}}
