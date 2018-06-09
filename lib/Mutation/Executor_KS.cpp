@@ -4699,7 +4699,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             interpreterHandler->processTestCase(*mState, nullptr, nullptr); //std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
             ks_writeMutantTestsInfos(mState->ks_mutantID, gentestid++); //Write info needed to know which test for which mutant 
             if (mState->constraints.size() > clen) {
-              assert (mState->constraints.size() = clen + 1 && "Expect only one more contraint here, the just added one");
+              assert (mState->constraints.size() == clen + 1 && "Expect only one more contraint here, the just added one");
               mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
             } 
             //return true;
