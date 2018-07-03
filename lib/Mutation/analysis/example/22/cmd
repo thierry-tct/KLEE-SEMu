@@ -14,30 +14,24 @@ error_exit()
 intopdir=`readlink -f $(dirname $0)`/'inputs'
 outtopdir=`readlink -f $(dirname $0)`
 
-#Config DIR
+#TODO: Change here ######################################
+#Config DIR 
 configdir='/media/thierry/0630b405-f70d-48dc-ba06-3f3b6af08b44/home/shadowvm/shadow/tmpTCT/TMP-Corebench/workspace/metactrl/22/'
 configfile='22conf-script.conf'
+##########################################################
 
-if [ $# = 1 ]; then
-    [ "$1" = "onHPC" ] || error_exit "the only accepted argument is onHPC to skip zesti"
+if [ $# = 2 ]; then
+    [ "$2" = "onHPC" ] || error_exit "the only accepted argument is onHPC to skip zesti"
     configdir=$intopdir/'hpcConfigDir'
     configfile=`ls $configdir | grep 'conf-script.conf'`        # assume only on
     [ `echo $configfile | tr ' ' '\n' | wc -l` -eq 1 ] || error_exit "HPC config file not found or more than 1 found"
     SKIP_TASKS=`echo ${SKIP_TASKS:-} | sed '1iZESTI_DEV_TASK' | sort -u | xargs`
-elif [ $# != 0 ]; then
-    error_exit "expected one or no argument"
+elif [ $# != 1 ]; then
+    error_exit "expected two or one argument: <runConfig> <onHPC>?"
 fi
 
-# SEMU and ZESTI dir
-semudir='/media/thierry/TestMutants/KLEE-MART/klee-semu/build/bin/'
-[ "${SEMU_BINARY_DIR:-}" = "" ] || semudir=$SEMU_BINARY_DIR
-test -d  $semudir || error_exit "SEMU dir not existing: $semudir"
-ScriptDir=`readlink -f $semudir/../../src/lib/Mutation/analysis/`
-test -d  $ScriptDir || error_exit "Script dir not existing: $ScriptDir"
-
-# Assuming that klee zesti is already on the path
-zestidir=$(dirname `which klee`)
-PATH=$PATH:$semudir
+runConfigurationFile=$(readlink -f $1)
+test -f $runConfigurationFile || error_exit "missing run configuration file: $runConfigurationFile"
 
 test -d $intopdir || { echo "intopdir not existing: $intopdir"; exit 1; }
 
@@ -53,8 +47,21 @@ fi
 
 #echo $skipargs
 cd $configdir || { echo "Couldn't find config dir"; exit 1; }
-. $configfile
+. $configfile || error_exit "Failed to source MFI config $configfile"
 cd - > /dev/null
+
+cd $(dirname $runConfigurationFile) || error_exit "cannot enter runConfigurationFile's directory"
+. $(basename $runConfigurationFile) || error_exit "Failed to source $runConfigurationFile"
+cd - > /dev/null
+
+# SEMU and ZESTI dir
+semudir="$SEMU_CFG_SEMU_EXE_DIR"
+test -d  $semudir || error_exit "SEMU dir not existing: $semudir"
+ScriptDir=`readlink -f $semudir/../../src/lib/Mutation/analysis/`
+test -d  $ScriptDir || error_exit "Script dir not existing: $ScriptDir"
+
+zestidir="$SEMU_CFG_ZESTI_EXE_DIR"
+PATH=$PATH:$semudir
 
 printf "\n>> CMD calling run.py\n\n"
 
@@ -66,11 +73,13 @@ python $ScriptDir/run.py $outtopdir $skipargs \
 --matrix $intopdir/matrices/SM.dat \
 --coverage $intopdir/matrices/MCOV.dat \
 --zesti_exe_dir $zestidir \
---covTestThresh 20 \
---testSampleMode 'DEV' \
---testSamplePercent 10 \
---semutimeout 86400 \
---semumaxmemory 16000 \
---semupreconditionlength 2 \
---semumutantmaxfork 2 \
+--llvmgcc_exe_dir $SEMU_CFG_LLVMGCC_EXE_DIR \
+--llvm27_exe_dir $SEMU_CFG_LLVM27_EXE_DIR \
+--covTestThresh $SEMU_CFG_COVERAGE_THERSHOLD \
+--testSampleMode $SEMU_CFG_TEST_SAMPLE_MODE \
+--testSamplePercent $SEMU_CFG_TEST_SAMPLE_PERCENTAGE \
+--semutimeout $SEMU_CFG_SEMU_TIMEOUT \
+--semumaxmemory $SEMU_CFG_SEMU_MAXMEMORY \
+--semupreconditionlength $SEMU_CFG_SEMU_PRECONDITION_LENGTH \
+--semumutantmaxfork $SEMU_CFG_SEMU_MUTANT_MAX_FORK \
 
