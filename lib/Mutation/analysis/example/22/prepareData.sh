@@ -53,3 +53,4 @@ done
 mkdir -p $projOut/inputs/hpcConfigDir/repos/$MFI_ID/src || error_exit "failed to make repos src"
 touch $projOut/inputs/hpcConfigDir/repos/$MFI_ID/src/$MFI_PROGRAM || error_exit "failed to touch $MFI_PROGRAM"
 
+echo "Done with $MFI_ID!"
