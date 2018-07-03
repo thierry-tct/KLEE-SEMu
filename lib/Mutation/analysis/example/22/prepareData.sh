@@ -14,7 +14,9 @@ destTopDir=$(readlink -f $2)
 zest=1
 
 # load conf
+cd $(dirname $confscript)
 . $confscript
+cd -
 
 inmutsodldir=$(dirname $confscript)/$MFI_ID-output/mutants/$MFI_PROGRAM/mutation_SODL.txt
 indatadir=$(dirname $confscript)/$MFI_ID-output/data
@@ -24,7 +26,8 @@ then
     # COMPILE Project with llvm-2.7 and save with Zesti
     echo "Building fo Zesti BC ..."
     export LLVM_COMPILER='llvm-gcc'
-    export LLVM_COMPILER_PATH='/home/shadowvm/shadow/kleeDeploy/llvm-2.9/Release+Asserts/bin' # CHANGE This
+    export LLVM_COMPILER_PATH='/home/shadowvm/shadow/kleeDeploy/llvm-2.9/Release+Asserts/bin' # CHANGE This XXX
+    export PATH=$PATH:'/home/shadowvm/shadow/kleeDeploy/llvm-gcc4.2-2.9-x86_64-linux/bin' # CHANGE This XXX
     $MFI_BUILDSCRIPT "wllvm" "" build || error_exit "Build failed with wllvl llvm2.7"
     cd $MFI_EXEDIR && extract-bc $MFI_PROGRAM || error_exit "Failed extract bc"
     cp $MFI_PROGRAM.bc $inmutsodldir/$MFI_PROGRAM.Zesti.bc || error_exit "copy bc failed"
@@ -41,7 +44,7 @@ cp -rf $indatadir/matrices $projOut/inputs/ || error_exit "Failed to copy matric
 cp -rf $indatadir/genktests $projOut/inputs/ || error_exit "Failed to copy genktests"
 cp -rf $inmutsodldir $projOut/inputs/mutantsdata || error_exit "Failed to copy mutantsdata"
 
-for file in $MFI_ID"_build.sh"  $MFI_ID"_conf-script.conf"  $MFI_ID"_expr-bugfix.patch" $MFI_ID"_klee-args-template.args"  $MFI_ID"_runtests.sh"  $MFI_ID"_srclist.txt"  $MFI_ID"_testscases.txt"
+for file in $MFI_ID"_build.sh"  $MFI_ID"_conf-script.conf" $MFI_ID"_klee-args-template.args"  $MFI_ID"_runtests.sh"  $MFI_ID"_srclist.txt"  $MFI_ID"_testscases.txt"
 do
     cp $(dirname $confscript)/$file $projOut/inputs/hpcConfigDir/ || error_exit "Failed to copy $file"
 done
