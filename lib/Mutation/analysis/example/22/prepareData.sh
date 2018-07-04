@@ -1,5 +1,7 @@
-
 #! /bin/bash
+# USAGE example: 
+# bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/prepareData.sh ../workspace/metactrl/chroot/chroot_conf-script.conf .
+
 set -u
 
 error_exit()
