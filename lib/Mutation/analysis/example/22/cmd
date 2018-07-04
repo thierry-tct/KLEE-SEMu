@@ -56,9 +56,10 @@ cd - > /dev/null
 
 # SEMU and ZESTI dir
 semudir="$SEMU_CFG_SEMU_EXE_DIR"
-test -d  $semudir || error_exit "SEMU dir not existing: $semudir"
-ScriptDir=`readlink -f $semudir/../../src/lib/Mutation/analysis/`
-test -d  $ScriptDir || error_exit "Script dir not existing: $ScriptDir"
+test -d  "$semudir" || error_exit "SEMU dir not existing: '$semudir'"
+ScriptDir=`readlink -f $semudir/../../src/lib/Mutation/analysis/` || \
+    ScriptDir=`readlink -f $semudir/../../../src/lib/Mutation/analysis/`
+test -d  "$ScriptDir" || error_exit "Script dir not existing: '$ScriptDir'"
 
 zestidir="$SEMU_CFG_ZESTI_EXE_DIR"
 PATH=$PATH:$semudir

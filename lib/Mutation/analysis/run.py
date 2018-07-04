@@ -1284,6 +1284,8 @@ def main():
     candidateFunctionsJson = args.candidateFunctionsJson
     klee_tests_topdir = args.klee_tests_topdir
     zesti_exe_dir = args.zesti_exe_dir
+    llvm27_exe_dir = args.llvm27_exe_dir
+    llvmgcc_exe_dir = args.llvmgcc_exe_dir
     semu_exe_dir = args.semu_exe_dir
 
     # get abs path in case not
