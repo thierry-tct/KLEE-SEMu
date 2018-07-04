@@ -116,7 +116,7 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
 
     # Verify that Zesti is accessible
     zextmp = "klee"
-    if zestiexedir is None:
+    if zestiexedir is not None:
        zextmp = os.path.join(zestiexedir, zextmp)
     if os.system(zextmp+" --help | grep zest > /dev/null") != 0:
         error_exit ("The available klee do not have Zesti: "+zextmp)
