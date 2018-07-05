@@ -165,7 +165,6 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
     testrunlog = " > /dev/null" #+" 2>&1"
     nKleeOut = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
     assert nKleeOut == 0, "Must be no klee out in the begining"
-    kleelast_filepath = os.path.join(outpdir, "klee-last")
     for tc in unwrapped_testlist:
         # Run Semu with tests (wrapper is installed)
         print "# Running Tests", tc, "..."
@@ -177,9 +176,11 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
             error_exit ("Test execution failed for test case '"+tc+"', retCode was: "+str(retCode))
         assert nNew > nKleeOut, "Test was not run: "+tc
 
-        # Premissions on changing klee-last
-        if os.system(" ".join(["sudo chmod 777", kleelast_filepath])) != 0:
-            error_exit ("Failed to give all access rights to klee-last")
+        # Premissions on changing output klee stuffs
+        os.chmod(outpdir, 0o777)
+        #for kfile in glob.iglob(outpdir+"/klee-*"):
+        #    os.chmod(kfile, 0o777)
+
         for devtid, kleetid in enumerate(range(nKleeOut, nNew)):
             kleeoutdir = os.path.join(outpdir, 'klee-out-'+str(kleetid))
             # Check that the kleeoutdir has right ownership, otherwise set
