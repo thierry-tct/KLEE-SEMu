@@ -175,6 +175,10 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
         assert nNew > nKleeOut, "Test was not run: "+tc
         for devtid, kleetid in enumerate(range(nKleeOut, nNew)):
             kleeoutdir = os.path.join(outpdir, 'klee-out-'+str(kleetid))
+            # Remove everything from kleeoutdir, but the ktest
+            for fname in glob.iglob(kleeoutdir+'/*'):
+                if not fname.endswith('.ktest'):
+                    os.remove(fname)
             wrapTestName = os.path.join(tc.replace('/', '_') + "-out", "Dev-out-"+str(devtid), "devtest.ktest")
 
             test2outdirMap[wrapTestName] = kleeoutdir
@@ -273,7 +277,8 @@ def parseZestiKtest(filename):
             if len(indexes_ia) > 0: # filename in args, the corresponding position in datalist is indexes_ia
                 # in case the same name appears many times in args, let the user manually verify
                 if len(indexes_ia) != 1:
-                    print "\n>> CONFLICT: the file object at position ",ind,"with name",name,"in ktest",filename,"appears several times in args. please choose its positions (",indexes_ia,"):"
+                    print "\n>> CONFLICT: the file object at position ",ind,"with name",name,"in ktest",filename,"appears several times in args (Check OUTPUT/caches/test2zestidirMap.json for actual test)."
+                    print "\n>> Please choose its positions (",indexes_ia,"):"
                     raw = raw_input()
                     indinargs = [int(v) for v in raw.split()]
                     assert len(set(indinargs) - set(indexes_ia)) == 0, "input wrond indexes. do not consider program name"
