@@ -192,7 +192,7 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
                 if not (fname.endswith('.ktest') or os.path.basename(fname) == STDIN_KTEST_DATA_FILE):
                     os.remove(fname)
             wrapTestName = os.path.join(tc.replace('/', '_') + "-out", "Dev-out-"+str(devtid), "devtest.ktest")
-            assert len(glob.glob(kleeoutdir+'/*.ktests')) > 0, "No ktest was generated for "+wrapTestName+". ZEST CMD: "+zestCmd
+            assert len(glob.glob(kleeoutdir+'/*.ktest')) > 0, "No ktest was generated for "+wrapTestName+". ZEST CMD: "+zestCmd
 
             test2outdirMap[wrapTestName] = kleeoutdir
         # update
