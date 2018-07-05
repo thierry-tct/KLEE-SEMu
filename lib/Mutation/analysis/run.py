@@ -43,6 +43,8 @@ KLEE_TESTGEN_SCRIPT_TESTS = "MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh"
 FilterHardToKill = "FilterHardToKill"
 GenTestsToKill = "GenTestsToKill"
 
+STDIN_KTEST_DATA_FILE = "stdin-ktest-data"
+
 def error_exit(errstr):
     print "\nERROR: "+errstr+'\n'
     assert False
@@ -181,7 +183,7 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
                     error_exit ("Failed to set ownership of kleeoutdir of roottest")
             # Remove everything from kleeoutdir, but the ktest
             for fname in glob.iglob(kleeoutdir+'/*'):
-                if not fname.endswith('.ktest'):
+                if not (fname.endswith('.ktest') or os.path.basename(fname) == STDIN_KTEST_DATA_FILE):
                     os.remove(fname)
             wrapTestName = os.path.join(tc.replace('/', '_') + "-out", "Dev-out-"+str(devtid), "devtest.ktest")
 
@@ -328,9 +330,9 @@ def parseZestiKtest(filename):
             datalist.append(stdin)
         else:
             afterLastFilenstatObj = max(filesNstatsIndex) + 1 if len(filesNstatsIndex) > 0 else (len(b.objects) - 1) # -1 for model_version
-            # shadow-zesti ay have problem with stdin, use our hack on wrappe to capture that
-            stdin_file = os.path.join(os.path.dirname(filename), "stdin-ktest-data")
-            assert os.path.isfile(stdin_file), "The stdin exported in wrapper is missing of test: "+filename
+            # shadow-zesti have problem with stdin, use our hack on wrapper to capture that
+            stdin_file = os.path.join(os.path.dirname(filename), STDIN_KTEST_DATA_FILE)
+            assert os.path.isfile(stdin_file), "The stdin exported in wrapper is missing for test: "+filename
             with open(stdin_file) as f:
                 sidat = f.read()
                 if len(sidat) > 0:
