@@ -19,11 +19,11 @@ tmpstdindata="IN_TOOL_DIR/stdin-ktest-data"
 if [ -t 0 ] # check if stdin do not exist 
 then
     (ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1)
-    touch $tmpstdindata
+    /usr/bin/touch $tmpstdindata
 else
 #/usr/bin/tee >(ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1) >(cat - > $tmpstdindata || EXIT_CODE=1) 
-(cat - > $tmpstdindata ) || EXIT_CODE=1
-(cat $tmpstdindata | ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" | /usr/bin/tee $semuout 2>&1); EXIT_CODE=$?
+(/bin/cat - > $tmpstdindata ) || EXIT_CODE=1
+(/bin/cat $tmpstdindata | ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" | /usr/bin/tee $semuout 2>&1); EXIT_CODE=$?
 fi
 
 # Symbolic
@@ -37,8 +37,7 @@ fi
 #/bin/sleep 1 # XXX removing this makes exit with 256, why(FIXME)
 
 # after  zesti finished and updated klee-last
-mv $tmpstdindata $stdindata || EXIT_CODE=2 
-
+/bin/mv $tmpstdindata $stdindata || EXIT_CODE=2 
 
 # Provoke "unbound variable" if KLEE fails
 # Preserve the KLEE exit code
