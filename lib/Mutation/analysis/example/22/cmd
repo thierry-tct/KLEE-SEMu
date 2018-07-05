@@ -50,6 +50,9 @@ cd $configdir || { echo "Couldn't find config dir"; exit 1; }
 . $configfile || error_exit "Failed to source MFI config $configfile"
 cd - > /dev/null
 
+# Useful for tests having skip ... where we want to not skip in replay mode..
+export EKLEEPSE_REPLAY_TOOL=$MFI_PROGRAM
+
 cd $(dirname $runConfigurationFile) || error_exit "cannot enter runConfigurationFile's directory"
 . $(basename $runConfigurationFile) || error_exit "Failed to source $runConfigurationFile"
 cd - > /dev/null
