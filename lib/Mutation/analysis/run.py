@@ -175,6 +175,10 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
         assert nNew > nKleeOut, "Test was not run: "+tc
         for devtid, kleetid in enumerate(range(nKleeOut, nNew)):
             kleeoutdir = os.path.join(outpdir, 'klee-out-'+str(kleetid))
+            # Check that the kleeoutdir has right ownership, otherwise set
+            if os.stat(kleeoutdir).st_uid != os.geteuid():
+                if os.system(" ".join(["sudo chown -R --reference", outpdir, kleeoutdir])) != 0:
+                    error_exit ("Failed to set ownership of kleeoutdir of roottest")
             # Remove everything from kleeoutdir, but the ktest
             for fname in glob.iglob(kleeoutdir+'/*'):
                 if not fname.endswith('.ktest'):
