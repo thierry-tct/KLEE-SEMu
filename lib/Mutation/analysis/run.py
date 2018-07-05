@@ -165,6 +165,7 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
     testrunlog = " > /dev/null" #+" 2>&1"
     nKleeOut = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
     assert nKleeOut == 0, "Must be no klee out in the begining"
+    kleelast_filepath = os.path.join(outpdir, "klee-last")
     for tc in unwrapped_testlist:
         # Run Semu with tests (wrapper is installed)
         print "# Running Tests", tc, "..."
@@ -175,6 +176,10 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
             print ">> command: "+ zestCmd
             error_exit ("Test execution failed for test case '"+tc+"', retCode was: "+str(retCode))
         assert nNew > nKleeOut, "Test was not run: "+tc
+
+        # Premissions on changing klee-last
+        if os.system(" ".join(["sudo chmod 777", kleelast_filepath])) != 0:
+            error_exit ("Failed to give all access rights to klee-last")
         for devtid, kleetid in enumerate(range(nKleeOut, nNew)):
             kleeoutdir = os.path.join(outpdir, 'klee-out-'+str(kleetid))
             # Check that the kleeoutdir has right ownership, otherwise set
@@ -284,7 +289,7 @@ def parseZestiKtest(filename):
                 # in case the same name appears many times in args, let the user manually verify
                 if len(indexes_ia) != 1:
                     print "\n>> CONFLICT: the file object at position ",ind,"with name",name,"in ktest",filename,"appears several times in args (Check OUTPUT/caches/test2zestidirMap.json for actual test)."
-                    print "\n>> Please choose its positions (",indexes_ia,"):"
+                    print "    >> Please choose its position(s), (",indexes_ia,"):"
                     raw = raw_input()
                     indinargs = [int(v) for v in raw.split()]
                     assert len(set(indinargs) - set(indexes_ia)) == 0, "input wrond indexes. do not consider program name"
