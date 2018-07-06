@@ -155,7 +155,10 @@ def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, vert
             res.append(v / refvals[i] if v>0 else 0)
         return res
 
+    # Decide wheter the plot take the whole graph
     fullPlot = True
+
+    outDFObj = {}
 
     #plt.style.use('ggplot')
     plt.style.use('seaborn-whitegrid')
@@ -170,24 +173,32 @@ def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, vert
         ysemu = makeFull(semuPair[1][si], refPair[1][0]) if fullPlot else semuPair[1][si]
         plt.plot(semuPair[0][si], ysemu, '-', color=cval , linewidth=3.0, alpha=0.6, label=label)
         plt.fill_between(semuPair[0][si], 0, ysemu, facecolor=cval, alpha=0.05)
+        # Save data
+        outDFObj[label] = {'X':semuPair[0][si], 'Y':ysemu}
         # Vertical line
         if vertline is not None:
             plt.axvline(x=vertline['semu'], linewidth=1, color=cval, linestyle='--')
+            outDFObj[label]['vertline'] = vertline['semu']
     for ci in range(len(classPair[0])):
         cval = getColor(colors)
         label = os.path.splitext(CLASSIC_JSONs[ci])[0].replace('classic', 'Test-Cases')
         yclassic = makeFull(classPair[1][ci], refPair[1][0]) if fullPlot else classPair[1][ci]
         plt.plot(classPair[0][ci], yclassic, '-.', color=cval, linewidth=3.0, alpha=0.6, label=label)
         plt.fill_between(classPair[0][ci], 0, yclassic, facecolor=cval, alpha=0.05)
+        # Save data
+        outDFObj[label] = {'X':classPair[0][ci], 'Y':yclassic}
         # Vertivcal line
         if vertline is not None:
             plt.axvline(x=vertline['classic'], linewidth=1, color=cval, linestyle='--')
+            outDFObj[label]['vertline'] = vertline['classic']
     if randPair[0] is not None and randPair[1] is not None:
         assert len(randPair[0]) == 1
         for ri in range(len(randPair[0])):
             cval = getColor(colors)
             plt.plot(randPair[0][ri], randPair[1][ri], ':', color=cval, linewidth=3.0, alpha=0.6, label='random')
             plt.fill_between(randPair[0][ri], 0, randPair[1][ri], facecolor=cval, alpha=0.05)
+            # Save data
+            outDFObj['random'] = {'X':randPair[0][ri], 'Y':randPair[1][ri]}
 
     if not fullPlot:
         assert len(refPair[0]) == 1
@@ -214,6 +225,7 @@ def plot4 (semuPair, classPair, randPair, refPair, title, figfilename=None, vert
     if figfilename is not None:
         plt.savefig(figfilename+".pdf", format='pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
         plt.savefig(figfilename+".png", bbox_extra_artists=(lgd,), bbox_inches='tight')
+        dumpJson(outDFObj, figfilename+'.json')
     else:
         plt.show()
 
@@ -253,7 +265,7 @@ def computePoints(subjObj, refObj, refHardness=None, tieRandom=False, percentage
         refMutsOrdered += list(refObj[rscore])
 
     if refHardness is not None:
-        assert type(refHardness) == list, "must be list, wll have x at pos 0, y at pos 1"
+        assert type(refHardness) == list, "must be list, will have x at pos 0, y at pos 1"
         refHardness.append(range(1, len(refMutsOrdered) + 1))
         refHardness.append([])
         for rscore in sorted(refObj, reverse=True, key=lambda x: float(x)):

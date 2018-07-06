@@ -35,6 +35,13 @@ test -f $runConfigurationFile || error_exit "missing run configuration file: $ru
 
 test -d $intopdir || { echo "intopdir not existing: $intopdir"; exit 1; }
 
+# extra Args, such as execution Mode: EXTRA_ARGS='--executionMode GenTestsToKill'
+extraargs=''
+if [ "${EXTRA_ARGS:-}" != "" ]
+then
+    extraargs="$EXTRA_ARGS"
+fi
+
 # Check if want to skip some task
 skipargs=""
 if [ "${SKIP_TASKS:-}" != "" ]
@@ -69,7 +76,7 @@ PATH=$PATH:$semudir
 
 printf "\n>> CMD calling run.py\n\n"
 
-python $ScriptDir/run.py $outtopdir $skipargs \
+python $ScriptDir/run.py $outtopdir $skipargs $extraargs \
 --exepath $(readlink -f $MFI_EXEDIR/$MFI_PROGRAM) \
 --runtest $MFI_RUNTESTSCRIPT \
 --testlist $MFI_TCSFILE \
