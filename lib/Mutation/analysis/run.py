@@ -1487,7 +1487,8 @@ def main():
             
         # keep only covered by treshold at least, and killed
         for mid in toremoveMuts:
-            del groundConsideredMutant_covtests[mid]
+            if mid in groundConsideredMutant_covtests:
+                del groundConsideredMutant_covtests[mid]
         print "# Number of Mutants after coverage filtering:", len(groundConsideredMutant_covtests)
         
         # consider the specified functions
