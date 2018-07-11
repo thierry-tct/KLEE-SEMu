@@ -1002,7 +1002,7 @@ def executeSemu (semuworkdir, semuOutDirs, testSample, test2semudirMap, metaMuta
     #        os.system(" ".join(["sed -i'' 's/argv_/arg/g; s/argv/arg0/g'", pathcondfile])) #DBG
     # use the collected preconditions and run semy in symbolic mode
 
-    filter_mutestgen = "" if exemode == FilterHardToKill else " -semu-tests-gen-per-mutant=5" #5 test per mutant
+    filter_mutestgen = "" if exemode == FilterHardToKill else " -semu-max-tests-gen-per-mutant="+str(tuning['EXTRA']['MaxTestsPerMutant']) # num of test per mutant
 
     runSemuCmds = []
     for thread_id in range(nThreads):
@@ -1289,6 +1289,7 @@ def main():
     parser.add_argument("--semupreconditionlength", type=str, default='2', help="Specify precondition length semu execution")
     parser.add_argument("--semumutantmaxfork", type=str, default='2', help="Specify hard checkpoint for mutants (or post condition checkpoint) as PC length, in semu execution")
     parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
+    parser.add_argument("--semumaxtestsgenpermutants", type=int, default=5, help="Specify the maximum number of tests to generate for each mutant in test generation mode")
     parser.add_argument("--nummaxparallel", type=int, default=1, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
     args = parser.parse_args()
 
@@ -1361,7 +1362,8 @@ def main():
         
     semuTuning = {
                     'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
-                    'SEMU':{"-semu-precondition-length":args_semupreconditionlength, "-semu-mutant-max-fork":args_semumutantmaxfork, "-semu-loop-break-delay":args.semuloopbreaktimeout }
+                    'SEMU':{"-semu-precondition-length":args_semupreconditionlength, "-semu-mutant-max-fork":args_semumutantmaxfork, "-semu-loop-break-delay":args.semuloopbreaktimeout},
+                    'EXTRA':{'MaxTestsPerMutant': args.semumaxtestsgenpermutants}
                  }
 
     # Create outdir if absent
