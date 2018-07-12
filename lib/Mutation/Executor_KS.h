@@ -558,6 +558,10 @@ private:
   bool ks_outputTestsCases;
   bool ks_outputStateDiffs;
 
+  //unsigned maxNumTestsPerMutants = 0;
+  // Set of mutants that reached the maximum number of generated tests per mutants
+  std::map<ExecutionState::KS_MutantIDType, unsigned> mutants2gentestsNum;
+
 #ifdef KS_Z3MAXSAT_SOLVER__H
   // Partial Max Sat Solver
   // Make this with cache

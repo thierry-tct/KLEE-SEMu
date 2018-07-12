@@ -147,9 +147,13 @@ cl::opt<unsigned> semuPreconditionLength("semu-precondition-length",
                                  cl::init(6), 
                                  cl::desc("Set number of conditions that will be taken from the test cases path conditions and used are precondition"));
 
-cl::opt<unsigned> semuNumTestGenPerMutant("semu-tests-gen-per-mutant", 
+cl::opt<unsigned> semuMaxTotalNumTestGen("semu-max-total-tests-gen", 
                                  cl::init(0), 
-                                 cl::desc("Set number of test generated to kill ech mutant. (== 0) means do not generate test, only get state difference. (> 0) means generate test, do not get state differences. default is 0"));
+                                 cl::desc("Set the maximum number of test generated to kill the mutants. (== 0) and semu-max-tests-gen-per-mutant=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
+
+cl::opt<unsigned> semuMaxNumTestGenPerMutant("semu-max-tests-gen-per-mutant", 
+                                 cl::init(0), 
+                                 cl::desc("Set the maximum number of test generated to kill each mutant. (== 0) and semu-max-total-tests-gen=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
 
 // Use shadow test case generation for mutants ()
 cl::opt<bool> semuShadowTestGeneration("semu-shadow-test-gen", 
@@ -451,8 +455,16 @@ const Module *Executor::setModule(llvm::Module *module,
   
   // @KLEE-SEMu
   ExecutionState::ks_setMode(semuShadowTestGeneration ? ExecutionState::KS_Mode::TESTGEN_MODE: ExecutionState::KS_Mode::SEMU_MODE);
-  ks_outputTestsCases = (semuNumTestGenPerMutant > 0);
+  ks_outputTestsCases = (semuMaxNumTestGenPerMutant > 0 || semuMaxTotalNumTestGen > 0);
   ks_outputStateDiffs = !ks_outputTestsCases;
+
+  // Handle case where only one of semuMaxTotalNumTestGen and semuMaxNumTestGenPerMutant is > 0
+  if (ks_outputTestsCases) {
+    if (semuMaxTotalNumTestGen == 0)
+      semuMaxTotalNumTestGen = (unsigned) -1;  // Very high value
+    else // semuMaxNumTestGenPerMutant == 0
+      semuMaxNumTestGenPerMutant = (unsigned) -1; // Very high value
+  }
 
   if (semuSetEntryFuncArgsSymbolic) {
     ks_entryFunction = module->getFunction(opts.EntryPoint);
@@ -4621,7 +4633,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
                                            std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly) {
   static const bool usethesolverfordiff = true;
 
-  static unsigned gentestid = 1;
+  static unsigned gentestid = 0;
   bool outputTestCases = ks_outputTestsCases; //false;
   bool doMaxSat = ks_outputStateDiffs; //true;
 
@@ -4672,7 +4684,17 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
   #ifdef ENABLE_KLEE_SEMU_DEBUG
           llvm::errs() << "<!=> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Different.\n\n";
   #endif
+          diffFound = true;
           if (outputTestCases && ExecutionState::ks_isCriticalDiff(sDiff)) {
+            // On test generation mode, if the mutant of mState reached maximum quota of tests, 
+            // stop comparing. 
+            // insert if not yet in map
+            auto irp_m = mutants2gentestsNum.insert(std::make_pair(mState->ks_mutantID, 0));
+            if (irp_m.first->second >= semuMaxNumTestGenPerMutant) {
+              // We reache the test gen quota for the mutant, do nothing
+              return diffFound;
+            }
+
             // generate test case of this difference.
             ref<Expr> insdiff = origpathPrefix;
             // TODO: improve this so the test constraint is smaller: remove condition for variable
@@ -4697,14 +4719,26 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             size_t clen = mState->constraints.size();
             mState->addConstraint (insdiff); //TODO TODO
             interpreterHandler->processTestCase(*mState, nullptr, nullptr); //std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
-            ks_writeMutantTestsInfos(mState->ks_mutantID, gentestid++); //Write info needed to know which test for which mutant 
+            ks_writeMutantTestsInfos(mState->ks_mutantID, ++gentestid); //Write info needed to know which test for which mutant 
             if (mState->constraints.size() > clen) {
               assert (mState->constraints.size() == clen + 1 && "Expect only one more contraint here, the just added one");
               mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
-            } 
+            }
+
+            // XXX: If reached maximum number ot tests, exit
+            if (gentestid >= semuMaxTotalNumTestGen) {
+              llvm::errs() << "\nSEMU@COMPLETED: Maximum number of generated tests reached. Done!\n";
+              exit(0);
+            }
+
+            // increment mutant test count 
+            irp_m.first->second += 1;
+            if (irp_m.first->second >= semuMaxNumTestGenPerMutant) {
+              // We reache the test gen quota for the mutant, do nothing
+              return diffFound;
+            }
             //return true;
           }
-          diffFound = true;
           if (doMaxSat) {
             ks_checkMaxSat(mState->constraints, mSisState, inStateDiffExp, mState->ks_mutantID, sDiff);
           }
