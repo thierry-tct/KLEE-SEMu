@@ -4716,14 +4716,18 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             }
             //llvm::errs() << "============================= end\n";
             /*  */
-            size_t clen = mState->constraints.size();
-            mState->addConstraint (insdiff); //TODO TODO
-            interpreterHandler->processTestCase(*mState, nullptr, nullptr); //std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
+            // XXX create a new mState just to output testcase and destroy after
+            ExecutionState *tmp_mState = new ExecutionState(*mState);
+            interpreterHandler->processTestCase(*tmp_mState, nullptr, nullptr); //std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
+            delete tmp_mState;
+            ////size_t clen = mState->constraints.size();
+            ////mState->addConstraint (insdiff); 
+            ////interpreterHandler->processTestCase(*mState, nullptr, nullptr); //std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
             ks_writeMutantTestsInfos(mState->ks_mutantID, ++gentestid); //Write info needed to know which test for which mutant 
-            if (mState->constraints.size() > clen) {
-              assert (mState->constraints.size() == clen + 1 && "Expect only one more contraint here, the just added one");
-              mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
-            }
+            ////if (mState->constraints.size() > clen) {
+            ////  assert (mState->constraints.size() == clen + 1 && "Expect only one more contraint here, the just added one");
+            ////  mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
+            ////}
 
             // XXX: If reached maximum number ot tests, exit
             if (gentestid >= semuMaxTotalNumTestGen) {
