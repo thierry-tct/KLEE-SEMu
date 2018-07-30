@@ -192,7 +192,10 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
                 if not (fname.endswith('.ktest') or os.path.basename(fname) == STDIN_KTEST_DATA_FILE):
                     os.remove(fname)
             wrapTestName = os.path.join(tc.replace('/', '_') + "-out", "Dev-out-"+str(devtid), "devtest.ktest")
-            assert len(glob.glob(kleeoutdir+'/*.ktest')) > 0, "No ktest was generated for "+wrapTestName+". ZEST CMD: "+zestCmd
+            if not len(glob.glob(kleeoutdir+'/*.ktest')) > 0:
+                print "## Did not find ktest in folder", kleeoutdir 
+                wait_creation = raw_input(". can you see it manually? [y/n]")
+            assert len(glob.glob(kleeoutdir+'/*.ktest')) > 0, "No ktest was generated for "+wrapTestName+". Folder is: "+kleeoutdir+". ZEST CMD: "+zestCmd
 
             test2outdirMap[wrapTestName] = kleeoutdir
         # update
@@ -287,16 +290,27 @@ def parseZestiKtest(filename):
         else:
             # File passed , In this case, there is: (1) an ARGV obj with data the filename, (2) an Obj with name the filename and data the file data, (3) an Obj for file stat (<filename>-stat) 
             indexes_ia = [i for i,x in enumerate(b.args[1:]) if x == name]
-            if len(indexes_ia) > 0: # filename in args, the corresponding position in datalist is indexes_ia
+            if len(indexes_ia) > 0 or name != "argv": # filename in args, the corresponding position in datalist is indexes_ia, or name is not argv but is containe. example "--file=in1" TODO
                 # in case the same name appears many times in args, let the user manually verify
-                if len(indexes_ia) != 1:
-                    print "\n>> CONFLICT: the file object at position ",ind,"with name",name,"in ktest",filename,"appears several times in args (Check OUTPUT/caches/test2zestidirMap.json for actual test)."
-                    print "    >> Please choose its position(s), (",indexes_ia,"):"
+                if len(indexes_ia) > 1:
+                    print "\n>> CONFLICT: the file object at position ",ind,"with name","'"+name+"'","in ktest",filename,"appears several times in args (Check OUTPUT/caches/test2zestidirMap.json for actual test)."
+                    print "    >> Please choose its space separated position(s), (",indexes_ia,"):"
                     raw = raw_input()
                     indinargs = [int(v) for v in raw.split()]
-                    assert len(set(indinargs) - set(indexes_ia)) == 0, "input wrond indexes. do not consider program name"
-                else:
+                    assert len(set(indinargs) - set(indexes_ia)) == 0, "input wrong indexes. do not consider program name"
+                elif len(indexes_ia) == 1:
                     indinargs = indexes_ia
+		else: # name != "argv"
+                    indexes_ia = [i for i,x in enumerate(b.args[1:]) if name in x]
+                    assert len(indexes_ia) > 0, "Must have at least one argv containing filename in its data"
+                    if len(indexes_ia) > 1:
+                        print "\n>> HINT NEEDED: the file object at position ",ind,"with name",name,"in ktest",filename,"has file with complex argv (Check OUTPUT/caches/test2zestidirMap.json for actual test)."
+                        print "    >> Please choose its space separated position(s), (",indexes_ia,"):"
+                        raw = raw_input()
+                        indinargs = [int(v) for v in raw.split()]
+                        assert len(set(indinargs) - set(indexes_ia)) == 0, "input wrong indexes. do not consider program name"
+                    else:
+                        indinargs = indexes_ia
 
                 for iv in indinargs:
                     datalist[iv] = ('ARGV', 1)  #XXX len is 1 because this will be the file name which is 1 char string in klee: 'A', 'B', ... ('A' + k | 0 <= k <= 255-'A')
@@ -316,7 +330,7 @@ def parseZestiKtest(filename):
             #elif name == "stdin-stat": #case of stdin
             #    stdin = ('STDIN', len(data)) #XXX 
             else: #ARGV
-                assert name == "argv", "not in args and not argv: "+filename
+                assert name == "argv", "name ("+name+") not in args and not argv: "+filename
                 datalist.append(('ARGV', len(data))) #XXX
 
     if len(filesNstatsIndex) > 0:
@@ -426,7 +440,17 @@ def getSymArgsFromZestiKtests (ktestFilesList, testNamesList):
             # update file argument
             for ind_fai, fainds in enumerate(fileArgInd[ktpos]):
                 for fai in fainds:
-                    ktdat.objects[fai] = (ktdat.objects[fai][0], shortFnames[ind_fai])
+                    # [:-1] in ktdat.objects[fai][1][-1] because of last '\0'
+                    if ktdat.objects[fai][1][:-1] == ktdat.objects[filenstatsInObj[ktpos][2*ind_fai]][0]:
+                        ktdat.objects[fai] = (ktdat.objects[fai][0], shortFnames[ind_fai])
+                    else:
+                        #print len(ktdat.objects[fai][1]) ,len(ktdat.objects[filenstatsInObj[ktpos][2*ind_fai]][0])
+                        #print list(ktdat.objects[fai][1]) ,list(ktdat.objects[filenstatsInObj[ktpos][2*ind_fai]][0])
+			print "\n>> MANUAL REPLACE: the final file name is '"+shortFnames[ind_fai]+"'.","initial name is '"+ktdat.objects[filenstatsInObj[ktpos][2*ind_fai]][0]+"'."
+			print "  >> Test name is:", ktestContains["CORRESP_TESTNAME"][ktpos]
+			print "    >> Please replace initial file name with new in '"+ktdat.objects[fai][1]+"' :"
+			raw = raw_input().strip()
+                        ktdat.objects[fai] = (ktdat.objects[fai][0], raw)
 
             # first add file object of additional files
             addedobj = []
