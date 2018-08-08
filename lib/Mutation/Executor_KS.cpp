@@ -3047,7 +3047,7 @@ void Executor::run(ExecutionState &initialState) {
   llvm::raw_string_ostream rsos(searcherName);
   searcher->printName(rsos);
   if (rsos.str().compare("BFSSearcher\n")) {
-    llvm::errs() << "SEMU@ERROR: SEMU require BFS as search!"
+    llvm::errs() << "SEMU@ERROR: SEMU require BFS as search!";
     assert (false && "SEMU require BFS as search");
   }
 
