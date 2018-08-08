@@ -3046,7 +3046,10 @@ void Executor::run(ExecutionState &initialState) {
   std::string searcherName;
   llvm::raw_string_ostream rsos(searcherName);
   searcher->printName(rsos);
-  assert (rsos.str().compare("BFSSearcher") == 0 && "SEMU require BFS as search");
+  if (rsos.str().compare("BFSSearcher\n")) {
+    llvm::errs() << "SEMU@ERROR: SEMU require BFS as search!"
+    assert (false && "SEMU require BFS as search");
+  }
 
   std::vector<ExecutionState *> newStates;
   for (auto *s: states) {
