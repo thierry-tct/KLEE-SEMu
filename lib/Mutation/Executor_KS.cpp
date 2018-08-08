@@ -3042,6 +3042,12 @@ void Executor::run(ExecutionState &initialState) {
   searcher = constructUserSearcher(*this);
 
   // @KLEE-SEMu
+  // XXX require bfs as searcher (for SEMU execution) for now
+  std::string searcherName;
+  llvm::raw_string_ostream rsos(searcherName);
+  searcher->printName(rsos);
+  assert (rsos.str().compare("BFSSearcher") == 0 && "SEMU require BFS as search");
+
   std::vector<ExecutionState *> newStates;
   for (auto *s: states) {
     if (ks_terminatedBeforeWP.count(s) > 0 
