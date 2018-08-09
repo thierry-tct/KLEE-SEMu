@@ -1060,39 +1060,14 @@ def executeSemu (semuworkdir, semuOutDirs, testSample, test2semudirMap, metaMuta
             runSemuCmd += " 2>"+logFile
             runSemuCmds.append(runSemuCmd)
 
-        print "## Executing SEMU with", len(pending_threads), "parallel threads. Execution log in <semu_out/Thread-<i>.log>"
-        threadpool = ThreadPool(len(pending_threads))
+        print "## Executing SEMU with", nThreads, "parallel threads. Execution log in <semu_out/Thread-<i>.log>"
+        threadpool = ThreadPool(nThreads)
         sretcodes = threadpool.map(os.system, runSemuCmds)
-        threadpool.close()
-        threadpool.join()
 
-        failed_thread_executions = []
-        for thread_id, sretcode in zip(pending_threads, sretcodes):
+        for thread_id, sretcode in enumerate(sretcodes):
             if sretcode != 0 :#and sretcode != 256: # 256 for timeout
-                failed_thread_executions.append((thread_id, sretcode))
-
-        if len(failed_thread_executions) > 0:
-            common_err = failed_thread_executions[0][1]
-            for v in failed_thread_executions:
-                if v[1] != common_err:
-                    common_err = None
-                    break
-            if enable_semu_fork_externalcall or common_err is None or common_err != 11: 
-                # already reran or errors are not all same and not sigsegv(11)
-                print "# Execution failed for", len(failed_thread_executions), "threads:"
-                for thread_id, sretcode in failed_thread_executions:
-                    print "-- Returned Code:", sretcode, ", for thread", thread_id,". Command: ", runSemuCmds[thread_id]
-                error_exit("Error: klee-semu symbex failled!") # with code "+str(sretcode))
-            else:
-                # The execution failed for some threads, probably due to Seg Fault during external call.
-                # Rerun those thread in mode where a new process is forked everytime
-                pending_threads = [v[0] for v in failed_thread_executions]
-                enable_semu_fork_externalcall = True
-                print "## klee-semu failed for the threads:", pending_threads, "\n    >> re-executing them by forking process for external calls"
-        else:
-            # All sucessfull, end
-            pending_threads = []
-            print "## klee-semu execution is done!"
+                print "-- Returned Code:", sretcode, ", for thread", thread_id,". Command: ", runSemuCmds[thread_id]
+                error_exit("Error: klee-semu symbex failled with code "+str(sretcode))
 
     if mergeThreadsDir is not None:
         if os.path.isdir(mergeThreadsDir):
