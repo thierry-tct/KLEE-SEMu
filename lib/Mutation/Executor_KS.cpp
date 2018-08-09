@@ -31,6 +31,8 @@
 #include "expr/Parser.h"
 #include "klee/ExprBuilder.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include <unistd.h>
+#include <sys/wait.h>
 //~KS
 
 #include "klee/Expr.h"
@@ -154,6 +156,10 @@ cl::opt<unsigned> semuMaxTotalNumTestGen("semu-max-total-tests-gen",
 cl::opt<unsigned> semuMaxNumTestGenPerMutant("semu-max-tests-gen-per-mutant", 
                                  cl::init(0), 
                                  cl::desc("Set the maximum number of test generated to kill each mutant. (== 0) and semu-max-total-tests-gen=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
+
+cl::opt<bool> semuForkProcessForSegvExternalCalls("semu-forkprocessfor-segv-externalcalls",
+                                          cl::init(false),
+                                          cl::desc("Enable forking a new process for external call to 'printf' which can lead to Segmentation Fault."));
 
 // Use shadow test case generation for mutants ()
 cl::opt<bool> semuShadowTestGeneration("semu-shadow-test-gen", 
@@ -3427,7 +3433,48 @@ void Executor::callExternalFunction(ExecutionState &state,
       klee_warning_once(function, "%s", os.str().c_str());
   }
   
+  // @KLEE-SEMu
+  bool success;
+  // XXX keep this only to function that output (input with new process may need more)
+  if (semuForkProcessForSegvExternalCalls && function->getName() == "printf") {
+    pid_t my_pid;
+    int child_status;
+    if ((my_pid = ::fork()) < 0) {
+      llvm::errs() << "SEMU@ERROR: fork failure for external call (to avoid Sementation fault)";
+      exit(1);
+    }
+    if (my_pid == 0) {
+      // Child process 
+      _Exit((int) !externalDispatcher->executeCall(function, target->inst, args));
+    } else {
+      // Parent process 
+      ::wait(&child_status);
+      if (WIFEXITED(child_status)) {
+         const int es = WEXITSTATUS(child_status);
+         if (es) {
+           //perror ("exited with error code");
+           success = false;
+         } else {
+           //perror ("exited normally");
+           success = true;
+         }
+      } else if (WIFSIGNALED(child_status)) {
+         const int signum = WTERMSIG(child_status);
+         llvm::errs() << "SEMU@Error: External call child process signaled with signum: " << signum << " !\n";
+         assert (false);
+         exit (1);
+      } else {
+         llvm::errs() << "SEMU@Error: External call child process other error!\n";
+         assert (false);
+         exit (1);
+      }
+    }
+  } else
+      success = externalDispatcher->executeCall(function, target->inst, args);
+  //~KS
+  /* // @KLEE-SEMu  -- COMMENT
   bool success = externalDispatcher->executeCall(function, target->inst, args);
+  */ // ~KS
   if (!success) {
     terminateStateOnError(state, "failed external call: " + function->getName(),
                           External);
