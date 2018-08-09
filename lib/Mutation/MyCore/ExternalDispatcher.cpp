@@ -48,12 +48,12 @@ using namespace klee;
 
 /***/
 
-static jmp_buf escapeCallJmpBuf;
+static sigjmp_buf escapeCallJmpBuf;
 
 extern "C" {
 
 static void sigsegv_handler(int signal, siginfo_t *info, void *context) {
-  longjmp(escapeCallJmpBuf, 1);
+  siglongjmp(escapeCallJmpBuf, 1);
 }
 
 }
@@ -174,7 +174,7 @@ bool ExternalDispatcher::runProtectedCall(Function *f, uint64_t *args) {
   segvAction.sa_sigaction = ::sigsegv_handler;
   sigaction(SIGSEGV, &segvAction, &segvActionOld);
 
-  if (setjmp(escapeCallJmpBuf)) {
+  if (sigsetjmp(escapeCallJmpBuf, 1)) {
     res = false;
   } else {
     executionEngine->runFunction(f, gvArgs);
