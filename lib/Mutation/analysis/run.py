@@ -1037,7 +1037,7 @@ def executeSemu (semuworkdir, semuOutDirs, testSample, test2semudirMap, metaMuta
             semuOutDir = semuOutDirs[thread_id]
             logFile = semuOutDir+".log"
 
-            is os.path.isdir(semuOutDir):
+            if os.path.isdir(semuOutDir):
                 shutil.rmtree(semuOutDir)
 
             kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp"
