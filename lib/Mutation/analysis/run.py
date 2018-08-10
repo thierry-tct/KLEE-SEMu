@@ -1007,6 +1007,11 @@ def executeSemu (semuworkdir, semuOutDirs, testSample, test2semudirMap, metaMuta
     for tc in testSample:
         shutil.copy2(test2semudirMap[tc], semuSeedsDir)
 
+    # Copy the metaMutantBC file into semu semuSeedsDir (will be remove when semuSeedsDir is removed bellow)
+    # Avoid case where klee modifies the BC file and don't have backup
+    metaMutantBCFilePath = os.path.join(semuSeedsDir, os.path.basename(metaMutantBC))
+    shutil.copy2(metaMutantBC, metaMutantBCFilePath)
+
     assert len(candidateMutantsFiles) == len(semuOutDirs), "Missmatch between number of candidate mutant files and number of outputs folders: "+str(len(candidateMutantsFiles))+" VS "+str(len(semuOutDirs))
     nThreads = len(candidateMutantsFiles)
 
@@ -1055,7 +1060,7 @@ def executeSemu (semuworkdir, semuOutDirs, testSample, test2semudirMap, metaMuta
                 semuArgs += " -semu-forkprocessfor-segv-externalcalls"
 
             semuExe = "klee-semu" if semuexedir is None else os.path.join(semuexedir, "klee-semu")
-            runSemuCmd = " ".join([semuExe, kleeArgs, semukleearg, semuArgs, metaMutantBC, " ".join(symArgs), "> /dev/null"]) #,"2>&1"])
+            runSemuCmd = " ".join([semuExe, kleeArgs, semukleearg, semuArgs, metaMutantBCFilePath, " ".join(symArgs), "> /dev/null"]) #,"2>&1"])
             #sretcode = os.system(runSemuCmd)
             runSemuCmd += " 2>"+logFile
             runSemuCmds.append(runSemuCmd)
