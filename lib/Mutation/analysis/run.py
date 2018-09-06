@@ -1305,7 +1305,7 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
     # transform oldnewnamemap into ktestsPre2Post
     for vv in oldnewnamemap:
         iktd = os.path.dirname(vv)
-        kk = ps.path.basename(vv)
+        kk = os.path.basename(vv)
         ktestsPre2Post[iktd][kk] = oldnewnamemap[vv]
 
     # Finalize metadata
