@@ -1147,7 +1147,18 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
             print "## klee-semu execution is done!"
 
     # In case of pureKLEE (testgen mode), we need the file containing mutants tests
-    # TODO TODO
+    if isPureKLEE: 
+        for semuOutDir in semuOutDirs:
+            mktlistfile = os.path.join(semuOutDir, "mutant-0.ktestlist")
+            df_ktl = []
+            inittime = os.path.getctime(os.path.join(semuOutDir, "assembly.ll"))
+            for ktp in glob.glob(os.path.join(semuOutDir, "*.ktest")):
+                kttime = os.path.getctime(ktp) - inittime
+                assert kttime >= 0, "negative kttime w.r.t assembly.ll, for ktest: "+ ktp
+                df_ktl.append({"MutantID":0, 'ktest': os.path.basename(ktp), "ellapsedTime(s)": kttime})
+            df_ktl = pd.DataFrame(df_ktl)
+            df_ktl.to_csv(mktlistfile, index=False)
+
 
     if mergeThreadsDir is not None:
         if os.path.isdir(mergeThreadsDir):
