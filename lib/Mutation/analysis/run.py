@@ -1235,6 +1235,10 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
                  ktp = os.path.join(fold, row["ktest"])
                  assert ktp in ktests, "test not in ktests: "+str(ktests)+",\n test: "+ktp+"; minf is: "+minf
                  ktests[ktp].append((mid, et))
+
+    # Verify that each ktest in ktests has corresponding mutant
+    if len([kt for kt in ktests if len(ktests[kt]) == 0]) > 0:
+        error_exit("Some ktests are not present as belonging to mutant: "+str([kt for kt in ktests if len(ktests[kt]) == 0]))
                   
     # Use fdupes across the dirs in semuoutputs to remove duplicates and update test infos
     fdupesout = mfi_ktests_dir+".tmp"
