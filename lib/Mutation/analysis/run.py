@@ -1036,7 +1036,7 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
 
     assert len(candidateMutantsFiles) == len(semuOutDirs), "Missmatch between number of candidate mutant files and number of outputs folders: "+str(len(candidateMutantsFiles))+" VS "+str(len(semuOutDirs))
 
-    if tuning['name'] == '_pureklee_' and 'SEMU' not in tuning and 'EXTRA' not in tuning:
+    if tuning['name'] == '_pureklee_' and 'SEMU' not in tuning:
         assert exemode == GenTestsToKill, "Must be Test generation mode for _pureklee_"
         isPureKLEE = True
     else:
@@ -1045,10 +1045,12 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
     if isPureKLEE:
         # Use simple bc file
         metaMutantBC = metaMutantBC[:-len('.MetaMu.bc')]+'.bc'
+        nMutants = sum([sum(1 for line_ in open(mlist)) for mlist in candidateMutantsFiles])
         nThreads = 1
     else:
         nThreads = len(candidateMutantsFiles)
-        filter_mutestgen = "" if exemode == FilterHardToKill else " -semu-max-tests-gen-per-mutant="+str(tuning['EXTRA']['MaxTestsPerMutant']) # num of test per mutant
+
+    filter_mutestgen = "" if exemode == FilterHardToKill else " -semu-max-tests-gen-per-mutant="+str(tuning['EXTRA']['MaxTestsPerMutant']) # num of test per mutant
 
     # Copy the metaMutantBC file into semu semuSeedsDir (will be remove when semuSeedsDir is removed bellow)
     # Avoid case where klee modifies the BC file and don't have backup
@@ -1090,7 +1092,8 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
             kleeArgs += " --output-dir="+semuOutDir
             semukleearg = "-seed-out-dir="+semuSeedsDir
             if isPureKLEE:
-                semuArgs = ""
+                #semuArgs = ""
+                semuArgs = "-stop-after-n-tests="+str(tuning['EXTRA']['MaxTestsPerMutant'] * nMutants)
                 semuExe = "klee"
             else:
                 semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
@@ -1888,7 +1891,6 @@ def main():
             purekleetune = semuTuningList[-1].copy()
             purekleetune['name'] = "_pureklee_"
             del purekleetune['SEMU']
-            del purekleetune['EXTRA']
             semuTuningList.append(purekleetune)
 
         # Actual Semu execution and compute
