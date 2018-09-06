@@ -21,7 +21,7 @@ configfile='22conf-script.conf'
 ##########################################################
 
 if [ $# = 2 ]; then
-    [ "$2" = "onHPC" ] || error_exit "the only accepted argument is onHPC to skip zesti"
+    [ "$2" = "onHPC" ] || error_exit "the only accepted 2nd argument is onHPC to skip zesti"
     configdir=$intopdir/'hpcConfigDir'
     configfile=`ls $configdir | grep 'conf-script.conf'`        # assume only on
     [ `echo $configfile | tr ' ' '\n' | wc -l` -eq 1 ] || error_exit "HPC config file not found or more than 1 found"
@@ -82,6 +82,7 @@ python $ScriptDir/run.py $outtopdir $skipargs $extraargs \
 --testlist $MFI_TCSFILE \
 --martout $intopdir/mutantsdata \
 --matrix $intopdir/matrices/SM.dat \
+--passfail $intopdir/matrices/ktestPassFail.txt \
 --coverage $intopdir/matrices/MCOV.dat \
 --zesti_exe_dir $zestidir \
 --llvmgcc_exe_dir $SEMU_CFG_LLVMGCC_EXE_DIR \
@@ -91,6 +92,6 @@ python $ScriptDir/run.py $outtopdir $skipargs $extraargs \
 --testSamplePercent $SEMU_CFG_TEST_SAMPLE_PERCENTAGE \
 --semutimeout $SEMU_CFG_SEMU_TIMEOUT \
 --semumaxmemory $SEMU_CFG_SEMU_MAXMEMORY \
---semupreconditionlength $SEMU_CFG_SEMU_PRECONDITION_LENGTH \
---semumutantmaxfork $SEMU_CFG_SEMU_MUTANT_MAX_FORK \
+--semupreconditionlength "$SEMU_CFG_SEMU_PRECONDITION_LENGTH" \
+--semumutantmaxfork "$SEMU_CFG_SEMU_MUTANT_MAX_FORK" \
 
