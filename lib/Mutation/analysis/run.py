@@ -91,18 +91,6 @@ def decompressDir (in_tar_filename, outDir=None):
         error_exit("Invalid tar file: "+in_tar_filename)
 #~ def decompressDir()
 
-def fdupesMergeKtestsDirs (dirslist, mergedir, data_map_filename="ktestdir_tests_map.json", deleteindirs=True):
-    ktestDirsTestsMap = {}
-    ktestDirsTestsMap_filename = os.path.join(mergedir, data_map_filename)
-
-    # TODO: do fdupes, deleting duplicates and store mapping
-
-    dumpJson(ktestDirsTestsMap, ktestDirsTestsMap_filename)
-    if deleteindirs:
-        for dd in dirslist:
-            shutil.rmtree(dd)
-#~ def fdupesMergeKtestsDirs()
-
 def getTestSamples(testListFile, samplePercent, matrix, discards={}, hasKleeTests=True):
     assert samplePercent >= 0 and samplePercent <= 100, "invalid sample percent"
     samples = {}
@@ -1206,9 +1194,8 @@ def analysis_plot(thisOut, groundConsideredMutant_covtests):
     For mutant killing test generation Mode
     take the ktests in the folders of semuoutputs, then put then together removing duplicates
     The result is put in newly created dir mfi_ktests_dir. The .ktestlist files of each mutant are updated
-    remergelevel decide whether the merge is at the first, second,... stage (merging results of first merge...)
 '''
-def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, remergelevel=0):  #TODO TODO consider remergelevel=1
+def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
     assert mfi_ktests_dir_top in mfi_ktests_dir
     if os.path.isdir(mfi_ktests_dir_top):
         shutil.rmtree(mfi_ktests_dir_top)
@@ -1269,6 +1256,51 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, remerge
     etdf.to_csv(os.path.join(mfi_ktests_dir, "tests_by_ellapsedtime.csv"), index=False)
     dumpJson(finalObj, os.path.join(mfi_ktests_dir, "mutant_ktests_mapping.json"))
 #~ def fdupeGeneratedTest ()
+
+def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, names):
+    assert len(inKtestDirs) = len(names)
+    assert len(set(names)) == len(names), "There should be no redundancy in names"
+    assert mfi_ktests_dir_top in mfi_ktests_dir
+    if os.path.isdir(mfi_ktests_dir_top):
+        shutil.rmtree(mfi_ktests_dir_top)
+    os.makedirs(mfi_ktests_dir)
+
+    ktestsPre2Post = {ktd: {} for ktd in inKtestDirs}
+
+    # Use fdupes across the dirs in semuoutputs to remove duplicates and update test infos
+    redundances = []
+    fdupesout = mfi_ktests_dir+".tmp"
+    fdupcmd = " ".join(["fdupes -1"]+inKtestDirs+[">",fdupesout])
+    if os.system(fdupcmd) != 0:
+        error_exit ("fdupes failed. cmd: "+fdupcmd)
+    assert os.path.isfile(fdupesout), "Fdupes failed to produce output"
+    with open(fdupesout) as fp:
+        for line in fp:
+            la = line.strip().split()
+            redundances.append(la)
+    os.remove(fdupesout)
+
+    # TODO  TODO copy tests and rename. and update ktestsPre2Post. Those in redundances copy the first one and map the others (see above function)
+
+
+    for i in len(inKtestDirs):
+        etdf = pd.read_csv(os.path.join(inKtestDirs[i], "tests_by_ellapsedtime.csv"))
+        in_finalObj = loadJson(os.path.join(inKtestDirs[i], "mutant_ktests_mapping.json")
+        finalObj = {}
+
+        for index, row in etdf.iterrows():
+            row['ktest'] = ktestsPre2Post[inKtestDirs[i]][row['ktest']]
+        for kt in in_finalObj:
+            assert ktestsPre2Post[inKtestDirs[i]][kt] not in finalObj
+            finalObj[ktestsPre2Post[inKtestDirs[i]][kt]] = in_finalObj[kt]
+
+        # copy 'info' file
+        if os.path.isfile(os.path.join(inKtestDirs[i], 'info')):
+            shutil.copy2(os.path.join(inKtestDirs[i], "info"), os.path.join(mfi_ktests_dir, names[i]+'-info'))
+
+        etdf.to_csv(os.path.join(mfi_ktests_dir, names[i]+"-tests_by_ellapsedtime.csv"), index=False)
+        dumpJson(finalObj, os.path.join(mfi_ktests_dir, names[i]+"-mutant_ktests_mapping.json"))
+#~ def fdupesAggregateKtestDirs()
 
 def stripRootTest2Dir (rootdir, test2dir):
     res = {}
@@ -1772,7 +1804,7 @@ def main():
                             if os.path.isdir(semuoutput):
                                 shutil.rmtree(semuoutput)
 
-                return (mfi_mutants_list, mfi_ktests_dir_top, mfi_ktests_dir, mfi_execution_output, this_Out)
+                return (mfi_mutants_list, mfi_ktests_dir_top, mfi_ktests_dir, mfi_execution_output, this_Out, semuTuning['name'])
         #~ def configParallel():
 
         # Prepare the seeds to use
@@ -1809,9 +1841,11 @@ def main():
 
             if COMPUTE_TASK in toExecute: 
                 ktdirs = []
+                d_names = []
                 present_thisOut = []
-                for part_mfi_mutants_list, part_mfi_ktests_dir_top, part_mfi_ktests_dir, part_mfi_execution_output, part_this_Out in ctp_return:
+                for part_mfi_mutants_list, part_mfi_ktests_dir_top, part_mfi_ktests_dir, part_mfi_execution_output, part_this_Out, part_d_name in ctp_return:
                     ktdirs.append(part_mfi_ktests_dir)
+                    d_names.append(part_d_name)
                     if os.path.isdir(part_this_Out):
                         present_thisOut.append(part_this_Out)
 
@@ -1826,14 +1860,14 @@ def main():
                     os.mkdir(agg_Out)
 
                     # All mutant list must be same
-                    part_mfi_mutants_list, part_mfi_ktests_dir_top, part_mfi_ktests_dir, part_mfi_execution_output, part_this_Out = ctp_return[0]
+                    part_mfi_mutants_list, part_mfi_ktests_dir_top, part_mfi_ktests_dir, part_mfi_execution_output, part_this_Out, part_d_name = ctp_return[0]
                     shutil.copy2(part_mfi_mutants_list, mfi_mutants_list)
 
                     # Merge tests.  
-                    fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, ktdirs, remergelevel=1)
+                    fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, ktdirs, d_names)
 
                     # delete the separate data stuffs
-                    for part_mfi_mutants_list, part_mfi_ktests_dir_top, part_mfi_ktests_dir, part_mfi_execution_output, part_this_Out in ctp_return:
+                    for part_mfi_mutants_list, part_mfi_ktests_dir_top, part_mfi_ktests_dir, part_mfi_execution_output, part_this_Out, part_d_name in ctp_return:
                         shutil.rmtree(part_this_Out) # This implicitely remove part_mfi_mutants_list, part_mfi_ktests_dir_top, ...
 
 
