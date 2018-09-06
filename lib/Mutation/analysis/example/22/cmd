@@ -1,6 +1,6 @@
 # Can run this from top dir, which contain inputs in directory 'inputs'
 
-# Example run:  SKIP_TASKS="" bash cmd
+# Example run:  SKIP_TASKS="" GIVEN_CONF_SCRIPT=<link> bash cmd
 # tasksList = [ZESTI_DEV_TASK, TEST_GEN_TASK, SEMU_EXECUTION, ANALYSE_TASK]
 
 set -u 
@@ -18,6 +18,11 @@ outtopdir=`readlink -f $(dirname $0)`
 #Config DIR 
 configdir='/media/thierry/0630b405-f70d-48dc-ba06-3f3b6af08b44/home/shadowvm/shadow/tmpTCT/TMP-Corebench/workspace/metactrl/22/'
 configfile='22conf-script.conf'
+if [ "${GIVEN_CONF_SCRIPT:-}" != "" ]
+then
+    configfile=$(basename $GIVEN_CONF_SCRIPT)
+    configdir=$(dirname $(readlink -f $GIVEN_CONF_SCRIPT))
+fi
 ##########################################################
 
 if [ $# = 2 ]; then
