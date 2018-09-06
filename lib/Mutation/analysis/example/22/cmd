@@ -79,9 +79,17 @@ test -d  "$ScriptDir" || error_exit "Script dir not existing: '$ScriptDir'"
 zestidir="$SEMU_CFG_ZESTI_EXE_DIR"
 PATH=$PATH:$semudir
 
+klee_tests_topdir="$intopdir/genktests/GenKTESTS"
+if [ -d $klee_tests_topdir ]; then
+    klee_tests_topdir="--klee_tests_topdir $klee_tests_topdir"
+else
+    klee_tests_topdir=""
+fi
+
 printf "\n>> CMD calling run.py\n\n"
 
 python $ScriptDir/run.py $outtopdir $skipargs $extraargs \
+$klee_tests_topdir \
 --exepath $(readlink -f $MFI_EXEDIR/$MFI_PROGRAM) \
 --runtest $MFI_RUNTESTSCRIPT \
 --testlist $MFI_TCSFILE \
