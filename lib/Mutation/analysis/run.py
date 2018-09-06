@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /usr/bin/env python
 
 #######################
 # This script takes as input:
@@ -1135,7 +1135,7 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
         os.mkdir(mergeThreadsDir)
         thread_data_map = {}
 
-        if exemode == FilterHardToKill
+        if exemode == FilterHardToKill:
             thread_data_map_filename = os.path.join(mergeThreadsDir, "thread_data_map.jsom")
             for thread_id in range(nThreads):
                 thread_data_map[thread_id] = []
@@ -1258,7 +1258,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
 #~ def fdupeGeneratedTest ()
 
 def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, names):
-    assert len(inKtestDirs) = len(names)
+    assert len(inKtestDirs) == len(names)
     assert len(set(names)) == len(names), "There should be no redundancy in names"
     assert mfi_ktests_dir_top in mfi_ktests_dir
     if os.path.isdir(mfi_ktests_dir_top):
@@ -1311,7 +1311,7 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
     # Finalize metadata
     for i in len(inKtestDirs):
         etdf = pd.read_csv(os.path.join(inKtestDirs[i], "tests_by_ellapsedtime.csv"))
-        in_finalObj = loadJson(os.path.join(inKtestDirs[i], "mutant_ktests_mapping.json")
+        in_finalObj = loadJson(os.path.join(inKtestDirs[i], "mutant_ktests_mapping.json"))
         finalObj = {}
 
         for index, row in etdf.iterrows():
@@ -1551,7 +1551,7 @@ def main():
         print "#>> SEMU Symbex - Precondition Param:", args_semupreconditionlength, ", Checkpoint Param:", args_semumutantmaxfork
             
         semuTuningList.append({
-                        'name': str(semupreconditionlength)+'_'+str(semumutantmaxfork)
+                        'name': str(semupreconditionlength)+'_'+str(semumutantmaxfork),
                         'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
                         'SEMU':{"-semu-precondition-length":args_semupreconditionlength, "-semu-mutant-max-fork":args_semumutantmaxfork, "-semu-loop-break-delay":args.semuloopbreaktimeout},
                         'EXTRA':{'MaxTestsPerMutant': args.semumaxtestsgenpermutants}
@@ -1648,7 +1648,7 @@ def main():
             sampl_size = int(max(1, testSamplePercent * len(alltestsObj['GENTESTS']) / 100))
             testSamples = {'KLEE_'+str(testSamplePercent): random.sample(alltestsObj['GENTESTS'], sampl_size)}
         elif testSampleMode == 'PASS':
-            cand_pass = set{}
+            cand_pass = set()
             # get passing
             with open(passfail) as f:
                 for line_ in f:
@@ -1841,13 +1841,13 @@ def main():
             for tc in testSamples[ts_size]:
                 shutil.copy2(test2semudirMap[tc], semuSeedsDir)
             # Fdupes the seedDir.
-            if os.system(" ".join(["fdupes -r -d -N", semuSeedsDir]) != 0:
+            if os.system(" ".join(["fdupes -r -d -N", semuSeedsDir])) != 0:
                 error_exit ("fdupes failed on semuSeedDir")
 
         # Actual Semu execution and compute
         # TODO: add normal KLEE
         if len(semuTuningList) > 1:
-            conf_threadpool = ThreadPool(len(semuTuningList)):
+            conf_threadpool = ThreadPool(len(semuTuningList))
             ctp_return = conf_threadpool.map(configParallel, semuTuningList)
             conf_threadpool.close()
             conf_threadpool.join()
