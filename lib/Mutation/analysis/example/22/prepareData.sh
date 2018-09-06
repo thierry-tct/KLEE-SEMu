@@ -46,7 +46,15 @@ cp -rf $indatadir/matrices $projOut/inputs/ || error_exit "Failed to copy matric
 cp -rf $indatadir/genktests $projOut/inputs/ || error_exit "Failed to copy genktests"
 cp -rf $inmutsodldir $projOut/inputs/mutantsdata || error_exit "Failed to copy mutantsdata"
 
-for file in $MFI_ID"_build.sh"  $MFI_ID"_conf-script.conf" $MFI_ID"_klee-args-template.args"  $MFI_ID"_runtests.sh"  $MFI_ID"_srclist.txt"  $MFI_ID"_testscases.txt"
+if [ -f $MFI_ID"_build.sh" ]; then
+    sep="_"
+elif [ -f $MFI_ID"build.sh" ]; then
+    sep=""
+else
+    error_exit "missing file $MFI_ID"build.sh""
+fi
+
+for file in $MFI_ID$sep"build.sh"  $MFI_ID$sep"conf-script.conf" $MFI_ID$sep"klee-args-template.args"  $MFI_ID$sep"runtests.sh"  $MFI_ID$sep"srclist.txt"  $MFI_ID$sep"testscases.txt"
 do
     cp $(dirname $confscript)/$file $projOut/inputs/hpcConfigDir/ || error_exit "Failed to copy $file"
 done

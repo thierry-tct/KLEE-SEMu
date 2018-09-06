@@ -675,7 +675,7 @@ def getSymArgsFromZestiKtests (ktestFilesList, testNamesList):
                 
                 objpos += 1
             else:  # File or stdin, stdout
-                pass #TODO handle the case of files (NB: check above how the files are recpgnized from zesti tests (size may not be 0)
+                pass #TODO handle the case of files (NB: check above how the files are recognized from zesti tests (size may not be 0)
 
     # Change the args list in each ktest object with the common symb args 
     for ktdat in ktestContains["KTEST-OBJ"]:
@@ -1268,7 +1268,7 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
     ktestsPre2Post = {ktd: {} for ktd in inKtestDirs}
 
     # Use fdupes across the dirs in semuoutputs to remove duplicates and update test infos
-    redundances = []
+    redundancesMap = {}
     fdupesout = mfi_ktests_dir+".tmp"
     fdupcmd = " ".join(["fdupes -1"]+inKtestDirs+[">",fdupesout])
     if os.system(fdupcmd) != 0:
@@ -1277,12 +1277,38 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
     with open(fdupesout) as fp:
         for line in fp:
             la = line.strip().split()
-            redundances.append(la)
+            if ls[0].endswith('.ktest'): # do not consider other possible non ktest duplicates
+                redundancesMap[la[0]] = la[1:]
     os.remove(fdupesout)
 
-    # TODO  TODO copy tests and rename. and update ktestsPre2Post. Those in redundances copy the first one and map the others (see above function)
+    nonredundances = set()
+    for iktd in inKtestDirs:
+        nonredundances |= set(glob.glob(os.path.join(iktd, '*.ktest')))
+    for v in redundancesMap:
+        nonredundances -= set(redundancesMap[v])
 
+    oldnewnamemap = {}
+    # Copy non duplicates into mfi_ktests_dir
+    testid = 1
+    for ktp in nonredundances:
+        newtname = "test"+str(testid)+".ktest"
+        testid += 1
+        shutil.copy2(ktp, os.path.join(mfi_ktests_dir, newtname))
+        oldnewnamemap[ktp] = newtname
 
+    # update the redundant keys
+    for v in redundancesMap:
+        for rv in redundancesMap[v]:
+            assert rv not in oldnewnamemap
+            oldnewnamemap[rv] = oldnewnamemap[v]
+
+    # transform oldnewnamemap into ktestsPre2Post
+    for vv in oldnewnamemap:
+        iktd = os.path.dirname(vv)
+        kk = ps.path.basename(vv)
+        ktestsPre2Post[iktd][kk] = oldnewnamemap[vv]
+
+    # Finalize metadata
     for i in len(inKtestDirs):
         etdf = pd.read_csv(os.path.join(inKtestDirs[i], "tests_by_ellapsedtime.csv"))
         in_finalObj = loadJson(os.path.join(inKtestDirs[i], "mutant_ktests_mapping.json")
@@ -1420,7 +1446,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("outTopDir", help="topDir for output (required)")
-    parser.add_argument("--executionMode", type=str, default=FilterHardToKill, choices=[FilterHardToKill, GenTestsToKill], help="The execution mode for this script (Find hard mutants of generate test to kill mutants.)")
+    parser.add_argument("--executionMode", type=str, default=GenTestsToKill, choices=[FilterHardToKill, GenTestsToKill], help="The execution mode for this script (Find hard mutants of generate test to kill mutants.)")
     parser.add_argument("--exepath", type=str, default=None, help="The path to executable in project")
     parser.add_argument("--runtest", type=str, default=None, help="The test running script")
     parser.add_argument("--testlist", type=str, default=None, help="The test list file")
@@ -1608,7 +1634,7 @@ def main():
         test2semudirMap = prependRootTest2Dir(outDir, test2semudirMap)
 
     # Get all test samples before starting experiment
-    ## TODO TODO: Fix this when supporting other testSampleModes
+    ## XXX: Fix this when supporting other testSampleModes
     print "# Getting Test Samples .."
     if SEMU_EXECUTION in toExecute: 
         invalid_ktests = set(test2zestidirMap) - set (test2semudirMap)
@@ -1833,7 +1859,7 @@ def main():
             shutil.rmtree(semuSeedsDir)
 
         if executionMode == GenTestsToKill:
-            agg_Out = os.path.join(outDir, "TestGenFinalAggregated")
+            agg_Out = os.path.join(outDir, "TestGenFinalAggregated"+str(ts_size))
             mfi_mutants_list = os.path.join(agg_Out, "mfirun_mutants_list.txt")
             mfi_ktests_dir_top = os.path.join(agg_Out, "mfirun_ktests_dir")
             mfi_ktests_dir = os.path.join(mfi_ktests_dir_top, KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0")
