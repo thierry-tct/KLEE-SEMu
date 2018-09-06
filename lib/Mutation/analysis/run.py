@@ -1277,7 +1277,7 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
     with open(fdupesout) as fp:
         for line in fp:
             la = line.strip().split()
-            if ls[0].endswith('.ktest'): # do not consider other possible non ktest duplicates
+            if la[0].endswith('.ktest'): # do not consider other possible non ktest duplicates
                 redundancesMap[la[0]] = la[1:]
     os.remove(fdupesout)
 
