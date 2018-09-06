@@ -1309,7 +1309,7 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
         ktestsPre2Post[iktd][kk] = oldnewnamemap[vv]
 
     # Finalize metadata
-    for i in len(inKtestDirs):
+    for i in range(len(inKtestDirs)):
         etdf = pd.read_csv(os.path.join(inKtestDirs[i], "tests_by_ellapsedtime.csv"))
         in_finalObj = loadJson(os.path.join(inKtestDirs[i], "mutant_ktests_mapping.json"))
         finalObj = {}
