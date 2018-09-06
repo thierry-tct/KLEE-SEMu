@@ -1146,6 +1146,9 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
             pending_threads = []
             print "## klee-semu execution is done!"
 
+    # In case of pureKLEE (testgen mode), we need the file containing mutants tests
+    # TODO TODO
+
     if mergeThreadsDir is not None:
         if os.path.isdir(mergeThreadsDir):
             shutil.rmtree(mergeThreadsDir)
@@ -1230,7 +1233,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
                  et = row["ellapsedTime(s)"]
                  mid = row["MutantID"]
                  ktp = os.path.join(fold, row["ktest"])
-                 assert ktp in ktests, "test not in ktests: "+str(ktests)+", test: "+ktp
+                 assert ktp in ktests, "test not in ktests: "+str(ktests)+",\n test: "+ktp+"; minf is: "+minf
                  ktests[ktp].append((mid, et))
                   
     # Use fdupes across the dirs in semuoutputs to remove duplicates and update test infos
