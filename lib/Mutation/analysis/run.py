@@ -1652,7 +1652,7 @@ def main():
             # get passing
             with open(passfail) as f:
                 for line_ in f:
-                    tc_, v_ = line.strip().split()
+                    tc_, v_ = line_.strip().split()
                     if v_ == '0':
                         cand_pass.add(tc_)
             # get passing and considered

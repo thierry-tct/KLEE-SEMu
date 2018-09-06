@@ -30,7 +30,7 @@ if [ $# = 3 ]; then
     [ `echo $configfile | tr ' ' '\n' | wc -l` -eq 1 ] || error_exit "HPC config file not found or more than 1 found"
     SKIP_TASKS=`echo ${SKIP_TASKS:-} | sed '1iZESTI_DEV_TASK' | sort -u | xargs`
 elif [ $# != 2 ]; then
-    error_exit "expected two or one argument: <runConfig> <onHPC>?"
+    error_exit "expected two or one argument: <Proj Topdir containing folder 'inputs'> <runConfig> <onHPC>?"
 fi
 
 PROJ_TOPDIR=$(readlink -f $1)
