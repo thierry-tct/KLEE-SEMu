@@ -46,12 +46,12 @@ cp -rf $indatadir/matrices $projOut/inputs/ || error_exit "Failed to copy matric
 cp -rf $indatadir/genktests $projOut/inputs/ || error_exit "Failed to copy genktests"
 cp -rf $inmutsodldir $projOut/inputs/mutantsdata || error_exit "Failed to copy mutantsdata"
 
-if [ -f $MFI_ID"_build.sh" ]; then
+if [ -f $(dirname $confscript)/$MFI_ID"_build.sh" ]; then
     sep="_"
-elif [ -f $MFI_ID"build.sh" ]; then
+elif [ -f $(dirname $confscript)/$MFI_ID"build.sh" ]; then
     sep=""
 else
-    error_exit "missing file $MFI_ID"build.sh""
+    error_exit "missing file $(dirname $confscript)/$MFI_ID"[_]build.sh""
 fi
 
 for file in $MFI_ID$sep"build.sh"  $MFI_ID$sep"conf-script.conf" $MFI_ID$sep"klee-args-template.args"  $MFI_ID$sep"runtests.sh"  $MFI_ID$sep"srclist.txt"  $MFI_ID$sep"testscases.txt"
