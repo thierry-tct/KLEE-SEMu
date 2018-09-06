@@ -1109,7 +1109,7 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
             runSemuCmd += " 2>"+logFile
             runSemuCmds.append(runSemuCmd)
 
-        print "## Executing SEMU with", len(pending_threads), "parallel threads. Execution log in <semu_out/Thread-<i>.log>"
+        print "## Executing", "pure KLEE" if isPureKLEE else "SEMU", "with", len(pending_threads), "parallel threads. Execution log in <semu_out/Thread-<i>.log>"
         if len(pending_threads) > 1:
             threadpool = ThreadPool(len(pending_threads))
             sretcodes = threadpool.map(os.system, runSemuCmds)
