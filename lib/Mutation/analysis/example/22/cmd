@@ -11,13 +11,11 @@ error_exit()
     exit 1
 }
 
-intopdir=`readlink -f $(dirname $0)`/'inputs'
-outtopdir=`readlink -f $(dirname $0)`
 
 #TODO: Change here ######################################
 #Config DIR 
-configdir='/media/thierry/0630b405-f70d-48dc-ba06-3f3b6af08b44/home/shadowvm/shadow/tmpTCT/TMP-Corebench/workspace/metactrl/22/'
-configfile='22conf-script.conf'
+configdir='/media/thierry/0630b405-f70d-48dc-ba06-3f3b6af08b44/home/shadowvm/shadow/tmpTCT/TMP-Corebench/workspace/metactrl/<MFI_ID>'
+configfile='<MFI_ID>_conf-script.conf'
 if [ "${GIVEN_CONF_SCRIPT:-}" != "" ]
 then
     configfile=$(basename $GIVEN_CONF_SCRIPT)
@@ -25,17 +23,21 @@ then
 fi
 ##########################################################
 
-if [ $# = 2 ]; then
+if [ $# = 3 ]; then
     [ "$2" = "onHPC" ] || error_exit "the only accepted 2nd argument is onHPC to skip zesti"
     configdir=$intopdir/'hpcConfigDir'
     configfile=`ls $configdir | grep 'conf-script.conf'`        # assume only on
     [ `echo $configfile | tr ' ' '\n' | wc -l` -eq 1 ] || error_exit "HPC config file not found or more than 1 found"
     SKIP_TASKS=`echo ${SKIP_TASKS:-} | sed '1iZESTI_DEV_TASK' | sort -u | xargs`
-elif [ $# != 1 ]; then
+elif [ $# != 2 ]; then
     error_exit "expected two or one argument: <runConfig> <onHPC>?"
 fi
 
-runConfigurationFile=$(readlink -f $1)
+PROJ_TOPDIR=$(readlink -f $1)
+intopdir=$PROJ_TOPDIR/'inputs'
+outtopdir=$PROJ_TOPDIR/
+
+runConfigurationFile=$(readlink -f $2)
 test -f $runConfigurationFile || error_exit "missing run configuration file: $runConfigurationFile"
 
 test -d $intopdir || { echo "intopdir not existing: $intopdir"; exit 1; }
