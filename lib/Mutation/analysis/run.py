@@ -1216,7 +1216,7 @@ def analysis_plot(thisOut, groundConsideredMutant_covtests):
     The result is put in newly created dir mfi_ktests_dir. The .ktestlist files of each mutant are updated
 '''
 def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
-    assert mfi_ktests_dir_top in mfi_ktests_dir
+    assert mfi_ktests_dir_top in mfi_ktests_dir, "mfi_ktests_dir_top not in mfi_ktests_dir"
     if os.path.isdir(mfi_ktests_dir_top):
         shutil.rmtree(mfi_ktests_dir_top)
     os.makedirs(mfi_ktests_dir)
@@ -1225,7 +1225,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
         kt_fold = glob.glob(fold+"/*.ktest")
         mut_fold = glob.glob(fold+"/mutant-*.ktestlist")
         for ktp in kt_fold:
-            assert ktp not in ktests
+            assert ktp not in ktests, "ktp not in ktests. fold is "+fold+" ktp is "+ktp
             ktests[ktp] = []
         for minf in mut_fold:
             df = pd.read_csv(minf)
@@ -1248,7 +1248,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
             #assert la[0] not in dupmap, "fdupe line: "+la[0]+", is not in dupmap: "+str(dupmap)
             remain = la[0]
             dups = la[1:]
-            assert remain in ktests
+            assert remain in ktests, "remain not in ktests. remain is "+remain
             for dpkt in dups:
                 ktests[remain] += ktests[dpkt]
                 del ktests[dpkt]
