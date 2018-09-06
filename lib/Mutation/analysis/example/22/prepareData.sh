@@ -23,6 +23,9 @@ cd -
 inmutsodldir=$(dirname $confscript)/$MFI_ID-output/mutants/$MFI_PROGRAM/mutation_SODL.txt
 indatadir=$(dirname $confscript)/$MFI_ID-output/data
 
+projOut=$destTopDir/$MFI_ID
+test -d $projOut && error_exit "already processed $projOut. Delete manually for redo"
+
 if [ "$zest" = "1" ]
 then
     # COMPILE Project with llvm-2.7 and save with Zesti
@@ -36,8 +39,6 @@ then
 fi
 
 # Copy stuffs
-projOut=$destTopDir/$MFI_ID
-test -d $projOut && error_exit "already processed $projOut. Delete manually for redo"
 mkdir $projOut || error_exit "Failed to create $projOut"
 
 mkdir -p $projOut/inputs/hpcConfigDir || error_exit "Failed to mkdir"
@@ -58,7 +59,8 @@ for file in $MFI_ID$sep"build.sh"  $MFI_ID$sep"conf-script.conf" $MFI_ID$sep"kle
 do
     cp $(dirname $confscript)/$file $projOut/inputs/hpcConfigDir/ || error_exit "Failed to copy $file"
 done
-sed -i'' 's|export MFI_ROOTDIR=`pwd`/"../../repos/$MFI_ID"|export MFI_ROOTDIR=`pwd`/"repos/$MFI_ID"|g' $projOut/inputs/hpcConfigDir/$MFI_ID"_conf-script.conf" || error_exit "Failed to change repo path in hpcConfigDir"
+#sed -i'' 's|export MFI_ROOTDIR=`pwd`/"../../repos/$MFI_ID"|export MFI_ROOTDIR=`pwd`/"repos/$MFI_ID"|g' $projOut/inputs/hpcConfigDir/$MFI_ID$sep"conf-script.conf" || error_exit "Failed to change repo path in hpcConfigDir"
+sed -i'' 's|^export MFI_ROOTDIR=|export MFI_ROOTDIR=`pwd`/"repos/$MFI_ID" #|g' $projOut/inputs/hpcConfigDir/$MFI_ID$sep"conf-script.conf" || error_exit "Failed to change repo path in hpcConfigDir"
 
 # Specific to Coreutils here
 mkdir -p $projOut/inputs/hpcConfigDir/repos/$MFI_ID/src || error_exit "failed to make repos src"
