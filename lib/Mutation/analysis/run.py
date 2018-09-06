@@ -1246,12 +1246,13 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
         for line in fp:
             la = line.strip().split()
             #assert la[0] not in dupmap, "fdupe line: "+la[0]+", is not in dupmap: "+str(dupmap)
-            remain = la[0]
-            dups = la[1:]
-            assert remain in ktests, "remain not in ktests. remain is "+remain
-            for dpkt in dups:
-                ktests[remain] += ktests[dpkt]
-                del ktests[dpkt]
+            if la[0].endswith('.ktest'):
+                remain = la[0]
+                dups = la[1:]
+                assert remain in ktests, "remain not in ktests. remain is "+remain
+                for dpkt in dups:
+                    ktests[remain] += ktests[dpkt]
+                    del ktests[dpkt]
     os.remove(fdupesout)
     for ktp in ktests:
         ktests[ktp].sort(key=lambda x:x[0]) # sort according to mutant ids
