@@ -1766,24 +1766,24 @@ def main():
                     zips = [(groundConsideredMutant_covtests, mergeSemuThisOut, mergeSemuThreadsDir)]
                 else:
                     zips = zip(list_groundConsideredMutant_covtests+[groundConsideredMutant_covtests], thisOut_list+[mergeSemuThisOut], semuoutputs+[mergeSemuThreadsDir])
-                for groundConsMut_cov, thisOut, semuoutput in zips:
+                for groundConsMut_cov, thisOutSe, semuoutput in zips:
                     # process with each approach
                     if COMPUTE_TASK in toExecute: 
                         print "# Procesing for test size", ts_size, "..."
 
                         if martOut is not None or matrix is not None:
-                            if os.path.isdir(thisOut):
-                                shutil.rmtree(thisOut)
-                            os.mkdir(thisOut)
+                            if os.path.isdir(thisOutSe):
+                                shutil.rmtree(thisOutSe)
+                            os.mkdir(thisOutSe)
 
                         # process for matrix
                         if matrix is not None:
-                            processMatrix (matrix, alltests, 'groundtruth', groundConsMut_cov, thisOut) 
-                            processMatrix (matrix, testSamples[ts_size], 'classic', groundConsMut_cov, thisOut) 
+                            processMatrix (matrix, alltests, 'groundtruth', groundConsMut_cov, thisOutSe) 
+                            processMatrix (matrix, testSamples[ts_size], 'classic', groundConsMut_cov, thisOutSe) 
 
                         # process for SEMU
                         if martOut is not None:
-                            processSemu (semuoutput, "semu", thisOut)
+                            processSemu (semuoutput, "semu", thisOutSe)
 
                     # Analysing for each test Sample 
                     if ANALYSE_TASK in toExecute:
@@ -1791,7 +1791,7 @@ def main():
 
                         # Make final Analysis and plot
                         if martOut is not None and matrix is not None:
-                            analysis_plot(thisOut, None) #groundConsideredMutant_covtests.keys()) # None to not plot random
+                            analysis_plot(thisOutSe, None) #groundConsideredMutant_covtests.keys()) # None to not plot random
             else:
                 mfi_mutants_list = os.path.join(this_Out, "mfirun_mutants_list.txt")
                 mfi_ktests_dir_top = os.path.join(this_Out, "mfirun_ktests_dir")
@@ -1802,9 +1802,11 @@ def main():
                     for semuoutput in semuoutputs:
                         if not os.path.isdir(semuoutput):
                             atMergeStage = True
+                        else:
+                            assert not atMergeStage, "some semuoutputs are deleted but not "+semuoutput
 
                     if atMergeStage:
-                        print "# -- Already ready for merge in Test Gen Compute. Do nothing (for "+thisOut+')'
+                        print "# -- Already ready for merge in Test Gen Compute. Do nothing (for "+this_Out+')'
                     else:
                         print "# Compute task Procesing for test size", ts_size, "..."
                         if not os.path.isdir(this_Out):
