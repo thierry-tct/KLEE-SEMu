@@ -1143,11 +1143,11 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
                 # Rerun those thread in mode where a new process is forked everytime
                 pending_threads = [v[0] for v in failed_thread_executions]
                 enable_semu_fork_externalcall = True
-                print "## klee-semu failed for the threads:", pending_threads, "\n    >> re-executing them by forking process for external calls"
+                print "##", "pure klee" if isPureKLEE else "klee-semu", "failed for the threads:", pending_threads, "\n    >> re-executing them by forking process for external calls"
         else:
             # All sucessfull, end
             pending_threads = []
-            print "## klee-semu execution is done!"
+            print "##", "pure klee" if isPureKLEE else "klee-semu", "execution is done!"
 
     # In case of pureKLEE (testgen mode), we need the file containing mutants tests
     if isPureKLEE: 
@@ -1159,6 +1159,11 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
                 kttime = os.path.getctime(ktp) - inittime
                 assert kttime >= 0, "negative kttime w.r.t assembly.ll, for ktest: "+ ktp
                 df_ktl.append({"MutantID":0, 'ktest': os.path.basename(ktp), "ellapsedTime(s)": kttime})
+
+            # Handle case where not test is generated
+            if len(df_ktl) == 0:
+                df_ktl = {"MutantID":[], 'ktest':[], "ellapsedTime(s)":[]}
+
             df_ktl = pd.DataFrame(df_ktl)
             df_ktl.to_csv(mktlistfile, index=False)
 
@@ -1969,12 +1974,20 @@ def main():
                     print "@ Rexecute this when done (skipping every task except analyse task)."
                 else:
                     nMutants = len(groundConsideredMutant_covtests)
-                    if nGenTests_ > 0:
-                        sm_file = os.path.join(mfi_execution_output, "data", "matrices", "SM.dat")
-                        nnewKilled = len(matrixHardness.getKillableMutants(sm_file))
-                    else:
-                        nnewKilled = 0
-                    outobj_ = {"#Mutants": nMutants, "#Killed": nnewKilled, "#GenTests":nGenTests_, "MS-INC":(nnewKilled * 100.0 / nMutants)}
+                    sm_file = os.path.join(mfi_execution_output, "data", "matrices", "SM.dat")
+                    pf_file = os.path.join(mfi_execution_output, "data", "matrices", "ktestPassFail.txt")
+                    outobj_ = {}
+                    for semuTuning in semuTuningList:
+                        nameprefix = semuTuning['name']
+                        testsOfThis = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-tests_by_ellapsedtime.csv"))['ktest']
+                        testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
+                        if len(testsOfThis) > 0:
+                            nnewKilled = len(matrixHardness.getKillableMutants(sm_file, testsOfThis))
+                            nnewFailing = len(matrixHardness.getFaultyTests(pf_file, testsOfThis))
+                        else:
+                            nnewKilled = 0
+                            nnewFailing = 0
+                        outobj_[nameprefix] = {"#Mutants": nMutants, "#Killed": nnewKilled, "#GenTests":len(testsOfThis), "#FailingTests":nnewFailing, "MS-INC":(nnewKilled * 100.0 / nMutants), "#AggregatedTestGen": nGenTests_}
                     dumpJson(outobj_, outjsonfile)
                     print "Kill Mutant TestGen Analyse Result:", outobj_
 

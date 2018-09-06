@@ -93,6 +93,22 @@ def loadMatrix(matrixfile, selectedT, X_index_string=SM_index_string, noKlee=Fal
     return dataAll #, sortedTestNameList
 #~ def loadMatrix()
 
+def getFaultyTests(ktestPassFailFile, testset=None):
+    passing = []
+    failing = []
+    with open(ktestPassFailFile) as f:
+        for line in f:
+            tc, pf = line.strip().split()
+            if pf in PASS:
+                passing.append(tc)
+            else:
+                failing.append(tc) 
+    if testset is not None:
+        passing = list(set(passing) & testset)
+        failing = list(set(failing) & testset)
+    return failing
+#~ def getFaultyTests()
+
 '''
     get the list of test that kill mutants
 '''
