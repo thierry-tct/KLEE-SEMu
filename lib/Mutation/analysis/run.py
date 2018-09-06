@@ -1034,13 +1034,27 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
         shutil.rmtree(threadsOutTop)
     os.mkdir(threadsOutTop)
 
+    assert len(candidateMutantsFiles) == len(semuOutDirs), "Missmatch between number of candidate mutant files and number of outputs folders: "+str(len(candidateMutantsFiles))+" VS "+str(len(semuOutDirs))
+
+    if tuning['name'] == '_pureklee_' and 'SEMU' not in tuning and 'EXTRA' not in tuning:
+        assert exemode == GenTestsToKill, "Must be Test generation mode for _pureklee_"
+        isPureKLEE = True
+    else:
+        isPureKLEE = False
+
+    if isPureKLEE:
+        # Use simple bc file
+        metaMutantBC = metaMutantBC[:-len('.MetaMu.bc')]+'.bc'
+        nThreads = 1
+    else:
+        nThreads = len(candidateMutantsFiles)
+        filter_mutestgen = "" if exemode == FilterHardToKill else " -semu-max-tests-gen-per-mutant="+str(tuning['EXTRA']['MaxTestsPerMutant']) # num of test per mutant
+
     # Copy the metaMutantBC file into semu semuSeedsDir (will be remove when semuSeedsDir is removed bellow)
     # Avoid case where klee modifies the BC file and don't have backup
     metaMutantBCFilePath = os.path.join(semuSeedsDir, os.path.basename(metaMutantBC))
     shutil.copy2(metaMutantBC, metaMutantBCFilePath)
 
-    assert len(candidateMutantsFiles) == len(semuOutDirs), "Missmatch between number of candidate mutant files and number of outputs folders: "+str(len(candidateMutantsFiles))+" VS "+str(len(semuOutDirs))
-    nThreads = len(candidateMutantsFiles)
 
     # Clean possible existing outdir
     for semuOutDir in semuOutDirs:
@@ -1057,8 +1071,6 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
             # In the path condition file, replace argv with arg: XXX temporary, DBG
     #        os.system(" ".join(["sed -i'' 's/argv_/arg/g; s/argv/arg0/g'", pathcondfile])) #DBG
     # use the collected preconditions and run semy in symbolic mode
-
-    filter_mutestgen = "" if exemode == FilterHardToKill else " -semu-max-tests-gen-per-mutant="+str(tuning['EXTRA']['MaxTestsPerMutant']) # num of test per mutant
 
     pending_threads = range(nThreads)
     enable_semu_fork_externalcall = False
@@ -1077,16 +1089,21 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
             kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -use-cex-cache " # -watchdog"
             kleeArgs += " --output-dir="+semuOutDir
             semukleearg = "-seed-out-dir="+semuSeedsDir
-            semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
-            semuArgs = " ".join([par+'='+str(tuning['SEMU'][par]) for par in tuning['SEMU']])  #" ".join(["-semu-precondition-length=3", "-semu-mutant-max-fork=2"])
-            #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
-            semuArgs += filter_mutestgen
-            if candidateMutantsFile is not None:
-                semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
-            if enable_semu_fork_externalcall:
-                semuArgs += " -semu-forkprocessfor-segv-externalcalls"
+            if isPureKLEE:
+                semuArgs = ""
+                semuExe = "klee"
+            else:
+                semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
+                semuArgs = " ".join([par+'='+str(tuning['SEMU'][par]) for par in tuning['SEMU']])  #" ".join(["-semu-precondition-length=3", "-semu-mutant-max-fork=2"])
+                #semuArgs += " " + " ".join(["-semu-precondition-file="+prec for prec in symbexPreconditions])
+                semuArgs += filter_mutestgen
+                if candidateMutantsFile is not None:
+                    semuArgs += " -semu-candidate-mutants-list-file " + candidateMutantsFile
+                if enable_semu_fork_externalcall:
+                    semuArgs += " -semu-forkprocessfor-segv-externalcalls"
+                semuExe = "klee-semu"
 
-            semuExe = "klee-semu" if semuexedir is None else os.path.join(semuexedir, "klee-semu")
+            semuExe = semuExe if semuexedir is None else os.path.join(semuexedir, semuExe)
             runSemuCmd = " ".join([semuExe, kleeArgs, semukleearg, semuArgs, metaMutantBCFilePath, " ".join(symArgs), "> /dev/null"]) #,"2>&1"])
             #sretcode = os.system(runSemuCmd)
             runSemuCmd += " 2>"+logFile
@@ -1117,7 +1134,7 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
                 print "# Execution failed for", len(failed_thread_executions), "threads:"
                 for thread_id, sretcode in failed_thread_executions:
                     print "-- Returned Code:", sretcode, ", for thread", thread_id,". Command: ", runSemuCmds[thread_id]
-                error_exit("Error: klee-semu symbex failled!") # with code "+str(sretcode))
+                error_exit("Error: klee-semu symbex failled! (name is: "+tuning['name']+")") # with code "+str(sretcode))
             else:
                 # The execution failed for some threads, probably due to Seg Fault during external call.
                 # Rerun those thread in mode where a new process is forked everytime
@@ -1846,8 +1863,16 @@ def main():
             if os.system(" ".join(["fdupes -r -d -N", semuSeedsDir])) != 0:
                 error_exit ("fdupes failed on semuSeedDir")
 
+        # In the case of tests generation, add pure klee
+        if executionMode == GenTestsToKill:
+            assert type(semuTuningList[-1]) == dict
+            purekleetune = semuTuningList[-1].copy()
+            purekleetune['name'] = "_pureklee_"
+            del purekleetune['SEMU']
+            del purekleetune['EXTRA']
+            semuTuningList.append(purekleetune)
+
         # Actual Semu execution and compute
-        # TODO: add normal KLEE
         if len(semuTuningList) > 1:
             conf_threadpool = ThreadPool(len(semuTuningList))
             ctp_return = conf_threadpool.map(configParallel, semuTuningList)
