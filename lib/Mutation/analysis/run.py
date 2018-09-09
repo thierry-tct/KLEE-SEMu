@@ -1094,6 +1094,7 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
             if isPureKLEE:
                 #semuArgs = ""
                 semuArgs = "-stop-after-n-tests="+str(tuning['EXTRA']['MaxTestsPerMutant'] * nMutants)
+                semuArgs += " -only-output-states-covering-new"
                 semuExe = "klee"
             else:
                 semukleearg += " -only-replay-seeds" #make sure that the states not of seed are removed
