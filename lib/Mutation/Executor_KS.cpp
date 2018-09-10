@@ -161,6 +161,10 @@ cl::opt<bool> semuForkProcessForSegvExternalCalls("semu-forkprocessfor-segv-exte
                                           cl::init(false),
                                           cl::desc("Enable forking a new process for external call to 'printf' which can lead to Segmentation Fault."));
 
+cl::opt<bool> semuTestgenOnlyForCriticalDiffs("semu-testsgen-only-for-critical-diffs", 
+                                          cl::init(false), 
+                                          cl::desc("Enable Outputting tests only for critial diffs (involving environment (this excludes local/global vars))"));
+
 // Use shadow test case generation for mutants ()
 cl::opt<bool> semuShadowTestGeneration("semu-shadow-test-gen", 
                                           cl::init(false), 
@@ -4741,7 +4745,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
           llvm::errs() << "<!=> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Different.\n\n";
   #endif
           diffFound = true;
-          if (outputTestCases && ExecutionState::ks_isCriticalDiff(sDiff)) {
+          if (outputTestCases && (!semuTestgenOnlyForCriticalDiffs || ExecutionState::ks_isCriticalDiff(sDiff))) {
             // On test generation mode, if the mutant of mState reached maximum quota of tests, 
             // stop comparing. 
             // insert if not yet in map
