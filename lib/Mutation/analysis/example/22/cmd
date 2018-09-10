@@ -109,4 +109,5 @@ $klee_tests_topdir \
 --semumaxmemory $SEMU_CFG_SEMU_MAXMEMORY \
 --semupreconditionlength "$SEMU_CFG_SEMU_PRECONDITION_LENGTH" \
 --semumutantmaxfork "$SEMU_CFG_SEMU_MUTANT_MAX_FORK" \
+--semumaxtestsgenpermutants "$SEMU_CFG_SEMU_MAX_TESTS_PER_MUTANTS" \
 
