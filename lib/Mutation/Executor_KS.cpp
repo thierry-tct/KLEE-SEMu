@@ -146,7 +146,7 @@ cl::opt<double> semuLoopBreakDelay("semu-loop-break-delay",
                                  cl::desc("Set the maximum time in seconds that the same state is executed without stop"));
 
 // precondition Length value is fixed if >= 0; stop when any state finds a mutants and set to that depth if == -1; stop when each state reach a mutant if < -1
-cl::opt<long> semuPreconditionLength("semu-precondition-length", 
+cl::opt<int> semuPreconditionLength("semu-precondition-length", 
                                  cl::init(6), 
                                  cl::desc("Set number of conditions that will be taken from the test cases path conditions and used as precondition"));
 
