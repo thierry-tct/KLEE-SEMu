@@ -577,6 +577,7 @@ public:
               std::vector<uint64_t> &mut_IDs);
   
   bool ks_nextIsOutEnv (ExecutionState &state);
+  bool ks_reachedAMutant(KInstruction *ki);
   bool ks_reachedCheckMaxDepth(ExecutionState &state);
 
   // Check whether we the last instruction forked - in seed Mode Test Generation (TG)

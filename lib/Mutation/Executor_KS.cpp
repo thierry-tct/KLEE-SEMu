@@ -145,9 +145,10 @@ cl::opt<double> semuLoopBreakDelay("semu-loop-break-delay",
                                  cl::init(120.0), 
                                  cl::desc("Set the maximum time in seconds that the same state is executed without stop"));
 
-cl::opt<unsigned> semuPreconditionLength("semu-precondition-length", 
+// precondition Length value is fixed if >= 0; stop when any state finds a mutants and set to that depth if == -1; stop when each state reach a mutant if < -1
+cl::opt<long> semuPreconditionLength("semu-precondition-length", 
                                  cl::init(6), 
-                                 cl::desc("Set number of conditions that will be taken from the test cases path conditions and used are precondition"));
+                                 cl::desc("Set number of conditions that will be taken from the test cases path conditions and used as precondition"));
 
 cl::opt<unsigned> semuMaxTotalNumTestGen("semu-max-total-tests-gen", 
                                  cl::init(0), 
@@ -2903,6 +2904,8 @@ void Executor::run(ExecutionState &initialState) {
     std::vector<ConstraintManager> symbexPreconditionsList;
     ks_loadKQueryConstraints(symbexPreconditionsList);
     // Make precondition Expression
+    if (symbexPreconditionsList.size() > 0)
+        assert (semuPreconditionLength >= 0 && "Must use symbexPreconditionsList only with fixe preconditionLength");
     unsigned nSelectedConds = semuPreconditionLength;
     ref<Expr> mergedPrecond = ConstantExpr::alloc(0, Expr::Bool);  //False
     for (auto &testcasePC: symbexPreconditionsList) {
@@ -2980,8 +2983,20 @@ void Executor::run(ExecutionState &initialState) {
 
       // @KLEE-SEMu
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-        // remove from seedMap the last state if depth exceeded the precondition length
-        if (state.depth >= semuPreconditionLength) {
+        // remove the last state from seedMap if depth exceeded the precondition length
+        if (semuPreconditionLength < 0) {
+          // We are in non fixed mode: precondition until we reach a point:
+          // == -1: until any state reach a mutant and the depth is fixed for others
+          // < -1: until each state reach a mutant
+          if (ks_reachedAMutant(ki)) {
+            if (semuPreconditionLength == -1)
+              semuPreconditionLength = state.depth; 
+            // else ;
+            seedMap.erase(it);
+            precond_offset++;
+            continue;
+          }
+        } else if (state.depth >= semuPreconditionLength) {
           seedMap.erase(it);
           precond_offset++;
           continue;
@@ -4520,6 +4535,15 @@ inline bool Executor::ks_nextIsOutEnv (ExecutionState &state) {
   return false;
 }
 
+inline bool Executor::ks_reachedAMutant(KInstruction *ki) {
+  if (ki->inst->getOpcode() == Instruction::Call) {
+    Function *f = dyn_cast<CallInst>(ki->inst)->getCalledFunction();
+    if (f == ks_mutantIDSelectorGlobal_Func)
+      return true;
+  }
+  return false;
+}
+
 inline bool Executor::ks_reachedCheckMaxDepth(ExecutionState &state) {
   if (semuMaxDepthWP > 0 && (state.depth > ks_maxDepthID * semuMaxDepthWP))
     return true;
@@ -4745,7 +4769,9 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
           llvm::errs() << "<!=> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Different.\n\n";
   #endif
           diffFound = true;
-          if (outputTestCases && (!semuTestgenOnlyForCriticalDiffs || ExecutionState::ks_isCriticalDiff(sDiff))) {
+
+          // Consider only critical diffs if outEnvOnly is True (semuTestgenOnlyForCriticalDiffs is overriden)
+          if (outputTestCases && (!(semuTestgenOnlyForCriticalDiffs || outEnvOnly) || ExecutionState::ks_isCriticalDiff(sDiff))) {
             // On test generation mode, if the mutant of mState reached maximum quota of tests, 
             // stop comparing. 
             // insert if not yet in map
