@@ -817,7 +817,9 @@ def updateObjects(argvinfo, ktestContains):
                 stdin_pos = stdin_stat_pos - 1
                 assert kt_obj[stdin_pos][0] == 'stdin', "Expected stdin as object just before stdout and model_version"
                 kt_obj[stdin_pos] = (kt_obj[stdin_pos][0], kt_obj[stdin_pos][1] + '\0'*(argvinfo['sym-std']['in-size'] - argvinfo['sym-std']['in-size-pre']))
-            pointer -= 2
+                pointer -= 2
+            else:
+                pointer -= 2
        
         # sym-files
         if argvinfo['sym-files']['nFiles'] > 0:
@@ -842,7 +844,7 @@ def updateObjects(argvinfo, ktestContains):
                     kt_obj.insert(obj_ind, ("n_args", struct.pack('<i', 0)))
                     obj_ind += 1
             else:
-                assert isCmdArg(kt_obj[obj_ind][0])
+                assert isCmdArg(kt_obj[obj_ind][0]), "Supposed to be CMD arg: "+str(kt_obj[obj_ind][0])
                 if '-sym-arg ' in argvinfo['old'][arg_ind]:
                     assert len(argvinfo['new'][arg_ind]) == 1, "must be on sym-args here"
                     kt_obj.insert(obj_ind, ("n_args", struct.pack('<i', 1)))
@@ -953,7 +955,7 @@ def mergeZestiAndKleeKTests (outDir, ktestContains_zest, commonArgs_zest, ktestC
                         z_ind += 1
                     ineqs = [a.replace('sym-arg ', 'sym-args 0 1 ') for a in argv_zest['old'][z_ind:]] #replace sym-arg with sym-args 0 1 because not present in other
                     commonArgs += ineqs
-                    argv_zest['new'][z_ind:] = [ineqs]
+                    argv_zest['new'][z_ind:] = [[v] for v in ineqs]
                     argv_klee['new'][k_ind] += ineqs
                     break
                 if k_ind < len(argv_klee['old']):
@@ -967,7 +969,7 @@ def mergeZestiAndKleeKTests (outDir, ktestContains_zest, commonArgs_zest, ktestC
                         k_ind += 1
                     ineqs = [a.replace('sym-arg ', 'sym-args 0 1 ') for a in argv_klee['old'][k_ind:]] #replace sym-arg with sym-args 0 1 because not present in other
                     commonArgs += ineqs
-                    argv_klee['new'][k_ind:] = [ineqs]
+                    argv_klee['new'][k_ind:] = [[v] for v in ineqs]
                     argv_zest['new'][z_ind] += ineqs
                     break
                 break
