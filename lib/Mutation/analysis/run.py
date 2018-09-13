@@ -1993,7 +1993,9 @@ def main():
                             nnewFailing = 0
                         outobj_[nameprefix] = {"#Mutants": nMutants, "#Killed": nnewKilled, "#GenTests":len(testsOfThis), "#FailingTests":nnewFailing, "MS-INC":(nnewKilled * 100.0 / nMutants), "#AggregatedTestGen": nGenTests_}
                     dumpJson(outobj_, outjsonfile)
-                    print "Kill Mutant TestGen Analyse Result:", outobj_
+                    print "Kill Mutant TestGen Analyse Result:"
+                    for k in outobj_:
+                        print "'"+k+"':", outobj_[k]
 
     print "@ DONE!"
 
