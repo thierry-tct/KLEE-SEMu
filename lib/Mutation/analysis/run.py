@@ -1252,6 +1252,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
         for minf in mut_fold:
             df = pd.read_csv(minf)
             for index, row in df.iterrows():
+                 assert row["ktest"].endswith(".ktest"), "Invalid minf file: "+minf
                  et = row["ellapsedTime(s)"]
                  mid = row["MutantID"]
                  ktp = os.path.join(fold, row["ktest"])
@@ -1992,7 +1993,9 @@ def main():
                             nnewFailing = 0
                         outobj_[nameprefix] = {"#Mutants": nMutants, "#Killed": nnewKilled, "#GenTests":len(testsOfThis), "#FailingTests":nnewFailing, "MS-INC":(nnewKilled * 100.0 / nMutants), "#AggregatedTestGen": nGenTests_}
                     dumpJson(outobj_, outjsonfile)
-                    print "Kill Mutant TestGen Analyse Result:", outobj_
+                    print "Kill Mutant TestGen Analyse Result:"
+                    for k in outobj_:
+                        print "'"+k+"':", outobj_[k]
 
     print "@ DONE!"
 
