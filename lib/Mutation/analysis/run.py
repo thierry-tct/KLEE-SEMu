@@ -29,6 +29,10 @@ import rankSemuMutants
 import analyse
 import ktest_tool
 
+sys.path.insert(0, os.path.expanduser("~/mytools/MFI-V2.0/REFACTORING"))
+import magma.common.fs as magma_common_fs  # for compress and decmpress dir
+import magma.statistics.algorithms as magma_stats_algo # for Venn
+
 OutFolder = "OUTPUT"
 KleeSemuBCSuff = ".MetaMu.bc"
 ZestiBCSuff = ".Zesti.bc"
@@ -59,6 +63,7 @@ def dumpJson (data, filename):
     with open(filename, 'w') as f:
         json.dump(data, f)
 
+'''
 def compressDir (inDir, out_tar_filename=None, remove_inDir=False):
     if out_tar_filename is None:
         out_tar_filename = inDir + ".tar.gz"
@@ -116,6 +121,7 @@ def getCommonSetsSizes_venn (setsElemsDict, setsize_from=None, setsize_to=None, 
     
     return res_num
 #~ def getCommonSetsSizes_venn()
+'''
 
 def getTestSamples(testListFile, samplePercent, matrix, discards={}, hasKleeTests=True):
     assert samplePercent >= 0 and samplePercent <= 100, "invalid sample percent"
@@ -2025,7 +2031,11 @@ def main():
                         nnewKilled = len(newKilled)
                         outobj_[nameprefix] = {"#Mutants": nMutants, "#Killed": nnewKilled, "#GenTests":len(testsOfThis), "#FailingTests":nnewFailing, "MS-INC":(nnewKilled * 100.0 / nMutants), "#AggregatedTestGen": nGenTests_}
                         killedMutsPerTuning[nameprefix] = set(newKilled)
-                    venn_killedMutsInCommon = getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=len(killedMutsPerTuning), setsize_to=len(killedMutsPerTuning), name_delim='&')
+                    
+                    venn_killedMutsInCommon = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=len(killedMutsPerTuning), setsize_to=len(killedMutsPerTuning), name_delim='&')
+                    assert "OVERLAP_VENN" not in outobj_
+                    outobj_["OVERLAP_VENN"] = venn_killedMutsInCommon
+
                     dumpJson(outobj_, outjsonfile)
                     print "Kill Mutant TestGen Analyse Result:"
                     for k in outobj_:
