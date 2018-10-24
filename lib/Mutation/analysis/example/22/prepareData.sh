@@ -10,7 +10,19 @@ error_exit()
     exit 1
 }
 
-[ $# = 2 ] || error_exit "Expected two params $# given: <confFile> <destTopDir>"
+if [ $# = 3 ]
+then
+    semuconfigfile=$3
+    test -f $semuconfigfile || error_exit "$semuconfigfile not found"
+    source $semuconfigfile
+    llvm_compiler_path=$SEMU_CFG_LLVM27_EXE_DIR
+    llvm_gcc_path=$SEMU_CFG_LLVMGCC_EXE_DIR
+else
+    [ $# = 2 ]|| error_exit "Expected two or three params $# given: <confFile> <destTopDir> [<run semu config file>]"
+    llvm_compiler_path='/home/shadowvm/shadow/kleeDeploy/llvm-2.9/Release+Asserts/bin' # CHANGE This XXX
+    llvm_gcc_path='/home/shadowvm/shadow/kleeDeploy/llvm-gcc4.2-2.9-x86_64-linux/bin' # CHANGE This XXX
+fi
+
 confscript=$(readlink -f $1)
 destTopDir=$(readlink -f $2)
 zest=1
@@ -31,8 +43,8 @@ then
     # COMPILE Project with llvm-2.7 and save with Zesti
     echo "Building fo Zesti BC ..."
     export LLVM_COMPILER='llvm-gcc'
-    export LLVM_COMPILER_PATH='/home/shadowvm/shadow/kleeDeploy/llvm-2.9/Release+Asserts/bin' # CHANGE This XXX
-    export PATH=$PATH:'/home/shadowvm/shadow/kleeDeploy/llvm-gcc4.2-2.9-x86_64-linux/bin' # CHANGE This XXX
+    export LLVM_COMPILER_PATH=$llvm_compiler_path
+    export PATH=$PATH:$llvm_gcc_path
     $MFI_BUILDSCRIPT "wllvm" "" build || error_exit "Build failed with wllvl llvm2.7"
     cd $MFI_EXEDIR && extract-bc $MFI_PROGRAM || error_exit "Failed extract bc"
     cp $MFI_PROGRAM.bc $inmutsodldir/$MFI_PROGRAM.Zesti.bc || error_exit "copy bc failed"
