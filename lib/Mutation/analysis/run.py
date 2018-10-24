@@ -1130,7 +1130,8 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
         failed_thread_executions = []
         for thread_id, sretcode in zip(pending_threads, sretcodes):
             if sretcode != 0 :#and sretcode != 256: # 256 for timeout
-                failed_thread_executions.append((thread_id, sretcode))
+                if sretcode != 124: # timeout
+                    failed_thread_executions.append((thread_id, sretcode))
 
         if len(failed_thread_executions) > 0:
             common_err = failed_thread_executions[0][1]
