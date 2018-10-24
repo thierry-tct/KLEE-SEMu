@@ -91,6 +91,32 @@ def decompressDir (in_tar_filename, outDir=None):
         error_exit("Invalid tar file: "+in_tar_filename)
 #~ def decompressDir()
 
+def getCommonSetsSizes_venn (setsElemsDict, setsize_from=None, setsize_to=None, name_delim='&'):
+    res_set = {}
+    if setsize_from is None:
+        setsize_from = 1
+    if setsize_to is None:
+        setsize_to = len(setsElemsDict)
+    ordered_keys = list(setsElemsDict)
+    for setsize in range(setsize_from, setsize_to+1):
+        for set_pos in itertools.combinations(range(len(ordered_keys)), setsize):
+            name_key = name_delim.join([ordered_keys[i] for i in set_pos])
+            assert name_key not in res_set
+            res_set[name_key] = None
+            #print set_pos, len(set_pos)
+            for i in set_pos:
+                if res_set[name_key] is None:
+                    res_set[name_key] = set(setsElemsDict[ordered_keys[i]])
+                else:
+                    res_set[name_key] &= setsElemsDict[ordered_keys[i]]
+    #print res_set
+    res_num = {}
+    for v in res_set:
+        res_num[v] = len(res_set[v])
+    
+    return res_num
+#~ def getCommonSetsSizes_venn()
+
 def getTestSamples(testListFile, samplePercent, matrix, discards={}, hasKleeTests=True):
     assert samplePercent >= 0 and samplePercent <= 100, "invalid sample percent"
     samples = {}
@@ -1895,7 +1921,7 @@ def main():
             for tc in testSamples[ts_size]:
                 shutil.copy2(test2semudirMap[tc], semuSeedsDir)
             # Fdupes the seedDir.
-            if os.system(" ".join(["fdupes -r -d -N", semuSeedsDir])) != 0:
+            if os.system(" ".join(["fdupes -r -d -N", semuSeedsDir, '> /dev/null'])) != 0:
                 error_exit ("fdupes failed on semuSeedDir")
 
         # In the case of tests generation, add pure klee
@@ -1985,17 +2011,21 @@ def main():
                     sm_file = os.path.join(mfi_execution_output, "data", "matrices", "SM.dat")
                     pf_file = os.path.join(mfi_execution_output, "data", "matrices", "ktestPassFail.txt")
                     outobj_ = {}
+                    killedMutsPerTuning = {}
                     for semuTuning in semuTuningList:
                         nameprefix = semuTuning['name']
                         testsOfThis = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-tests_by_ellapsedtime.csv"))['ktest']
                         testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
                         if len(testsOfThis) > 0:
-                            nnewKilled = len(matrixHardness.getKillableMutants(sm_file, testsOfThis))
+                            newKilled = matrixHardness.getKillableMutants(sm_file, testsOfThis)
                             nnewFailing = len(matrixHardness.getFaultyTests(pf_file, testsOfThis))
                         else:
-                            nnewKilled = 0
+                            newKilled = []
                             nnewFailing = 0
+                        nnewKilled = len(newKilled)
                         outobj_[nameprefix] = {"#Mutants": nMutants, "#Killed": nnewKilled, "#GenTests":len(testsOfThis), "#FailingTests":nnewFailing, "MS-INC":(nnewKilled * 100.0 / nMutants), "#AggregatedTestGen": nGenTests_}
+                        killedMutsPerTuning[nameprefix] = set(newKilled)
+                    venn_killedMutsInCommon = getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=len(killedMutsPerTuning), setsize_to=len(killedMutsPerTuning), name_delim='&')
                     dumpJson(outobj_, outjsonfile)
                     print "Kill Mutant TestGen Analyse Result:"
                     for k in outobj_:
