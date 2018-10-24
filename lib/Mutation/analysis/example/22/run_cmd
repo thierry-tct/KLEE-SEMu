@@ -2,8 +2,9 @@
 
 # Can run this from top dir, which contain inputs in directory 'inputs'
 
-# Example run:  SKIP_TASKS="" GIVEN_CONF_SCRIPT=<link> bash cmd
+# Example run:  SKIP_TASKS="" GIVEN_CONF_SCRIPT=<link> bash run_cmd
 # tasksList = [ZESTI_DEV_TASK, TEST_GEN_TASK, SEMU_EXECUTION, COMPUTE_TASK, ANALYSE_TASK]
+# SKIP_TASKS="" GIVEN_CONF_SCRIPT= bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd
 
 set -u 
 
