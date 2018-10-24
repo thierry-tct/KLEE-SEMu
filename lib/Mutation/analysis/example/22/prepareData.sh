@@ -1,6 +1,6 @@
 #! /bin/bash
 # USAGE example: 
-# bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/prepareData.sh ../workspace/metactrl/chroot/chroot_conf-script.conf .
+# bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/prepareData.sh ../workspace/metactrl/chroot/chroot_conf-script.conf . [~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd-HPC.cfg]
 
 set -u
 
