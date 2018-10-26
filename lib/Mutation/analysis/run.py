@@ -1159,10 +1159,13 @@ def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidate
         else:
             sretcodes = map(os.system, runSemuCmds)
 
+        # get the actual returned code (os.system return not only the code but also the signal)
+        sretcodes = [os.WEXITSTATUS(os_sys_ret) for os_sys_ret in sretcodes]
+
         failed_thread_executions = []
         for thread_id, sretcode in zip(pending_threads, sretcodes):
-            if sretcode != 0 :#and sretcode != 256: # 256 for timeout
-                if sretcode != 124: # timeout
+            if sretcode != 0 :#and sretcode != 256: # 256 for watchdog timeout
+                if sretcode != 124 and sretcode != 137: # timeout and kill(9)
                     failed_thread_executions.append((thread_id, sretcode))
 
         if len(failed_thread_executions) > 0:
