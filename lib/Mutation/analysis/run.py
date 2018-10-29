@@ -2073,7 +2073,7 @@ def main():
                         outobj_[nameprefix] = {"#Mutants": nMutants, "#Killed": nnewKilled, "#GenTests":len(testsOfThis), "#FailingTests":nnewFailing, "MS-INC":(nnewKilled * 100.0 / nMutants), "#AggregatedTestGen": nGenTests_}
                         killedMutsPerTuning[nameprefix] = set(newKilled)
                     
-                    venn_killedMutsInCommon = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=len(killedMutsPerTuning), setsize_to=len(killedMutsPerTuning), name_delim='&')
+                    venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=len(killedMutsPerTuning), setsize_to=len(killedMutsPerTuning), name_delim='&')
                     assert "OVERLAP_VENN" not in outobj_
                     outobj_["OVERLAP_VENN"] = venn_killedMutsInCommon
 
