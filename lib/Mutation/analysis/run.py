@@ -1060,8 +1060,7 @@ def mergeZestiAndKleeKTests (outDir, ktestContains_zest, commonArgs_zest, ktestC
 
 # put information from concolic run for the passed test set into a temporary dir, then possibly
 # Compute SEMU symbex and rank according to SEMU. outpout in outFilePath
-# semuworkdir contains all the seeds and we sample some for execution
-def executeSemu (semuworkdir, semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles, symArgs, semuexedir, tuning, mergeThreadsDir=None, exemode=FilterHardToKill): #="zesti+symbex"):
+def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles, symArgs, semuexedir, tuning, mergeThreadsDir=None, exemode=FilterHardToKill): #="zesti+symbex"):
     # Prepare the seeds to use
     threadsOutTop = os.path.dirname(semuOutDirs[0])
     if os.path.isdir(threadsOutTop):
@@ -1662,30 +1661,48 @@ def main():
         kleeSemuInBC = os.path.basename(exePath) + KleeSemuBCSuff
         kleeSemuInBCLink = os.path.join(martOut, kleeSemuInBC)
         zestioutdir = os.path.join(cacheDir, "ZestiOutDir")
+        zestioutdir_targz = zestioutdir+".tar.gz"
         inBCFilePath = zestiInBCLink #if runMode == "zesti+symbex" else kleeSemuInBCLink
         test2zestidirMapFile = os.path.join(cacheDir, "test2zestidirMap.json")
         if ZESTI_DEV_TASK in toExecute:
             # Prepare outdir and copy bc
             if os.path.isdir(zestioutdir):
                 shutil.rmtree(zestioutdir)
+            if os.path.isfile(zestioutdir_targz):
+                os.remove(zestioutdir_targz)
             os.mkdir(zestioutdir)
 
             unused, alltestsObj, unwrapped_testlist = getTestSamples(testList, 0, matrix)   # 0 to not sample
             test2zestidirMap = runZestiOrSemuTC (unwrapped_testlist, alltestsObj['DEVTESTS'], exePath, runtestScript, inBCFilePath, zestioutdir, zesti_exe_dir, llvmgcc_exe_dir, llvm27_exe_dir) #, mode=runMode) #mode can also be "semuTC"
             dumpJson(stripRootTest2Dir(outDir, test2zestidirMap), test2zestidirMapFile)
+
+            # Compress zestioutdir and delete the directory, keeping only the tar.gz file
+            errmsg = magma_common_fs.compressDir(zestioutdir, zestioutdir_targz, remove_in_directory=True)
+            if errmsg is not None:
+                error_exit(errmsg)
         else:
             print "## Loading zesti test mapping from Cache"
-            assert os.path.isdir(zestioutdir), "Error: zestioutdir absent when ZESTI_DEV mode skipped"
+            #assert os.path.isdir(zestioutdir), "Error: zestioutdir absent when ZESTI_DEV mode skipped"
+            assert os.path.isfile(zestioutdir_targz), "Error: zestioutdir.tar.gz absent when ZESTI_DEV mode skipped"
             test2zestidirMap = loadJson(test2zestidirMapFile)
             test2zestidirMap = prependRootTest2Dir(outDir, test2zestidirMap)
 
     # TODO: TEST GEN part here. if klee_tests_topdir is not None, means use the tests from klee to increase baseline and dev test to evaluate aproaches
     # prepare seeds and extract sym-args. Then store it in the cache
     semuworkdir = os.path.join(cacheDir, "SemuWorkDir")
+    semuworkdir_targz = semuworkdir+".tar.gz"
     test2semudirMapFile = os.path.join(cacheDir, "test2semudirMap.json")
     if TEST_GEN_TASK in toExecute:
         print "# Doing TEST_GEN_TASK ..."
-        assert os.path.isdir(zestioutdir), "Error: "+zestioutdir+" not existing. Please make sure to collect Dev tests with Zesti"
+        #assert os.path.isdir(zestioutdir), "Error: "+zestioutdir+" not existing. Please make sure to collect Dev tests with Zesti"
+        assert os.path.isfile(zestioutdir_targz), "Error: "+zestioutdir_targz+" not existing. Please make sure to collect Dev tests with Zesti"
+
+        # Decompress zestioutdir_targz
+        if os.path.isdir(zestioutdir):
+            shutil.rmtree(zestioutdir)
+        errmsg = magma_common_fs.decompressDir(zestioutdir_targz, zestioutdir)
+        if errmsg is not None:
+            error_exit(errmsg)
         
         if os.path.isdir(semuworkdir):
             shutil.rmtree(semuworkdir)
@@ -1713,9 +1730,19 @@ def main():
             
         sym_args_param, test2semudirMap = mergeZestiAndKleeKTests (semuworkdir, zestKTContains, zest_sym_args_param, kleeKTContains, klee_sym_args_param)
         dumpJson([testSampleMode, sym_args_param, stripRootTest2Dir(outDir, test2semudirMap)], test2semudirMapFile)
+
+        # remove temporary decompressed zestioutdir 
+        shutil.rmtree(zestioutdir)
+
+        # Compress semuworkdir and delete the directory, keeping only the tar.gz file
+        errmsg = magma_common_fs.compressDir(semuworkdir, semuworkdir_targz, remove_in_directory=True)
+        if errmsg is not None:
+            error_exit(errmsg)
+
     else:
         print "## Loading parametrized tests mapping from cache"
-        assert os.path.isdir(semuworkdir), "Error: semuworkdir absent when TEST-GEN mode skipped"
+        #assert os.path.isdir(semuworkdir), "Error: semuworkdir absent when TEST-GEN mode skipped"
+        assert os.path.isfile(semuworkdir_targz), "Error: semuworkdir.tar.gz absent when TEST-GEN mode skipped"
         tmpSamplMode, sym_args_param, test2semudirMap = loadJson(test2semudirMapFile)
         assert tmpSamplMode == testSampleMode, "Given test Sample Mode ("+testSampleMode+") is different from caches ("+tmpSamplMode+"); should not skip TEST_GET_TASK!"
         test2semudirMap = prependRootTest2Dir(outDir, test2semudirMap)
@@ -1846,7 +1873,7 @@ def main():
             # Execute SEMU
             if SEMU_EXECUTION in toExecute: 
                 if martOut is not None:
-                    executeSemu (semuworkdir, semuoutputs, semuSeedsDir, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, exemode=executionMode) 
+                    executeSemu (semuoutputs, semuSeedsDir, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, exemode=executionMode) 
 
             if executionMode == FilterHardToKill:
                 if len(thisOut_list) == 1 and os.path.isdir(mergeSemuThreadsDir): #only have one thread, only process that
@@ -1927,8 +1954,19 @@ def main():
             if os.path.isdir(semuSeedsDir):
                 shutil.rmtree(semuSeedsDir)
             os.mkdir(semuSeedsDir)
+
+            # Decompress semuworkdir_targz
+            errmsg = magma_common_fs.decompressDir(semuworkdir_targz, semuworkdir)
+            if errmsg is not None:
+                error_exit(errmsg)
+            
+            # copy needed tests
             for tc in testSamples[ts_size]:
                 shutil.copy2(test2semudirMap[tc], semuSeedsDir)
+
+            # delete the decompressed temporary semuworkdir 
+            shutil.rmtree(semuworkdir)
+
             # Fdupes the seedDir.
             if os.system(" ".join(["fdupes -r -d -N", semuSeedsDir, '> /dev/null'])) != 0:
                 error_exit ("fdupes failed on semuSeedDir")
