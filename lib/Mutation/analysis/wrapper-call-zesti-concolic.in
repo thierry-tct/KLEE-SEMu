@@ -10,7 +10,7 @@ set -o pipefail
 #TOOL_NAME="IN_TOOL_NAME"
 maxTime=${SEMU_MAX_TIME:-TOTAL_MAX_TIME_}
 solvermaxtime=${SEMU_MAX_SOLVER_TIME:-SOLVER_MAX_TIME_}
-semuout="semu.out"
+semuout="IN_TOOL_DIR/semu.out"
 
 stdindata="IN_TOOL_DIR/klee-last/stdin-ktest-data"
 tmpstdindata="IN_TOOL_DIR/stdin-ktest-data"
