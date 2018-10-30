@@ -16,7 +16,7 @@ import json, re
 import shutil, glob
 import tarfile
 import argparse
-import random
+import random, time
 import pandas as pd
 import struct
 import itertools
@@ -260,7 +260,8 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
             wrapTestName = os.path.join(tc.replace('/', '_') + "-out", "Dev-out-"+str(devtid), "devtest.ktest")
             if not len(glob.glob(kleeoutdir+'/*.ktest')) > 0:
                 print "## Did not find ktest in folder", kleeoutdir 
-                wait_creation = raw_input(". can you see it manually? [y/n]")
+                #wait_creation = raw_input(". can you see it manually? [y/n]")
+                time.sleep(5)
             if len(glob.glob(kleeoutdir+'/*.ktest')) <= 0:
                 assert os.path.isfile(semuExecLog), "Semu exec log not found"
                 with open(semuExecLog) as f:
