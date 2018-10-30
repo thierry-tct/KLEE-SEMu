@@ -231,6 +231,7 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
     nKleeOut = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
     assert nKleeOut == 0, "Must be no klee out in the begining"
     for tc in unwrapped_testlist:
+        semuExecLog = os.path.join(outpdir, "semu.out")
         # Run Semu with tests (wrapper is installed)
         print "# Running Tests", tc, "..."
         zestCmd = " ".join(["bash", runtestScript, tc, testrunlog])
@@ -260,11 +261,27 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
             if not len(glob.glob(kleeoutdir+'/*.ktest')) > 0:
                 print "## Did not find ktest in folder", kleeoutdir 
                 wait_creation = raw_input(". can you see it manually? [y/n]")
+            if len(glob.glob(kleeoutdir+'/*.ktest')) <= 0:
+                assert os.path.isfile(semuExecLog), "Semu exec log not found"
+                with open(semuExecLog) as f:
+                    cantgentest = False
+                    kleedone = False
+                    for line in f:
+                        if line.strip() == "KLEE: WARNING: unable to get symbolic solution, losing test case":
+                            cantgentest = True
+                        elif line.strip().startswith("KLEE: done: generated tests = 1"):
+                            kleedone = True
+                    if cantgentest and kleedone:
+                        shutil.copy2 (semuExecLog, os.path.join(kleeoutdir, 'test000001.ktest'))
+
             assert len(glob.glob(kleeoutdir+'/*.ktest')) > 0, "No ktest was generated for "+wrapTestName+". Folder is: "+kleeoutdir+". ZEST CMD: "+zestCmd
 
             test2outdirMap[wrapTestName] = kleeoutdir
         # update
         nKleeOut = nNew
+
+        if os.path.isfile(semuExecLog):
+            os.remove(semuExecLog)
     for wtc in devtests:
         assert wtc in test2outdirMap, "test not in Test2SemuoutdirMap: \nMap: "+str(test2outdirMap)+"\nTest: "+wtc
     return test2outdirMap
