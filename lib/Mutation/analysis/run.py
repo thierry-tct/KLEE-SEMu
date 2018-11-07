@@ -2074,21 +2074,41 @@ def main():
                 else:
                     nMutants = len(groundConsideredMutant_covtests)
                     sm_file = os.path.join(mfi_execution_output, "data", "matrices", "SM.dat")
+                    mcov_file = os.path.join(mfi_execution_output, "data", "matrices", "MCOV.dat")
                     pf_file = os.path.join(mfi_execution_output, "data", "matrices", "ktestPassFail.txt")
                     outobj_ = {}
                     killedMutsPerTuning = {}
                     for semuTuning in semuTuningList:
                         nameprefix = semuTuning['name']
                         testsOfThis = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-tests_by_ellapsedtime.csv"))['ktest']
+                        test2mutsDS = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-mutant_ktests_mapping.json"))
+                        targeted_mutants = set()
+                        for kt in test2mutsDS:
+                            for mpair in test2mutsDS[kt]:
+                                targeted_mutants |= set(mpair)
+                        if nameprefix == '_pureklee_':
+                            targeted_mutants = set([0])
                         testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
                         if len(testsOfThis) > 0:
                             newKilled = matrixHardness.getKillableMutants(sm_file, testsOfThis)
+                            newCovered = matrixHardness.getCoveredMutants(mcov_file, testsOfThis)
                             nnewFailing = len(matrixHardness.getFaultyTests(pf_file, testsOfThis))
                         else:
                             newKilled = []
+                            newCovered = []
                             nnewFailing = 0
                         nnewKilled = len(newKilled)
-                        outobj_[nameprefix] = {"#Mutants": nMutants, "#Killed": nnewKilled, "#GenTests":len(testsOfThis), "#FailingTests":nnewFailing, "MS-INC":(nnewKilled * 100.0 / nMutants), "#AggregatedTestGen": nGenTests_}
+                        nnewCovered = len(newCovered)
+                        outobj_[nameprefix] = {
+                                                "#Mutants": nMutants, 
+                                                "#Targeted": len(targeted_mutants), 
+                                                "#Covered": nnewCovered, 
+                                                "#Killed": nnewKilled, 
+                                                "#GenTests":len(testsOfThis), 
+                                                "#FailingTests":nnewFailing, 
+                                                "MS-INC":(nnewKilled * 100.0 / nMutants), 
+                                                "#AggregatedTestGen": nGenTests_
+                                            }
                         killedMutsPerTuning[nameprefix] = set(newKilled)
                     
                     venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=1, setsize_to=len(killedMutsPerTuning), name_delim='&')
