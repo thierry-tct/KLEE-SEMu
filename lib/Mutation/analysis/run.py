@@ -2091,7 +2091,7 @@ def main():
                         testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
                         if len(testsOfThis) > 0:
                             newKilled = matrixHardness.getKillableMutants(sm_file, testsOfThis)
-                            newCovered = matrixHardness.getCoveredMutants(mcov_file, testsOfThis)
+                            newCovered = matrixHardness.getListCoveredMutants(mcov_file, testsOfThis)
                             nnewFailing = len(matrixHardness.getFaultyTests(pf_file, testsOfThis))
                         else:
                             newKilled = []
