@@ -1575,6 +1575,7 @@ def main():
     parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
     parser.add_argument("--semumaxtestsgenpermutants", type=int, default=5, help="Specify the maximum number of tests to generate for each mutant in test generation mode")
     parser.add_argument("--nummaxparallel", type=int, default=1, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
+    parser.add_argument("--disable_pureklee", action="store_true", help="Disable doing computation for pureklee")
     args = parser.parse_args()
 
     outDir = os.path.join(args.outTopDir, OutFolder)
@@ -1990,7 +1991,7 @@ def main():
                 error_exit ("fdupes failed on semuSeedDir")
 
         # In the case of tests generation, add pure klee
-        if executionMode == GenTestsToKill:
+        if executionMode == GenTestsToKill and not args.disable_pureklee:
             assert type(semuTuningList[-1]) == dict
             purekleetune = semuTuningList[-1].copy()
             purekleetune['name'] = "_pureklee_"

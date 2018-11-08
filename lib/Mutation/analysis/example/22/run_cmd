@@ -23,6 +23,8 @@ if [ "${GIVEN_CONF_SCRIPT:-}" != "" ]
 then
     configfile=$(basename $GIVEN_CONF_SCRIPT)
     configdir=$(dirname $(readlink -f $GIVEN_CONF_SCRIPT))
+else
+    error_exit "it is mandatory to pas 'GIVEN_CONF_SCRIPT' env var"
 fi
 ##########################################################
 
