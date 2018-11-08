@@ -2089,8 +2089,9 @@ def main():
                         if nameprefix == '_pureklee_':
                             targeted_mutants = set([0])
                         testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
+                        testsKillingOfThis = []
                         if len(testsOfThis) > 0:
-                            newKilled = matrixHardness.getKillableMutants(sm_file, testsOfThis)
+                            newKilled = matrixHardness.getKillableMutants(sm_file, testsOfThis, testkillinglist=testsKillingOfThis)
                             newCovered = matrixHardness.getListCoveredMutants(mcov_file, testsOfThis)
                             nnewFailing = len(matrixHardness.getFaultyTests(pf_file, testsOfThis))
                         else:
@@ -2105,6 +2106,7 @@ def main():
                                                 "#Covered": nnewCovered, 
                                                 "#Killed": nnewKilled, 
                                                 "#GenTests":len(testsOfThis), 
+                                                "#GenTestsKilling":len(testsKillingOfThis), 
                                                 "#FailingTests":nnewFailing, 
                                                 "MS-INC":(nnewKilled * 100.0 / nMutants), 
                                                 "#AggregatedTestGen": nGenTests_
