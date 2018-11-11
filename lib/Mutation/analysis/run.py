@@ -2089,6 +2089,7 @@ def main():
                                 targeted_mutants |= set(mpair)
                         if nameprefix == '_pureklee_':
                             targeted_mutants = set([0])
+                        targeted_mutants &= set(groundConsideredMutant_covtests)
                         testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
                         testsKillingOfThis = []
                         if len(testsOfThis) > 0:
