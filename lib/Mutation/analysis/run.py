@@ -1102,6 +1102,8 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
         nThreads = len(candidateMutantsFiles)
 
     filter_mutestgen = "" if exemode == FilterHardToKill else " -semu-max-tests-gen-per-mutant="+str(tuning['EXTRA']['MaxTestsPerMutant']) # num of test per mutant
+    if tuning['EXTRA']['-semu-testsgen-only-for-critical-diffs']:
+        filter_mutestgen += " -semu-testsgen-only-for-critical-diffs"
 
     # Copy the metaMutantBC file into semu semuSeedsDir (will be remove when semuSeedsDir is removed bellow)
     # Avoid case where klee modifies the BC file and don't have backup
@@ -1574,6 +1576,7 @@ def main():
     parser.add_argument("--semumutantmaxfork", type=str, default='2', help="Specify comma separated list of hard checkpoint for mutants (or post condition checkpoint) as PC length, in semu execution")
     parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
     parser.add_argument("--semumaxtestsgenpermutants", type=int, default=5, help="Specify the maximum number of tests to generate for each mutant in test generation mode")
+    parser.add_argument("--semutestgenonlycriticaldiffs", action="store_true", help="Enable only critical diff when test generated")
     parser.add_argument("--nummaxparallel", type=int, default=1, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
     parser.add_argument("--disable_pureklee", action="store_true", help="Disable doing computation for pureklee")
     args = parser.parse_args()
@@ -1658,8 +1661,10 @@ def main():
         semuTuningList.append({
                         'name': str(semupreconditionlength)+'_'+str(semumutantmaxfork),
                         'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
-                        'SEMU':{"-semu-precondition-length":args_semupreconditionlength, "-semu-mutant-max-fork":args_semumutantmaxfork, "-semu-loop-break-delay":args.semuloopbreaktimeout},
-                        'EXTRA':{'MaxTestsPerMutant': args.semumaxtestsgenpermutants}
+                        'SEMU':{"-semu-precondition-length":args_semupreconditionlength, 
+                                "-semu-mutant-max-fork":args_semumutantmaxfork, 
+                                "-semu-loop-break-delay":args.semuloopbreaktimeout},
+                        'EXTRA':{'MaxTestsPerMutant': args.semumaxtestsgenpermutants, "-semu-testsgen-only-for-critical-diffs":args.semutestgenonlycriticaldiffs}
                      })
 
     # Create outdir if absent
