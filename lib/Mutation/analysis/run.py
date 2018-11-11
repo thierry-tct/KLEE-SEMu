@@ -2085,11 +2085,9 @@ def main():
                         test2mutsDS = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-mutant_ktests_mapping.json"))
                         targeted_mutants = set()
                         for kt in test2mutsDS:
-                            for mpair in test2mutsDS[kt]:
-                                targeted_mutants |= set(mpair)
-                        if nameprefix == '_pureklee_':
-                            targeted_mutants = set([0])
-                        targeted_mutants &= set(groundConsideredMutant_covtests)
+                            for mutant_,elapsedtime in test2mutsDS[kt]:
+                                targeted_mutants.add(mutant_)
+                        assert len(targeted_mutants - set(groundConsideredMutant_covtests)) == 0, "more mutants that were used to gen tests"
                         testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
                         testsKillingOfThis = []
                         if len(testsOfThis) > 0:
