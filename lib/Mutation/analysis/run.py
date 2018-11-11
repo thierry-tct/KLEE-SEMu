@@ -2087,7 +2087,8 @@ def main():
                         for kt in test2mutsDS:
                             for mutant_,elapsedtime in test2mutsDS[kt]:
                                 targeted_mutants.add(mutant_)
-                        assert len(targeted_mutants - set(groundConsideredMutant_covtests)) == 0, "more mutants were used to gen tests: "+str(len(targeted_mutants - set(groundConsideredMutant_covtests)))
+                        if nameprefix != '_pureklee_':
+                            assert len(targeted_mutants - set(groundConsideredMutant_covtests)) == 0, "more mutants were used to gen tests: "+str(len(targeted_mutants - set(groundConsideredMutant_covtests)))
                         testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
                         testsKillingOfThis = []
                         if len(testsOfThis) > 0:
