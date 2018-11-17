@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -u
+set -o pipefail
+
+# TODO: path to 'tee' is hard-coded to avoid problems with binutils
+
+# This script is invoked by the test suite. Don't rely on the wd.
+#TOOL_DIR="/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/SEMU_EXECUTION/prime/OUTPUT/caches/ZestiOutDir"
+#TOOL_NAME="prime.Zesti"
+maxTime=${SEMU_MAX_TIME:-7200.0}
+solvermaxtime=${SEMU_MAX_SOLVER_TIME:-240.0}
+semuout="/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/SEMU_EXECUTION/prime/OUTPUT/caches/ZestiOutDir/semu.out"
+
+stdindata="/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/SEMU_EXECUTION/prime/OUTPUT/caches/ZestiOutDir/klee-last/stdin-ktest-data"
+tmpstdindata="/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/SEMU_EXECUTION/prime/OUTPUT/caches/ZestiOutDir/stdin-ktest-data"
+
+# Concolic
+if [ -t 0 ] # check if stdin do not exist 
+then
+    #(/home/shadowvm/shadow/klee-change/Release+Asserts/bin/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/SEMU_EXECUTION/prime/OUTPUT/caches/ZestiOutDir/prime.Zesti.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1)
+    (/home/shadowvm/shadow/klee-change/Release+Asserts/bin/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/SEMU_EXECUTION/prime/OUTPUT/caches/ZestiOutDir/prime.Zesti.bc" "${@:1}" > $semuout 2>&1) ; EXIT_CODE=$?
+    /usr/bin/touch $tmpstdindata
+else
+#/usr/bin/tee >(/home/shadowvm/shadow/klee-change/Release+Asserts/bin/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs "/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/SEMU_EXECUTION/prime/OUTPUT/caches/ZestiOutDir/prime.Zesti.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1) >(cat - > $tmpstdindata || EXIT_CODE=1) 
+(/bin/cat - > $tmpstdindata ) || EXIT_CODE=1
+#(/bin/cat $tmpstdindata | /home/shadowvm/shadow/klee-change/Release+Asserts/bin/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/SEMU_EXECUTION/prime/OUTPUT/caches/ZestiOutDir/prime.Zesti.bc" "${@:1}" | /usr/bin/tee $semuout 2>&1); EXIT_CODE=$?
+(/bin/cat $tmpstdindata | /home/shadowvm/shadow/klee-change/Release+Asserts/bin/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/SEMU_EXECUTION/prime/OUTPUT/caches/ZestiOutDir/prime.Zesti.bc" "${@:1}" > $semuout 2>&1); EXIT_CODE=$?
+fi
+
+# Symbolic
+
+# wait for zesti to finish (when tee is used for input dispatchment)
+#while true;
+#do
+#    `/bin/ps --ppid $$ | /bin/grep "/home/shadowvm/shadow/klee-change/Release+Asserts/bin/klee" > dev/null` || break
+#    /bin/sleep 1 # XXX removing this makes exit with 256, why(FIXME)
+#done
+#/bin/sleep 1 # XXX removing this makes exit with 256, why(FIXME)
+
+# after  zesti finished and updated klee-last
+/bin/mv $tmpstdindata $stdindata || EXIT_CODE=2 
+
+# Replace the /usr/bin/tee above. is it needed?
+cat $semuout
+
+# Provoke "unbound variable" if KLEE fails
+# Preserve the KLEE exit code
+exit $EXIT_CODE

@@ -1,0 +1,35 @@
+klee --simplify-sym-indices --max-memory=2048 --disable-inlining --optimize --use-forked-solver --use-cex-cache --libc=uclibc --posix-runtime --allow-external-sym-calls --only-output-states-covering-new --max-sym-array-size=4096 --max-instruction-time=30. --max-time=7200. --watchdog --max-memory-inhibit=false --max-static-fork-pct=1 --max-static-solve-pct=1 --max-static-cpfork-pct=1 --switch-type=internal --randomize-fork --search=random-path --search=nurs:covnew --use-batching-search --batch-instructions=10000 /media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/workspace/metactrl/prime/prime-output/data/genktests/GenKTESTS/MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh-out/prime.bc --sym-files 0 20
+PID: 27670
+Started: 2018-11-16 17:05:08
+BEGIN searcher description
+<BatchingSearcher> timeBudget: 5, instructionBudget: 10000, baseSearcher:
+<InterleavedSearcher> containing 2 searchers:
+RandomPathSearcher
+WeightedRandomSearcher::CoveringNew
+</InterleavedSearcher>
+</BatchingSearcher>
+END searcher description
+Finished: 2018-11-16 23:34:49
+Elapsed: 06:29:41
+KLEE: done: explored paths = 5844
+KLEE: done: avg. constructs per query = 572
+KLEE: done: total queries = 7617
+KLEE: done: valid queries = 6307
+KLEE: done: invalid queries = 1305
+KLEE: done: query cex = 7617
+KLEE: done: shadow expressions = 0
+KLEE: done: shadow splits = 0
+KLEE: done: klee changes = 0
+KLEE: done: fork on shadow = 0
+KLEE: done: mem op on shadow = 0
+KLEE: done: mem op read on shadow = 0
+KLEE: done: mem op write on shadow = 0
+KLEE: done: concretize shadow = 0
+KLEE: done: array update index shadow = 0
+KLEE: done: fork on constant shadow = 0
+KLEE: done: total time for shadow symbolic execution stage = 0
+KLEE: done: states generated during shadow symbolic execution stage = 0
+
+KLEE: done: total instructions = 2323484
+KLEE: done: completed paths = 5844
+KLEE: done: generated tests = 15

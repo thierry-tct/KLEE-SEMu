@@ -1,0 +1,4 @@
+Total #KTests: 18 (PASS: 18, FAIL: 0)
+=======================================
+Source Branch,total #KT,NotCov #KT,Cov #KT,NotCovnpass #KT,NotCovnfail #KT,Covnpass #KT,Covnfail #KT,%Covnfail/Cov,Manual-Cov
+-----------------------------------------------------------------------------------------------------------------------------------------------------

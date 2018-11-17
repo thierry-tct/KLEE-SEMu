@@ -1,0 +1,9 @@
+KLEE: WARNING: undefined reference to function: __xstat64
+KLEE: WARNING: undefined reference to function: fprintf
+KLEE: WARNING: undefined reference to function: snprintf
+KLEE: WARNING: undefined reference to function: strchr
+KLEE: WARNING: undefined reference to function: strtol
+KLEE: WARNING ONCE: calling external: syscall(16, 0, 21505, 48512128) at /home/shadowvm/shadow/klee-change/runtime/POSIX/fd.c:2475
+KLEE: WARNING ONCE: calling __user_main with extra arguments.
+KLEE: WARNING ONCE: calling external: __xstat64(1, 50858944, 47727312) at /usr/include/x86_64-linux-gnu/sys/stat.h:504
+KLEE: WARNING: HaltTimer invoked

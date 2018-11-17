@@ -84,7 +84,7 @@ ScriptDir=`readlink -f $semudir/../../src/lib/Mutation/analysis/` || \
 test -d  "$ScriptDir" || error_exit "Script dir not existing: '$ScriptDir'"
 
 zestidir="$SEMU_CFG_ZESTI_EXE_DIR"
-PATH=$PATH:$semudir
+#PATH=$PATH:$semudir
 
 klee_tests_topdir="$intopdir/genktests/GenKTESTS"
 if [ -d $klee_tests_topdir ]; then
@@ -104,6 +104,7 @@ $klee_tests_topdir \
 --matrix $intopdir/matrices/SM.dat \
 --passfail $intopdir/matrices/ktestPassFail.txt \
 --coverage $intopdir/matrices/MCOV.dat \
+--semu_exe_dir $semudir \
 --zesti_exe_dir $zestidir \
 --llvmgcc_exe_dir $SEMU_CFG_LLVMGCC_EXE_DIR \
 --llvm27_exe_dir $SEMU_CFG_LLVM27_EXE_DIR \

@@ -1,0 +1,6 @@
+WARNING: klee_assume(0)!
+klee-replay: TEST CASE: /media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/workspace/repos/prime/MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh-out/klee-out-0/test000004.ktest
+klee-replay: ARGS: "/media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/workspace/metactrl/prime/prime-output/built-versions/prime" 
+Enter a number
+Not prime.
+klee-replay: EXIT STATUS: NORMAL 

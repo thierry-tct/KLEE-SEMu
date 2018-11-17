@@ -1,0 +1,129 @@
+#!/bin/bash
+
+# That's a test replay script;
+# It is used when replaying tests with prefix, i.e. following all the commands
+# as in the original test case in order to have the same test environment;
+# The script is controlled via enviroment variables that are set accordingly
+# before executing a test case (the runner script stores the
+# necessary state info, which is needed to coordinate the test replaying process).
+
+set -u
+set -o pipefail
+
+# TODO: path to 'tee' is hard-coded to avoid problems with binutils
+
+# This script is invoked by the test suite. Don't rely on the wd.
+TOOL_DIR="IN_TOOL_DIR"
+TOOL_NAME="IN_TOOL_NAME"
+
+## signal handlers
+#function term_signal_handler {
+#  #echo "handling term signal" >> /tmp/signallog
+#  pkill -P "$$"
+#}
+#function int_signal_handler {
+#  #echo "handling int signal" >> /tmp/signallog
+#  pkill -P "$$"
+#}
+#function hup_signal_handler {
+#  #echo "handling hup signal" >> /tmp/signallog
+#  pkill -P "$$"
+#}
+
+argv=`/usr/bin/basename $0`
+if [[ ${#@} != 0 ]]
+then 
+  argv+=" $@"
+fi
+
+# critical section
+  # FD is redirected to our lock file
+  FD=200
+  eval "exec ${FD}>$EKLEEPSE_REPLAY_COUNTER_FILE.lock"
+
+  # try to lock the file with timeout of 1s
+  /usr/bin/flock -w 60 $FD
+  [[ $? -eq 1 ]] && /bin/echo "failed to aquire the lock" >> /tmp/mylog
+
+  # set a default value that will prevent from executing klee-replay
+  COUNTER=-1
+  
+  # check if the argv that the wrapper was called with is the desired argv
+  if [[ "$EKLEEPSE_REPLAY_MODE" = 0 || "$argv" = "$EKLEEPSE_REPLAY_ARGV" ]]
+  then
+    # the current argv is the desired one; now we need to get the value of the
+    # counter from the file; the counter establishes an order in case of multiple
+    # occurrences of the same argv     
+
+    # first, we need to get the value of the counter from a file
+    COUNTER=`/bin/cat "$EKLEEPSE_REPLAY_COUNTER_FILE"`
+    # echo "COUNTER = $COUNTER"
+
+    # decrement the counter and store it in the file
+    CNT=$((COUNTER - 1))
+    /bin/echo "$CNT" > "$EKLEEPSE_REPLAY_COUNTER_FILE"
+  fi
+
+  # release the lock
+  /usr/bin/flock -u $FD
+# end of critical section 
+
+
+if [[ "$COUNTER" = 0 ]]; then
+  if [[ "$argv" != "$EKLEEPSE_RUN_ARGS" ]]
+  then
+    stamp=`/bin/date +'%Y-%m-%d %H:%M:%S:%N'`
+    #/bin/echo "Replay cmd args [$argv] are not the same as run args [$EKLEEPSE_RUN_ARGS] $stamp" >> $EKLEEPSE_REPLAY_LOG  #Unused
+  fi
+  
+  ## install handlers that will terminate child processes (klee-replay and tee)
+  ## note: klee-replay does spawn processes but it also should terminate them
+  ## nicely after receiving sigterm
+  #trap term_signal_handler SIGTERM 
+  #trap int_signal_handler SIGINT
+  #trap hup_signal_handler SIGHUP
+  
+  /usr/bin/touch $EKLEEPSE_REPLAY_ATTEMPT
+
+  #  XXX Remove all existing GCDA
+  for srcdir in $EKLEEPSE_MFI_SRCDIRS; do
+    /bin/rm -f $srcdir/*.gcda
+  done
+
+  #echo "running by klee-replay EKLEEPSE_REPLAY_TOOL=$EKLEEPSE_REPLAY_TOOL, EKLEEPSE_REPLAY_KTEST=$EKLEEPSE_REPLAY_KTEST, EKLEEPSE_REPLAY_LOG=$EKLEEPSE_REPLAY_LOG"
+  #note: klee-replay does not return the application return code
+  # http://veithen.github.io/2014/11/16/sigterm-propagation.html
+  # both: klee-replay and tee are run in bg; both are children of this script; 
+  # wait will happen for tee, which is not perfect, but all processes are
+  # cleaned up by session in a higher level script
+  export KLEE_REPLAY_TIMEOUT=$EKLEEPSE_REPLAY_TIMEOUT
+  if [ "${MFIKESTSREPLAY_NATIVEREPLAY:-}" = "1" ]
+  then          #HUP
+    /usr/bin/timeout -s 9 $KLEE_REPLAY_TIMEOUT $EKLEEPSE_REPLAY_TOOL "${@:1}" > /dev/null 2>&1    #MAKE SURE THAT EACH TEST WITH INFINITE LOOP DO NOT CALL THIS FROM TIMEOUT(for it to flush GCDA)
+  else
+    killSig=9   #HUP
+    [ "$(/usr/bin/basename $EKLEEPSE_REPLAY_TOOL)" = "prime.covnowrap" ] && killSig=9   #for the call without GDB it is so thus use TERM to make sure of killing
+    /usr/bin/timeout -s $killSig $KLEE_REPLAY_TIMEOUT klee-replay $EKLEEPSE_REPLAY_TOOL $EKLEEPSE_REPLAY_KTEST > /dev/null 2>&1 #| /usr/bin/tee -a $EKLEEPSE_REPLAY_LOG
+  fi
+  mfi_prog="$(/usr/bin/dirname $EKLEEPSE_REPLAY_TOOL)/prime.covnowrap"
+  Ppid=`/bin/ps ax | /bin/grep "$mfi_prog" | /usr/bin/awk '{print $1" "$5}' | /bin/grep "$mfi_prog$" | /usr/bin/awk '{print $1}'`
+  if ! /bin/echo $EKLEEPSE_REPLAY_TOOL | /bin/grep "prime.covnowrap$" > /dev/null; then
+      [ "$Ppid" != "" ] && { 
+        for pID in $Ppid; do sudo /usr/bin/gdb -p $pID --batch-silent --quiet --return-child-result -ex "thread apply all call __gcov_flush()" -ex "thread apply all call exit()" -ex "kill"; done; 
+        /bin/kill -HUP $Ppid; /bin/sleep 1; /bin/kill -9 $Ppid; }
+  fi
+  #pid=$!
+  #wait $pid
+  #wait $pid
+  # XXX Get the list of gcda created
+  /bin/echo -n > $EKLEEPSE_MFI_SRC_GCDA_LIST
+  for srcdir in $EKLEEPSE_MFI_SRCDIRS; do
+    /bin/ls $srcdir/*.gcda >> $EKLEEPSE_MFI_SRC_GCDA_LIST
+  done
+else
+  # run natively
+  #echo "running natively EKLEEPSE_REPLAY_TOOL=$EKLEEPSE_REPLAY_TOOL"
+  exec /usr/bin/timeout $EKLEEPSE_REPLAY_TIMEOUT $EKLEEPSE_REPLAY_TOOL_NO_COV "${@:1}"
+fi 
+
+
