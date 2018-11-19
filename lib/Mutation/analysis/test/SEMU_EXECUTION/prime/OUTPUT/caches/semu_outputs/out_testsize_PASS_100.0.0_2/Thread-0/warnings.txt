@@ -1,3 +1,0 @@
-KLEE: WARNING ONCE: calling external: syscall(16, 0, 21505, 33858992)
-KLEE: WARNING ONCE: calling __user_main with extra arguments.
-KLEE: WARNING ONCE: calling external: printf(34025440)

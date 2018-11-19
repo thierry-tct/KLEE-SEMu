@@ -1,6 +1,0 @@
-KLEE: KLEE: using 18 seeds
-
-KLEE: 18 seeds remaining over: 1 states
-KLEE: seeding done (1 states remain)
-KLEE: ERROR: /media/thierry/TestMutants/KLEE-MART/klee-semu/src/lib/Mutation/analysis/test/workspace/repos/prime/prime.c:14: overshift error
-KLEE: NOTE: now ignoring this error at this location

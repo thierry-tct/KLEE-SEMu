@@ -1,6 +1,0 @@
-KLEE: WARNING ONCE: calling external: syscall(16, 0, 21505, 39134688)
-KLEE: WARNING ONCE: calling __user_main with extra arguments.
-KLEE: WARNING: seeds patched for violating constraint
-KLEE: WARNING: seeds patched for violating constraint
-KLEE: WARNING: seeds patched for violating constraint
-KLEE: WARNING ONCE: calling external: printf(39432160)
