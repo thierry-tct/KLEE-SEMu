@@ -1531,6 +1531,47 @@ def assignSemuJobs(mutantsbyfuncs, nMaxBlocks):
     return mutantsBlocks  
 #~ def assignSemuJobs():
 
+ZESTI_DEV_TASK = 'ZESTI_DEV_TASK'
+TEST_GEN_TASK = 'TEST_GEN_TASK'
+SEMU_EXECUTION = 'SEMU_EXECUTION'
+COMPUTE_TASK = "COMPUTE_TASK"
+ANALYSE_TASK = "ANALYSE_TASK"
+tasksList = [ZESTI_DEV_TASK, TEST_GEN_TASK, SEMU_EXECUTION, COMPUTE_TASK, ANALYSE_TASK]
+
+ALIVE_ALL = 'aliveall'  # All alive mutants
+ALIVE_RANDOM = 'aliverandom'  # Random set of N mutants
+ALIVE_COVERED_RAND = 'alivecoveredrand'  # Random set of N mutants covered by existing tests
+ALIVE_COVERED_MOST = 'alivecoveredmost'  # Top N most covered mutants (by highest number of tests)
+ALIVE_COVERED_LEAST = 'alivecoveredleast'  # Top N least covered mutants (by lowest number of tests)
+FIXED_MUTANT_NUMBER_STRATEGIES = [ALIVE_ALL, ALIVE_COVERED_RAND, ALIVE_COVERED_MOST, ALIVE_COVERED_LEAST]
+
+def applyFixedMutantFiltering(groundConsideredMutant_covtests, afterFuncFilter_byfunc, fixedmutanttarget, fixedmutantnumber)
+    if fixedmutantnumber is None or fixedmutanttarget == ALIVE_ALL:
+        return
+    if len(groundConsideredMutant_covtests) <= fixedmutantnumber:
+        return
+    if fixedmutanttarget == ALIVE_RANDOM:
+        selected = random.sample(list(groundConsideredMutant_covtests), fixedmutantnumber)
+    elif fixedmutanttarget == ALIVE_COVERED_RAND:
+        selected = random.sample([m for m in groundConsideredMutant_covtests if len(groundConsideredMutant_covtests[m]) > 0], fixedmutantnumber)
+    elif fixedmutanttarget == ALIVE_COVERED_MOST:
+        selected = sorted(groundConsideredMutant_covtests.keys(), reverse=True, key=lambda x: len(groundConsideredMutant_covtests[x]))[:fixedmutantnumber]
+    elif fixedmutanttarget == ALIVE_COVERED_LEAST:
+        selected = sorted(groundConsideredMutant_covtests.keys(), reverse=False, key=lambda x: len(groundConsideredMutant_covtests[x]))[:fixedmutantnumber]
+    else:
+        error_exit ("invalit target strategy")
+
+    selected = set(selected)
+
+    # remove non selected
+    for m in set(groundConsideredMutant_covtests) - selected:
+        del groundConsideredMutant_covtests[m]
+    for func in afterFuncFilter_byfunc.keys():
+        afterFuncFilter_byfunc[func] = list(selected & set(afterFuncFilter_byfunc[func]))
+        if len(afterFuncFilter_byfunc[func]) == 0:
+            del afterFuncFilter_byfunc[func]
+#~ def applyFixedMutantFiltering()
+
 # TODO: (1) PASS test sampling, (2) KLEE seeded test gen, (3) Merge generated tests and filter existing (keeping map), (4) Report MS and FD post test execution
 def main():
     global WRAPPER_TEMPLATE 
@@ -1542,13 +1583,6 @@ def main():
     MY_SCANF = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "FixScanfForShadow/my_scanf.c"))
     #else:
     #    WRAPPER_TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), SEMU_CONCOLIC_WRAPPER))
-
-    ZESTI_DEV_TASK = 'ZESTI_DEV_TASK'
-    TEST_GEN_TASK = 'TEST_GEN_TASK'
-    SEMU_EXECUTION = 'SEMU_EXECUTION'
-    COMPUTE_TASK = "COMPUTE_TASK"
-    ANALYSE_TASK = "ANALYSE_TASK"
-    tasksList = [ZESTI_DEV_TASK, TEST_GEN_TASK, SEMU_EXECUTION, COMPUTE_TASK, ANALYSE_TASK]
 
     parser = argparse.ArgumentParser()
     parser.add_argument("outTopDir", help="topDir for output (required)")
@@ -1579,6 +1613,7 @@ def main():
     parser.add_argument("--semutestgenonlycriticaldiffs", action="store_true", help="Enable only critical diff when test generated")
     parser.add_argument("--nummaxparallel", type=int, default=1, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
     parser.add_argument("--disable_pureklee", action="store_true", help="Disable doing computation for pureklee")
+    parser.add_argument("--fixedmutantnumbertarget", type=str, default=ALIVE_ALL, help="Specify the how the mutants to terget are set (<mode>[:<#Mutants>]): "+str(FIXED_MUTANT_NUMBER_STRATEGIES))
     args = parser.parse_args()
 
     outDir = os.path.join(args.outTopDir, OutFolder)
@@ -1638,6 +1673,19 @@ def main():
     semupreconditionlength_list = args.semupreconditionlength.split(',')
     semumutantmaxfork_list = args.semumutantmaxfork.split(',')
     assert len(semupreconditionlength_list) == len(semumutantmaxfork_list), "inconsistency between number of pre and post conditions. They must match (pair wise comma separated)" 
+
+    fmnt = args.fixedmutantnumbertarget.split(':')
+    if len(fmnt) == 2:
+        fixedmutanttarget = fmnt[0]
+        assert fmnt[1].isdigit(), "expect an integer after the column"
+        fixedmutantnumber = int(fmnt[1])
+        assert fixedmutantnumber >= 1, "The specified number of mutant must be >= 1"
+    elif len(fmnt) == 1:
+        fixedmutanttarget = fmnt[0]
+        fixedmutantnumber = None
+    else:
+        error_exit ("invalid fixedmutantnumbertarget parameter format. expect <targetmode>[:<#Mutants>]")
+    assert fixedmutanttarget in FIXED_MUTANT_NUMBER_STRATEGIES, "invalit target strategy for fixedmutantnumbertarget param"
 
     # Parameter tuning for Semu execution (timeout, to precondition depth)
     ## get precondition and mutantmaxfork from klee tests if specified as percentage
@@ -1850,6 +1898,12 @@ def main():
 
         for mid in gCM_c_set - intersect_ga:
             del groundConsideredMutant_covtests[mid]
+
+        # Apply filtering of mutants if specified (Which mutants to focus on)
+        applyFixedMutantFiltering(groundConsideredMutant_covtests, afterFuncFilter_byfunc, fixedmutanttarget, fixedmutantnumber)
+        print "# Number of Mutants after filtering specified:", len(groundConsideredMutant_covtests)
+        if len(groundConsideredMutant_covtests) < 1:
+            error_exit ("error(done): No mutant Left to analyze")
 
         paraAssign = assignSemuJobs(afterFuncFilter_byfunc, args.nummaxparallel)
         for pj in paraAssign:
