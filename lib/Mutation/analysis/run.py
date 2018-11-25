@@ -1545,7 +1545,7 @@ ALIVE_COVERED_MOST = 'alivecoveredmost'  # Top N most covered mutants (by highes
 ALIVE_COVERED_LEAST = 'alivecoveredleast'  # Top N least covered mutants (by lowest number of tests)
 FIXED_MUTANT_NUMBER_STRATEGIES = [ALIVE_ALL, ALIVE_COVERED_RAND, ALIVE_COVERED_MOST, ALIVE_COVERED_LEAST]
 
-def applyFixedMutantFiltering(groundConsideredMutant_covtests, afterFuncFilter_byfunc, fixedmutanttarget, fixedmutantnumber)
+def applyFixedMutantFiltering(groundConsideredMutant_covtests, afterFuncFilter_byfunc, fixedmutanttarget, fixedmutantnumber):
     if fixedmutantnumber is None or fixedmutanttarget == ALIVE_ALL:
         return
     if len(groundConsideredMutant_covtests) <= fixedmutantnumber:
