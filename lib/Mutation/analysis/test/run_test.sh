@@ -20,7 +20,8 @@ semudir=$topdir/SEMU_EXECUTION/$projID
 export MART_BINARY_DIR=$(readlink -f ~/mytools/mart/build/tools)
 
 # run MFI
-if false #true 
+if true 
+#if false
 then
     cleanstart=""
     #cleanstart=cleanstart
@@ -31,7 +32,8 @@ then
 fi
 
 # Prepare for SEMU
-if false #true
+if true
+#if false
 then
     echo "# RUNNING prepareData..."
     cd $(dirname $semudir) || error_exit "failed entering semudir parent!"

@@ -1,4 +1,1 @@
 test1.in
-test2.in
-test3.in
-MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh
