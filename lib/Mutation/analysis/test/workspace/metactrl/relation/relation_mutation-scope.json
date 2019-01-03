@@ -1,4 +1,4 @@
 {
 	"Source-Files": ["relation.c"],
-	"Functions": []
+	"Functions": ["main"]
 }
