@@ -28,8 +28,8 @@ int main(int argc, char **argv)
   int a,b;
   int x;
  
-//  printf("Enter two numbers\n");
-//  scanf("%d %d", &a, &b);
+/*  printf("Enter two numbers\n");
+  scanf("%d %d", &a, &b);*/
   a = str2int(argv[0]);
   b = str2int(argv[1]);
  

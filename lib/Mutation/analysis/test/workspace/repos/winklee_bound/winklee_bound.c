@@ -29,7 +29,7 @@ int main(int argc, char **argv)
   int x;
  
   printf("Enter two numbers\n");
-//  scanf("%d %d", &a, &b);
+/*  scanf("%d %d", &a, &b); */
   char str[4];
   scanf ("%s", str);
   a = str2int(str);
