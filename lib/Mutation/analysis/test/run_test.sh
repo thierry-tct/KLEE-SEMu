@@ -20,8 +20,7 @@ semudir=$topdir/SEMU_EXECUTION/$projID
 export MART_BINARY_DIR=$(readlink -f ~/mytools/mart/build/tools)
 
 # run MFI
-if true 
-#if false
+if [ "${FROM_SEMU_EXECUTION:-}" != "on" ] #true 
 then
     cleanstart=""
     #cleanstart=cleanstart
@@ -32,7 +31,7 @@ then
 fi
 
 # Prepare for SEMU
-if true
+if [ "${FROM_SEMU_EXECUTION:-}" != "on" ] #true 
 #if false
 then
     echo "# RUNNING prepareData..."
