@@ -30,8 +30,8 @@ int main(int argc, char **argv)
  
 /*  printf("Enter two numbers\n");
   scanf("%d %d", &a, &b);*/
-  a = str2int(argv[0]);
-  b = str2int(argv[1]);
+  a = str2int(argv[1]);
+  b = str2int(argv[2]);
  
   if (a > b)
     x = 1;
