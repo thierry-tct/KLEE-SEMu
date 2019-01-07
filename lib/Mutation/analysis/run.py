@@ -2173,10 +2173,13 @@ def main():
                                             }
                         killedMutsPerTuning[nameprefix] = set(newKilled)
                     
+                    extra_res = {}
                     #venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=1, setsize_to=len(killedMutsPerTuning), name_delim='&')
-                    venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=2, setsize_to=2, name_delim='&')
+                    venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=2, setsize_to=2, name_delim='&', not_common=extrs_res)
                     assert "OVERLAP_VENN" not in outobj_
                     outobj_["OVERLAP_VENN"] = venn_killedMutsInCommon
+                    assert "NON_OVERLAP_VENN" not in outobj_
+                    outobj_["NON_OVERLAP_VENN"] = extra_res
 
                     dumpJson(outobj_, outjsonfile)
                     print "Kill Mutant TestGen Analyse Result:"
