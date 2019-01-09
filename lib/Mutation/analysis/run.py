@@ -1169,7 +1169,8 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
             runSemuCmd += " 2>"+logFile
             runSemuCmds.append(runSemuCmd)
 
-        print "## Executing", "pure KLEE" if isPureKLEE else "SEMU", "with", len(pending_threads), "parallel threads. Execution log in <semu_out/Thread-<i>.log>"
+        print '['+time.strftime("%c")+']', "## Executing", "pure KLEE" if isPureKLEE else "SEMU", '('+tuning['name']+')', "with", len(pending_threads), \
+                                                                                                "parallel threads. Execution log in <semu_outputs/Thread-<i>.log>"
         if len(pending_threads) > 1:
             threadpool = ThreadPool(len(pending_threads))
             sretcodes = threadpool.map(os.system, runSemuCmds)
@@ -1204,11 +1205,12 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
                 # Rerun those thread in mode where a new process is forked everytime
                 pending_threads = [v[0] for v in failed_thread_executions]
                 enable_semu_fork_externalcall = True
-                print "##", "pure klee" if isPureKLEE else "klee-semu", "failed for the threads:", pending_threads, "\n    >> re-executing them by forking process for external calls"
+                print '['+time.strftime("%c")+']', "##", "pure klee" if isPureKLEE else "klee-semu", '('+tuning['name']+')', "failed for the threads:", pending_threads, \
+                                                                                            "\n    >> re-executing them by forking process for external calls"
         else:
             # All sucessfull, end
             pending_threads = []
-            print "##", "pure klee" if isPureKLEE else "klee-semu", "execution is done!"
+            print '['+time.strftime("%c")+']', "##", "pure klee" if isPureKLEE else "klee-semu", '('+tuning['name']+')', "execution is done!"
 
     # In case of pureKLEE (testgen mode), we need the file containing mutants tests
     if isPureKLEE: 
@@ -1606,8 +1608,8 @@ def main():
     parser.add_argument("--testSamplePercent", type=float, default=10, help="Specify the percentage of test suite to use for analysis") #, (require setting testSampleMode to NUM)")
     parser.add_argument("--semutimeout", type=int, default=86400, help="Specify the timeout for semu execution")
     parser.add_argument("--semumaxmemory", type=int, default=9000, help="Specify the max memory for semu execution")
-    parser.add_argument("--semupreconditionlength", type=str, default='2', help="Specify comma separated list of precondition length semu execution (same number as 'semumutantmaxfork')")
-    parser.add_argument("--semumutantmaxfork", type=str, default='2', help="Specify comma separated list of hard checkpoint for mutants (or post condition checkpoint) as PC length, in semu execution")
+    parser.add_argument("--semupreconditionlength", type=str, default='2', help="Specify space separated list of precondition length semu execution (same number as 'semumutantmaxfork')")
+    parser.add_argument("--semumutantmaxfork", type=str, default='2', help="Specify space separated list of hard checkpoint for mutants (or post condition checkpoint) as PC length, in semu execution")
     parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
     parser.add_argument("--semumaxtestsgenpermutants", type=int, default=5, help="Specify the maximum number of tests to generate for each mutant in test generation mode")
     parser.add_argument("--semutestgenonlycriticaldiffs", action="store_true", help="Enable only critical diff when test generated")
@@ -1670,9 +1672,9 @@ def main():
     testSamplePercent = args.testSamplePercent
     assert testSamplePercent > 0 and testSamplePercent <= 100, "Error: Invalid testSamplePercent"
 
-    semupreconditionlength_list = args.semupreconditionlength.split(',')
-    semumutantmaxfork_list = args.semumutantmaxfork.split(',')
-    assert len(semupreconditionlength_list) == len(semumutantmaxfork_list), "inconsistency between number of pre and post conditions. They must match (pair wise comma separated)" 
+    semupreconditionlength_list = args.semupreconditionlength.split()
+    semumutantmaxfork_list = args.semumutantmaxfork.split()
+    assert len(semupreconditionlength_list) == len(semumutantmaxfork_list), "inconsistency between number of pre and post conditions. They must match (pair wise space separated)" 
 
     fmnt = args.fixedmutantnumbertarget.split(':')
     if len(fmnt) == 2:
@@ -1961,7 +1963,7 @@ def main():
                 for groundConsMut_cov, thisOutSe, semuoutput in zips:
                     # process with each approach
                     if COMPUTE_TASK in toExecute: 
-                        print "# Procesing for test size", ts_size, "..."
+                        print "# Procesing for test size", ts_size, "; name: "+semuTuning['name'], "..."
 
                         if martOut is not None or matrix is not None:
                             if os.path.isdir(thisOutSe):
@@ -1979,7 +1981,7 @@ def main():
 
                     # Analysing for each test Sample 
                     if ANALYSE_TASK in toExecute:
-                        print "# Analysing for test size", ts_size, "..."
+                        print "# Analysing for test size", ts_size,  "; name: "+semuTuning['name'], "..."
 
                         # Make final Analysis and plot
                         if martOut is not None and matrix is not None:
@@ -2000,7 +2002,7 @@ def main():
                     if atMergeStage:
                         print "# -- Already ready for merge in Test Gen Compute. Do nothing (for "+this_Out+')'
                     else:
-                        print "# Compute task Procesing for test size", ts_size, "..."
+                        print '['+time.strftime("%c")+']', "# Compute task Procesing for test size", ts_size,  "; name: "+semuTuning['name'], "..."
                         if not os.path.isdir(this_Out):
                             os.mkdir(this_Out)
                         if os.path.isdir(mfi_execution_output):
@@ -2010,7 +2012,7 @@ def main():
                                 shutil.rmtree(mfi_execution_output)
                                 print "## Previous outdir removed"
                             else:
-                                print "\n#> Not deleting previous out, use skip compute task if just want to analyse"
+                                print "\n#> Not deleting previous out, use skip compute task if just want to analyse", "; name: "+semuTuning['name'] 
                                 exit(1)
 
                         if not os.path.isdir(mfi_execution_output):
@@ -2176,15 +2178,19 @@ def main():
                     extra_res = {}
                     #venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=1, setsize_to=len(killedMutsPerTuning), name_delim='&')
                     venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=2, setsize_to=2, name_delim='&', not_common=extra_res)
+
+                    extra_keys_outobj = []
                     assert "OVERLAP_VENN" not in outobj_
                     outobj_["OVERLAP_VENN"] = venn_killedMutsInCommon
+                    extra_keys_outobj.append('OVERLAP_VENN')
                     assert "NON_OVERLAP_VENN" not in outobj_
                     outobj_["NON_OVERLAP_VENN"] = extra_res
+                    extra_keys_outobj.append('NON_OVERLAP_VENN')
 
                     dumpJson(outobj_, outjsonfile)
                     print "Kill Mutant TestGen Analyse Result:"
-                    for k in outobj_:
-                        print "'"+k+"':", outobj_[k]
+                    for k in sorted(outobj_.keys(), reverse=True, key=lambda x:x in extra_keys_outobj):
+                        print ">>> '"+k+"':", outobj_[k]
 
     print "@ DONE!"
 

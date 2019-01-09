@@ -1,5 +1,13 @@
 #! /bin/bash
 
+# Example:
+# >> ./run_test.sh tritype
+#
+# Env vars:
+# FROM_SEMU_EXECUTION=on   --> Execute this script from SEMU execution
+# MFIRUNSHADOW_VERBOSE=on  --> make klee test generation of MFI verbose
+# 
+
 set -u
 
 error_exit()
