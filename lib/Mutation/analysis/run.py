@@ -482,7 +482,18 @@ class FileShortNames:
         return self.ShortNames[self.pos-1]
 #~ class FileShortNames:
 
-def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i=True): #, with_stdout=False):
+def is_sym_args_having_nargs(sym_args, check=False):
+    key_w, min_n_arg, max_n_arg, maxlen = commonArgs[apos].strip().split()
+    min_n_arg, max_n_arg, maxlen = map(int, (min_n_arg, max_n_arg, maxlen))
+    if check:
+        assert "-sym-args " in key_w, "Invalid key_w, must be having '-sym-args '"
+        assert min_n_arg <= max_n_arg, "error: min_n_arg > max_n_arg. (bug)"
+    if min_n_arg < max_n_arg:
+        return True
+    return False
+# def is_sym_args_having_nargs()
+
+def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i=False):
     assert len(ktestFilesList) == len(testNamesList), "Error: size mismatch btw ktest and names: "+str(len(ktestFilesList))+" VS "+str(len(testNamesList))
     # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions(TODO double check)
     listTestArgs = []
@@ -697,15 +708,17 @@ def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i
                     error_exit("must be argv, but found: "+ktestContains["KTEST-OBJ"][t].objects[objpos][0])  # the name must be argv...
 
                 # Pad the argument data with '\0' until args maxlen
-                maxlen = int(commonArgs[apos].strip().split(' ')[-1])
+                maxlen = int(commonArgs[apos].strip().split()[-1])
                 for sharedarg_i in range(commonArgsNumPerTest[t][apos]):
                     curlen = len(ktestContains["KTEST-OBJ"][t].objects[objpos + sharedarg_i][1])
                     curval = ktestContains["KTEST-OBJ"][t].objects[objpos + sharedarg_i]
                     ktestContains["KTEST-OBJ"][t].objects[objpos + sharedarg_i] = (curval[0], curval[1]+'\0'*(maxlen-curlen+1)) #+1 Because last zero added after sym len
 
                 # Insert n_args
-                ktestContains["KTEST-OBJ"][t].objects.insert(objpos, ("n_args", struct.pack('<i', commonArgsNumPerTest[t][apos])))       
-                objpos += 1 #pass just added 'n_args'
+                ## XXX No insertion of n_args if min_n_arg and max_n_arg are equal
+                if is_sym_args_having_nargs(commonArgs[apos], check_good=True):
+                    ktestContains["KTEST-OBJ"][t].objects.insert(objpos, ("n_args", struct.pack('<i', commonArgsNumPerTest[t][apos])))       
+                    objpos += 1 #pass just added 'n_args'
 
                 if commonArgsNumPerTest[t][apos] > 0: #Else no object for this, no need to advance this (will be done bellow)
                     objpos += commonArgsNumPerTest[t][apos]
@@ -819,10 +832,10 @@ def updateObjects(argvinfo, ktestContains):
         return False
     #~ def isCmdArg()
 
-    # list_new_sym_args = [[<nmin>,<nmax>,<size>],...]
-    def old2new_cmdargs(objSegment, list_new_sym_args):
+    # list_new_sym_args = [(<nmin>,<nmax>,<size>),...]
+    def old2new_cmdargs(objSegment, list_new_sym_args, old_has_nargs):
         res = []
-        nargs = len(objSegment) - 1 # First obj is n_args object
+        nargs = len(objSegment) - int(old_has_nargs) # First obj may be n_args object
         nums = [x[0] for x in list_new_sym_args]
         n_elem = sum(nums)
         assert n_elem <= nargs , "min sum do not match to nargs. n_args="+str(nargs)+", min sum="+str(n_elem)
@@ -838,7 +851,8 @@ def updateObjects(argvinfo, ktestContains):
         # put elements in res according to nums
         ao_ind = 1
         for i,n in enumerate(nums):
-            res.append(("n_args", struct.pack('<i', n)))
+            if is_sym_args_having_nargs(" ".join(['-sym-args']+list(map(str, list_new_sym_args[i])))):
+                res.append(("n_args", struct.pack('<i', n)))
             for j in range(ao_ind, ao_ind+n):
                 res.append((objSegment[j][0], objSegment[j][1] + '\0'*(list_new_sym_args[i][2] - len(objSegment[j][1]) + 1)))
             ao_ind += n
@@ -901,14 +915,16 @@ def updateObjects(argvinfo, ktestContains):
         for arg_ind in range(len(argvinfo['old'])):
             if argvinfo['old'][arg_ind] is None: #added ones, all are -sym-args, just add n_args=0
                 for sa in argvinfo['new'][arg_ind]:
+                    assert is_sym_args_having_nargs(sa), "min_n_args and max_n_arg must be different here"
                     kt_obj.insert(obj_ind, ("n_args", struct.pack('<i', 0)))
                     obj_ind += 1
             else:
                 assert isCmdArg(kt_obj[obj_ind][0]), "Supposed to be CMD arg: "+str(kt_obj[obj_ind][0])
                 if '-sym-arg ' in argvinfo['old'][arg_ind]:
                     assert len(argvinfo['new'][arg_ind]) == 1, "must be one sym-args here"
-                    kt_obj.insert(obj_ind, ("n_args", struct.pack('<i', 1)))
-                    obj_ind += 1 #Go after n_args
+                    if is_sym_args_having_nargs(argvinfo['new'][arg_ind][0]):
+                        kt_obj.insert(obj_ind, ("n_args", struct.pack('<i', 1)))
+                        obj_ind += 1 #Go after n_args
 
                     # Update the object len to the given in sym-args
                     old_len_ = len(kt_obj[obj_ind][1])
@@ -919,16 +935,23 @@ def updateObjects(argvinfo, ktestContains):
                         assert old_len_ == new_len_, "Error: new arg len lower than pld len (BUG)"
                     obj_ind += 1 #Go after argv(arg)
                 else: #sym-args
-                    assert kt_obj[obj_ind][0] == 'n_args', "must ne n_args here"
-                    nargs = struct.unpack('<i', kt_obj[obj_ind][1])[0]
-                    if argvinfo['old'][arg_ind] != argvinfo['new'][arg_ind]:
+                    if is_sym_args_having_nargs(argvinfo['old'][arg_ind]):
+                        assert kt_obj[obj_ind][0] == 'n_args', "must be n_args here"
+                        nargs = struct.unpack('<i', kt_obj[obj_ind][1])[0]
+                        old_has_nargs = True
+                    else:
+                        nargs = int(argvinfo['old'][arg_ind].strip().split()[1]) #n_args == min_n_arg == max_n_arg
+                        old_has_nargs = False
+
+                    if len(argvinfo['new'][arg_ind]) > 1 or argvinfo['old'][arg_ind] != argvinfo['new'][arg_ind][0]:
                         # put the args enabled as match to the right most in new
                         tmppos_last = obj_ind + nargs 
-                        replacement = old2new_cmdargs(kt_obj[obj_ind:tmppos_last+1], argvinfo_new_extracted[arg_ind])
+                        replacement = old2new_cmdargs(kt_obj[obj_ind:tmppos_last+1], argvinfo_new_extracted[arg_ind], \
+                                                                                        old_has_nargs=old_has_nargs)
                         kt_obj[obj_ind:tmppos_last+1] = replacement
                         obj_ind += len(replacement)
                     else:
-                        obj_ind += nargs + 1 #+1 for n_args obj
+                        obj_ind += nargs + int(old_has_nargs) #+1 for n_args obj
 
         assert len(kt_obj) + pointer == obj_ind, "Some argv objects were not considered? ("+str(len(kt_obj))+", "+str(pointer)+", "+str(obj_ind)+")"
 #~ def updateObjects()
