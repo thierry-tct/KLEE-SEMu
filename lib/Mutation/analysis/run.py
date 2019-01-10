@@ -483,7 +483,7 @@ class FileShortNames:
 #~ class FileShortNames:
 
 def is_sym_args_having_nargs(sym_args, check=False):
-    key_w, min_n_arg, max_n_arg, maxlen = commonArgs[apos].strip().split()
+    key_w, min_n_arg, max_n_arg, maxlen = sym_args.strip().split()
     min_n_arg, max_n_arg, maxlen = map(int, (min_n_arg, max_n_arg, maxlen))
     if check:
         assert "-sym-args " in key_w, "Invalid key_w, must be having '-sym-args '"
