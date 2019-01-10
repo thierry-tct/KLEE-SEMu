@@ -906,9 +906,18 @@ def updateObjects(argvinfo, ktestContains):
             else:
                 assert isCmdArg(kt_obj[obj_ind][0]), "Supposed to be CMD arg: "+str(kt_obj[obj_ind][0])
                 if '-sym-arg ' in argvinfo['old'][arg_ind]:
-                    assert len(argvinfo['new'][arg_ind]) == 1, "must be on sym-args here"
+                    assert len(argvinfo['new'][arg_ind]) == 1, "must be one sym-args here"
                     kt_obj.insert(obj_ind, ("n_args", struct.pack('<i', 1)))
-                    obj_ind += 2 #Go after n_args and argv(arg)
+                    obj_ind += 1 #Go after n_args
+
+                    # Update the object len to the given in sym-args
+                    old_len_ = len(kt_obj[obj_ind][1])
+                    new_len_ = argvinfo_new_extracted[arg_ind][0][2] + 1
+                    if old_len_ < new_len_:
+                        kt_obj[obj_ind] = (kt_obj[obj_ind][0], kt_obj[obj_ind][1] + '\0'*(new_len_ - old_len_))
+                    else:
+                        assert old_len_ == new_len_, "Error: new arg len lower than pld len (BUG)"
+                    obj_ind += 1 #Go after argv(arg)
                 else: #sym-args
                     assert kt_obj[obj_ind][0] == 'n_args', "must ne n_args here"
                     nargs = struct.unpack('<i', kt_obj[obj_ind][1])[0]
