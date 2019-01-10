@@ -316,7 +316,7 @@ def ktestToFile(ktestData, outfilename):
 
 '''
     return a list representing the ordered list of argument 
-    where each argument is represented by a pair of argtype (argv or file or stdin and the corresponding size)
+    where each argument is represented by a pair of argtype (argv or file or stdin and the corresponding sizes)
     IN KLEE, sym-files is taken into account only once (the last one)
 '''
 def parseZestiKtest(filename):
@@ -482,7 +482,7 @@ class FileShortNames:
         return self.ShortNames[self.pos-1]
 #~ class FileShortNames:
 
-def getSymArgsFromZestiKtests (ktestFilesList, testNamesList):
+def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i=True): #, with_stdout=False):
     assert len(ktestFilesList) == len(testNamesList), "Error: size mismatch btw ktest and names: "+str(len(ktestFilesList))+" VS "+str(len(testNamesList))
     # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions(TODO double check)
     listTestArgs = []
@@ -732,6 +732,16 @@ def getSymArgsFromZestiKtests (ktestFilesList, testNamesList):
         ktdat.args = ktdat.args[:1]
         for s in commonArgs:
             ktdat.args += s.strip().split(' ') 
+
+    # Change all argv keywords into arg<i>
+    if argv_becomes_arg_i:
+        for ktdat in ktestContains["KTEST-OBJ"]:
+            i_ = 0
+            for objpos, name, data in enumerate(kdat.objects):
+                if name != "argv":
+                    continue
+                kdat.objects[objpos] = ('arg'+str(i_), data)
+                i_ += 1
 
     return commonArgs, ktestContains
 #~ getSymArgsFromZestiKtests()
