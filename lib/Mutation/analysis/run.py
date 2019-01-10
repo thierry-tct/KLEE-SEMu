@@ -493,7 +493,7 @@ def is_sym_args_having_nargs(sym_args, check=False):
     return False
 # def is_sym_args_having_nargs()
 
-def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i=False):
+def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i=False, add_sym_stdout=False):
     assert len(ktestFilesList) == len(testNamesList), "Error: size mismatch btw ktest and names: "+str(len(ktestFilesList))+" VS "+str(len(testNamesList))
     # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions(TODO double check)
     listTestArgs = []
@@ -675,14 +675,15 @@ def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i
             
         break
 
-    # Sym stdout, is this really needed
-    commonArgs.append('--sym-stdout')
-    # add sym-out to ktets just before the last (model_version)
-    for i in range(len(ktestContains["CORRESP_TESTNAME"])):
-        symout_obj = ('stdout', '\0'*1024)
-        symoutstat_obj = ('stdout-stat', '\0'*144)
-        ktestContains["KTEST-OBJ"][i].objects.insert(-1, symout_obj)
-        ktestContains["KTEST-OBJ"][i].objects.insert(-1, symoutstat_obj)
+    if add_sym_stdout:
+        # Sym stdout, is this really needed
+        commonArgs.append('--sym-stdout')
+        # add sym-out to ktets just before the last (model_version)
+        for i in range(len(ktestContains["CORRESP_TESTNAME"])):
+            symout_obj = ('stdout', '\0'*1024)
+            symoutstat_obj = ('stdout-stat', '\0'*144)
+            ktestContains["KTEST-OBJ"][i].objects.insert(-1, symout_obj)
+            ktestContains["KTEST-OBJ"][i].objects.insert(-1, symoutstat_obj)
 
 
     # TODO: UPDATE KTEST CONTAINS WITH NEW ARGUMENT LIST AND INSERT THE "n_args" FOR '-sym-args'. ALSO PLACE 'model_version' AT THE END
