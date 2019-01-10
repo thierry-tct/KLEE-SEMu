@@ -737,7 +737,7 @@ def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i
     if argv_becomes_arg_i:
         for ktdat in ktestContains["KTEST-OBJ"]:
             i_ = 0
-            for objpos, name, data in enumerate(ktdat.objects):
+            for objpos, (name, data) in enumerate(ktdat.objects):
                 if name != "argv":
                     continue
                 ktdat.objects[objpos] = ('arg'+str(i_), data)
