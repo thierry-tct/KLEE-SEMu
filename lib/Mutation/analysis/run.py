@@ -482,7 +482,7 @@ class FileShortNames:
         return self.ShortNames[self.pos-1]
 #~ class FileShortNames:
 
-def is_sym_args_having_nargs(sym_args, check=False):
+def is_sym_args_having_nargs(sym_args, check_good=False):
     key_w, min_n_arg, max_n_arg, maxlen = sym_args.strip().split()
     min_n_arg, max_n_arg, maxlen = map(int, (min_n_arg, max_n_arg, maxlen))
     if check:
