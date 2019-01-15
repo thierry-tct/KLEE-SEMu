@@ -588,6 +588,8 @@ public:
   
   bool ks_nextIsOutEnv (ExecutionState &state);
   bool ks_reachedAMutant(KInstruction *ki);
+  bool ks_checkAtPostMutationPoint(ExecutionState &state, KInstruction *ki);
+  inline bool ks_reachedCheckNextDepth(ExecutionState &state);
   bool ks_reachedCheckMaxDepth(ExecutionState &state);
 
   // Check whether we the last instruction forked - in seed Mode Test Generation (TG)
@@ -599,7 +601,8 @@ public:
   // Test wheather we reached the point to compare the states
   bool ks_watchPointReached (ExecutionState &state, KInstruction *ki);
   
-  void ks_fixTerminatedChildrenRecursive (ExecutionState *pes); 
+  inline void ks_fixTerminatedChildren(ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove); 
+  void ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove); 
   void ks_terminateSubtreeMutants(ExecutionState *pes); 
   void ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly=false, bool postMutOnly=false);
   bool ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect, 

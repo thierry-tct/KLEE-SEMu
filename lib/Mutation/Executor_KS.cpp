@@ -4588,7 +4588,7 @@ bool Executor::ks_checkAtPostMutationPoint(ExecutionState &state, KInstruction *
     } else {
       break;
     }
-  } while(true)
+  } while(true);
   // Handle the cases where the post mutation point
   // function is not inserted (return) or call to
   // a function within mutated statement.
@@ -4631,7 +4631,7 @@ inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction 
 ///
 
 
-void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
+inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
   ks_fixTerminatedChildrenRecursive (es, toremove);
 
   // let a child mutant state be the new parent of the group in case this parent terminated
@@ -4649,7 +4649,7 @@ void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPtrSet<Ex
 void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
   std::vector<ExecutionState *> children(pes->ks_childrenStates.begin(), pes->ks_childrenStates.end());
   for (ExecutionState *ces: children) {
-    ks_fixTerminatedChildrenRecursive(ces);
+    ks_fixTerminatedChildrenRecursive(ces, toremove);
     if (ks_terminatedBeforeWP.count(ces) > 0) {
       pes->ks_childrenStates.erase(ces);
       if (! ces->ks_childrenStates.empty()) {
@@ -4813,8 +4813,8 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
     } else {
       llvm::SmallPtrSet<ExecutionState *, 5> toremove;
       for (auto *s: ks_atPointPostMutation)
-        if(s->ks_mutantID != && postMutOnly_hasdiff.count(s) == 0)
-          toremove.insert(s)
+        if(s->ks_mutantID != 0 && postMutOnly_hasdiff.count(s) == 0)
+          toremove.insert(s);
       // Remove mutants states that are terminated form their parent's 'children set'
       // And set a new mutant parent if cur parent is terminated
       for (ExecutionState *es: mutParentStates) {
@@ -4903,7 +4903,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
           // postMutOnly case
           if (postMutOnly) {
             postMutOnly_hasdiff.insert(mState);
-            return diffFound
+            return diffFound;
           }
 
           // Consider only critical diffs if outEnvOnly is True (semuTestgenOnlyForCriticalDiffs is overriden)
@@ -4979,7 +4979,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
   
   //compare children as well
   for (ExecutionState *es: mState->ks_childrenStates) {
-    diffFound |= ks_compareRecursive (es, mSisStatesVect, origSuffConstr, outEnvOnly, postMutOnly);
+    diffFound |= ks_compareRecursive (es, mSisStatesVect, origSuffConstr, outEnvOnly, postMutOnly, postMutOnly_hasdiff);
   }
   
   return diffFound;
@@ -5225,7 +5225,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   //} else {
     ks_terminated = !ks_justTerminatedStates.empty();
     // XXX Do not check whe the instruction is PHI or EHPad, except the state terminated
-    if (ks_terminated || !(llvm::isa<llvm::PHINode>(ki->inst) || ki->inst->isEHPad())) {
+    if (ks_terminated || !(llvm::isa<llvm::PHINode>(ki->inst) /*|| ki->inst->isEHPad()*/)) {
       // A state can have both in ks_atPostMutation and ks_atNextCheck true
       ks_OutEnvReached = ks_nextIsOutEnv (curState);
       ks_WPReached = ks_watchPointReached (curState, ki);
