@@ -179,6 +179,13 @@ public:
   // keep the mutation switch statement that has been executed previously
   // by this state or its parents. (help to know whether branch mutants or not)
   llvm::SmallPtrSet<llvm::Instruction *, 5> ks_VisitedMutPointsSet;         //CallInst
+
+  // Say whether the postmutationpoint need to be reached for this state
+  // initially true for mutant state, 
+  // but change as mutants are found (for original)
+  bool ks_hasToReachPostMutationPoint = false;
+
+  unsigned ks_startdepth;
   
   ExecutionState *ks_branchMut();
   

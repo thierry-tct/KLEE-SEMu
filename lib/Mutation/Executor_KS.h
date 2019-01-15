@@ -536,11 +536,17 @@ public:
 private:
   const char *ks_mutantIDSelectorName = "klee_semu_GenMu_Mutant_ID_Selector";
   const char *ks_mutantIDSelectorName_Func = "klee_semu_GenMu_Mutant_ID_Selector_Func";
+  const char *ks_postMutationPointFuncName = "klee_semu_GenMu_Post_Mutation_Point_Func";
   llvm::GlobalVariable *ks_mutantIDSelectorGlobal;
   llvm::Function *ks_mutantIDSelectorGlobal_Func;
+  llvm::Function *ks_postMutationPoint_Func;
   llvm::SmallPtrSet<ExecutionState *, 5> ks_reachedWatchPoint;
   llvm::SmallPtrSet<ExecutionState *, 5> ks_terminatedBeforeWP;
   llvm::SmallPtrSet<ExecutionState *, 5> ks_reachedOutEnv;
+  // The mutant and original states that just got to mutation point and passed
+  llvm::SmallPtrSet<ExecutionState *, 5> ks_atPointPostMutation;
+  // The states that will still execute after the current WP
+  llvm::SmallPtrSet<ExecutionState *, 5> ks_ongoingExecutionAtWP;
 
   llvm::SmallPtrSet<ExecutionState *, 5> ks_justTerminatedStates;
   
@@ -550,13 +556,17 @@ private:
   // true <=> watch the point, false <=> do not watch the point (TODO: temporary)
   //bool ks_watchpoint;
 
-  unsigned long ks_watchPointID=0;
-  unsigned long ks_maxDepthID=1;
+  unsigned long ks_checkID=0;
+  unsigned long ks_nextDepthID=1;
 
   double ks_runStartTime;
 
   bool ks_outputTestsCases;
   bool ks_outputStateDiffs;
+
+  // Some stats
+  unsigned long ks_numberOfMutantStatesDiscardedAtMutationPoint=0;
+  unsigned long ks_numberOfMutantStatesCheckedAtMutationPoint=0;
 
   //unsigned maxNumTestsPerMutants = 0;
   // Set of mutants that reached the maximum number of generated tests per mutants
@@ -591,9 +601,10 @@ public:
   
   void ks_fixTerminatedChildrenRecursive (ExecutionState *pes); 
   void ks_terminateSubtreeMutants(ExecutionState *pes); 
-  void ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly=false);
+  void ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly=false, bool postMutOnly=false);
   bool ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect, 
-                          std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly);
+                          std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly, 
+                          bool postMutOnly, llvm::SmallPtrSet<ExecutionState *, 5> &postMutOnly_hasdiff);
   
   void ks_FilterMutants (llvm::Module *module);
 

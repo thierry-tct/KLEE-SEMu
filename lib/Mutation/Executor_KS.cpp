@@ -134,8 +134,9 @@ cl::opt<std::string> semuCandidateMutantsFile("semu-candidate-mutants-list-file"
                                         cl::desc("File containing the subset  list of mutants to consider in the analysis"));
 
 // optional watch point max depth to leverage mutant state explosion
-// When not semuMaxDepthWP value v != 0, we check all mutants when the depth is k*v ans destroy all mutant states seen so far
-// TODO: Add this to checkWatchpointreached
+// When the value of semuMaxDepthWP is 0, check right after the mutation point (similar to waek mutation)
+// When not semuMaxDepthWP value v != 0, we check all mutants when the depth is k*v and destroy all mutant states seen so far
+// TODO: Add this to ks_reachedCheckMaxDepth
 cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork", 
                                  cl::init(0), 
                                  cl::desc("Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
@@ -492,6 +493,9 @@ const Module *Executor::setModule(llvm::Module *module,
   ks_mutantIDSelectorGlobal_Func = module->getFunction(ks_mutantIDSelectorName_Func);
   assert (ks_mutantIDSelectorGlobal_Func && ks_mutantIDSelectorGlobal_Func->arg_size() == 2 &&
     "@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
+  ks_postMutationPoint_Func = module->getFunction(ks_postMutationPointFuncName);
+  assert (ks_postMutationPoint_Func && ks_postMutationPoint_Func->arg_size() == 2 &&
+    "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
 
   ks_FilterMutants(module);
   //~KS
@@ -533,6 +537,9 @@ const Module *Executor::setModule(llvm::Module *module,
   ks_mutantIDSelectorGlobal_Func = module->getFunction(ks_mutantIDSelectorName_Func);
   assert (ks_mutantIDSelectorGlobal_Func && ks_mutantIDSelectorGlobal_Func->arg_size() == 2 &&
     "@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
+  ks_postMutationPoint_Func = module->getFunction(ks_postMutationPointFuncName);
+  assert (ks_postMutationPoint_Func && ks_postMutationPoint_Func->arg_size() == 2 &&
+    "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
   //~KS
   
   return module;
@@ -1929,11 +1936,14 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             // Set to visited, so that subsequent pass do not mutate anymore
             state.ks_VisitedMutPointsSet.insert(i);
                 
-            break;
+            break;  //case
         }
         else { //Simply skip that call when mutant or already seen
-            break;
+            break;  //case
         }
+    } else if (f == ks_postMutationPoint_Func) {
+      // Do nothing. Will be checked later
+      break;
     }
     //~KS
 
@@ -2848,7 +2858,7 @@ void Executor::doDumpStates() {
   if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
     // In case there was timeout, compare the states that already reached watchpoint
     std::vector<ExecutionState *> remainWPStates;
-    ks_watchPointID++;
+    ks_checkID++;
     ks_compareStates(remainWPStates); // TODO TODO: modify comparestates to take account of the fact that some states may not have reached the watchpoint
     for (auto *s: remainWPStates)
       terminateState (*s);
@@ -2893,8 +2903,8 @@ void Executor::run(ExecutionState &initialState) {
       }
     }
 
-    ks_watchPointID = 0;
-    ks_maxDepthID = 1;
+    ks_checkID = 0;
+    ks_nextDepthID = 1;
 
     ks_runStartTime = util::getWallTime();
     
@@ -2905,7 +2915,7 @@ void Executor::run(ExecutionState &initialState) {
     ks_loadKQueryConstraints(symbexPreconditionsList);
     // Make precondition Expression
     if (symbexPreconditionsList.size() > 0)
-        assert (semuPreconditionLength >= 0 && "Must use symbexPreconditionsList only with fixe preconditionLength");
+        assert (semuPreconditionLength >= 0 && "Must use symbexPreconditionsList only with fixed preconditionLength");
     unsigned nSelectedConds = semuPreconditionLength;
     ref<Expr> mergedPrecond = ConstantExpr::alloc(0, Expr::Bool);  //False
     for (auto &testcasePC: symbexPreconditionsList) {
@@ -4419,6 +4429,14 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
   } else {
     stats::forks += N-1;
     //addedStates.push_back(&state);
+
+    // Mutants just created thus ks_hasToReachPostMutationPoint set to true
+    // The mutants created will inherit the value
+    if (mut_IDs.size() > 0)
+      state.ks_hasToReachPostMutationPoint = true;
+      state.ks_startdepth = state.depth;
+
+    // create the mutants states
     for (std::vector<uint64_t>::iterator it = mut_IDs.begin(),
                                    ie = mut_IDs.end(); it != ie; ++it) {
       ExecutionState *ns = state.ks_branchMut();
@@ -4435,7 +4453,7 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
       ns->ks_originalMutSisterStates = state.ks_curBranchTreeNode;
 
       // On test generation mode, the newly seen mutant is shadowing original
-      // Thus is in seed mode
+      // Thus is in seed mode (This is KLEE Shadow implementation (XXX))
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::TESTGEN_MODE)
         ns->isTestGenMutSeeding = true;
 
@@ -4544,17 +4562,59 @@ inline bool Executor::ks_reachedAMutant(KInstruction *ki) {
   return false;
 }
 
-inline bool Executor::ks_reachedCheckMaxDepth(ExecutionState &state) {
-  if (semuMaxDepthWP > 0 && (state.depth > ks_maxDepthID * semuMaxDepthWP))
+// Check whether the ki is a post mutation point of the state (0) for original
+bool Executor::ks_checkAtPostMutationPoint(ExecutionState &state, KInstruction *ki) {
+  bool ret = false;
+  KInstruction * cur_ki = ki;
+  Instruction *i;
+
+  do {
+    i = cur_ki->inst;
+    if (i->getOpcode() == Instruction::Call) {
+      Function *f = dyn_cast<CallInst>(i)->getCalledFunction();
+      if (f == ks_postMutationPoint_Func) {
+        uint64_t fromMID = dyn_cast<ConstantInt>(dyn_cast<CallInst>(i)->getArgOperand(0))->getZExtValue();
+        uint64_t toMID = dyn_cast<ConstantInt>(dyn_cast<CallInst>(i)->getArgOperand(1))->getZExtValue();
+        if (state.ks_mutantID >= fromMID && state.ks_mutantID <= toMID)
+          ret = true;
+        // look for the last call in the BB 
+        // (since the call was added by mutation tool, there must be following Instruction in BB)
+        if (cur_ki != ki) // not the first loop
+          stepInstruction(state);
+        cur_ki = state.pc;
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  } while(true)
+  // Handle the cases where the post mutation point
+  // function is not inserted (return) or call to
+  // a function within mutated statement.
+  // XXX if the post mutation is not seen after first
+  // fork, we take it as post mutation point.
+  if (!ret && state.depth > state.ks_startdepth)
+    ret = true;
+  return ret;
+}
+
+inline bool Executor::ks_reachedCheckNextDepth(ExecutionState &state) {
+  if (state.depth > ks_nextDepthID)
     return true;
   return false;
 }
 
-// XXX: For now, watch point instructions are return and external calls.
+inline bool Executor::ks_reachedCheckMaxDepth(ExecutionState &state) {
+  if (state.depth - state.ks_startdepth > semuMaxDepthWP)
+    return true;
+  return false;
+}
+
 // This function must be called after 'stepInstruction' and 'executeInstruction' function call, which respectively
 // have set state.pc to next instruction to execute and state.prevPC to the to the just executed instruction 'ki'
 // - In the case of return, 'ki' is used and should be the return instruction (checked after return instruction execution)
-// ** We also have the option of limiting symbiloc exec depth for mutants and tsuch depth would be a watchpoint.
+// ** We also have the option of limiting symbolic exec depth for mutants and such depth would be a watchpoint.
 inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction *ki) {
   // No need to check return of non entry func.
   // Change this to enable/disable intermediate return
@@ -4571,7 +4631,22 @@ inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction 
 ///
 
 
-void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes) {
+void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
+  ks_fixTerminatedChildrenRecursive (es, toremove);
+
+  // let a child mutant state be the new parent of the group in case this parent terminated
+  // XXX at this point, all terminated children are removed from its chindren set
+  if (toremove.count(es) > 0 && !es->ks_childrenStates.empty()) {
+    auto *newParent = *(es->ks_childrenStates.begin());
+    es->ks_childrenStates.erase(newParent);
+    
+    newParent->ks_childrenStates.insert(es->ks_childrenStates.begin(), es->ks_childrenStates.end());
+    assert (newParent->ks_originalMutSisterStates == nullptr);
+    newParent->ks_originalMutSisterStates = es->ks_originalMutSisterStates;
+  }
+}
+
+void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
   std::vector<ExecutionState *> children(pes->ks_childrenStates.begin(), pes->ks_childrenStates.end());
   for (ExecutionState *ces: children) {
     ks_fixTerminatedChildrenRecursive(ces);
@@ -4594,28 +4669,48 @@ void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
     if (ks_reachedWatchPoint.count(ces) > 0) {
       ks_terminatedBeforeWP.insert(ces);
       ks_reachedWatchPoint.erase(ces);
+    } else if (ks_ongoingExecutionAtWP.count(ces) > 0) {
+      ks_terminatedBeforeWP.insert(ces);
+      ks_ongoingExecutionAtWP.erase(ces);
     }
   }
   if (ks_reachedWatchPoint.count(pes) > 0) {
     ks_terminatedBeforeWP.insert(pes);
     ks_reachedWatchPoint.erase(pes);
+  } else if (ks_ongoingExecutionAtWP.count(pes) > 0) {
+    ks_terminatedBeforeWP.insert(pes);
+    ks_ongoingExecutionAtWP.erase(pes);
   }
 }
 
-void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly) {
+void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly, bool postMutOnly) {
+  assert (!(outEnvOnly & postMutOnly) && 
+          "must not have both outEnvOnly and postMutOnly enabled simultaneously");
+
+  llvm::SmallPtrSet<ExecutionState *, 5> postMutOnly_hasdiff;
+
   //TODO TODO: Make efficient
   std::vector<ExecutionState *> mutParentStates;
-  for(ExecutionState *es: ks_reachedOutEnv) {
-    if (es->ks_originalMutSisterStates != nullptr)
-      mutParentStates.push_back(es);
-  }
-  for(ExecutionState *es: ks_reachedWatchPoint) {
-    if (es->ks_originalMutSisterStates != nullptr)
-      mutParentStates.push_back(es);
-  }
-  for(ExecutionState *es: ks_terminatedBeforeWP) {
-    if (es->ks_originalMutSisterStates != nullptr)
-      mutParentStates.push_back(es);
+  if (postMutOnly) {
+    for(ExecutionState *es: ks_atPointPostMutation) {
+      if (es->ks_originalMutSisterStates != nullptr)
+        mutParentStates.push_back(es);
+    }
+  } else {
+    for(ExecutionState *es: ks_reachedOutEnv) {
+      if (es->ks_originalMutSisterStates != nullptr)
+        mutParentStates.push_back(es);
+    }
+    if (!outEnvOnly) {
+      for(ExecutionState *es: ks_reachedWatchPoint) {
+        if (es->ks_originalMutSisterStates != nullptr)
+          mutParentStates.push_back(es);
+      }
+      for(ExecutionState *es: ks_terminatedBeforeWP) {
+        if (es->ks_originalMutSisterStates != nullptr)
+          mutParentStates.push_back(es);
+      }
+    }
   }
   std::sort(mutParentStates.begin(), mutParentStates.end(),
             [](const ExecutionState *a, const ExecutionState *b)
@@ -4655,7 +4750,8 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
         origSuffConstr.insert(std::pair<ExecutionState *, ref<Expr>>(tmpes, sconstr));
       }
     }
-    if (ks_compareRecursive (es, correspOriginals, origSuffConstr, outEnvOnly)) {
+
+    if (ks_compareRecursive (es, correspOriginals, origSuffConstr, outEnvOnly, postMutOnly, postMutOnly_hasdiff)) {
       // terminate all the states of this mutant by removing them from ks_reachedWatchPoint and adding them to ks_terminatedBeforeWP
       // XXX: For a mutant do we need to generate test for all difference with original or only one (mutant forked from different original have different test generated)?
       // TODO improve this
@@ -4667,7 +4763,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       }*/
     }
 
-    if (!outEnvOnly) {
+    /*if (!outEnvOnly) {
       // Remove mutants states that are terminated form their parent's 'children set'
       ks_fixTerminatedChildrenRecursive (es);
 
@@ -4681,32 +4777,65 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
         assert (newParent->ks_originalMutSisterStates == nullptr);
         newParent->ks_originalMutSisterStates = es->ks_originalMutSisterStates;
       }
-    }
+    }*/
   }
 
   if (!outEnvOnly) {
-    // Fix original terminated
-    if (! mutParentStates.empty()) {
-      auto *cands = mutParentStates.front();
-      auto *topParent = cands->ks_originalMutSisterStates;
-      while (topParent->parent != nullptr)
-        topParent = topParent->parent;
-      topParent->ks_cleanTerminatedOriginals(ks_terminatedBeforeWP);
-    }
-  }
+    if (!postMutOnly) {
+      // Fix original terminated
+      if (! mutParentStates.empty()) {
+        auto *cands = mutParentStates.front();
+        auto *topParent = cands->ks_originalMutSisterStates;
+        while (topParent->parent != nullptr)
+          topParent = topParent->parent;
+        topParent->ks_cleanTerminatedOriginals(ks_terminatedBeforeWP);
+      }
 
-  //Temporary
-  remainStates.clear();
-  remainStates.insert(remainStates.begin(), ks_reachedOutEnv.begin(), ks_reachedOutEnv.end());
-  if (!outEnvOnly) {
-    // We reached Checkpoint, terminate all mutant states so far and keep originals
-    for (auto *s: ks_reachedWatchPoint)
-      if (s->ks_mutantID == 0)
-        remainStates.push_back(s);
-      else
+    //Temporary
+    //remainStates.clear();
+    //remainStates.insert(remainStates.begin(), ks_reachedOutEnv.begin(), ks_reachedOutEnv.end());
+
+      // We reached Checkpoint, terminate all mutant states so far and keep originals
+      for (auto *s: ks_reachedWatchPoint) {
+        //if (s->ks_mutantID == 0)
+          //remainStates.push_back(s);
+        //else
         ks_terminatedBeforeWP.insert(s);
+      }
 
-    ks_reachedWatchPoint.clear();
+      // Remove mutants states that are terminated form their parent's 'children set'
+      // And set a new mutant parent if cur parent is terminated
+      for (ExecutionState *es: mutParentStates) {
+        // Remove mutants states that are terminated form their parent's 'children set'
+        ks_fixTerminatedChildren(es, ks_terminatedBeforeWP);
+      }
+      remainStates.clear();
+    } else {
+      llvm::SmallPtrSet<ExecutionState *, 5> toremove;
+      for (auto *s: ks_atPointPostMutation)
+        if(s->ks_mutantID != && postMutOnly_hasdiff.count(s) == 0)
+          toremove.insert(s)
+      // Remove mutants states that are terminated form their parent's 'children set'
+      // And set a new mutant parent if cur parent is terminated
+      for (ExecutionState *es: mutParentStates) {
+        // Remove mutants states that are terminated form their parent's 'children set'
+        ks_fixTerminatedChildren(es, toremove);
+      }
+        
+      // Get stats
+      ks_numberOfMutantStatesCheckedAtMutationPoint += toremove.size() + postMutOnly_hasdiff.size();
+      ks_numberOfMutantStatesDiscardedAtMutationPoint += toremove.size();
+
+      // terminate the state in toremove
+      for (auto *s: toremove)
+        terminateState(*s);
+
+      remainStates.clear();
+      remainStates.insert(remainStates.begin(), postMutOnly_hasdiff.begin(), postMutOnly_hasdiff.end());
+    }
+  } else {
+    remainStates.clear();
+    remainStates.insert(remainStates.begin(), ks_reachedOutEnv.begin(), ks_reachedOutEnv.end());
   }
   //ks_watchpoint = false;  //temporary
 }
@@ -4714,7 +4843,8 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
 //return true if there is a strong difference (the mutant is killed, stop it)
 //XXX: For a mutant do we need to generate test for all difference with original or only one?
 bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect,
-                                           std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly) {
+                                           std::map<ExecutionState *, ref<Expr>> &origSuffConstr, 
+                                           bool outEnvOnly, bool postMutOnly, llvm::SmallPtrSet<ExecutionState *, 5> &postMutOnly_hasdiff) {
   static const bool usethesolverfordiff = true;
 
   static unsigned gentestid = 0;
@@ -4769,6 +4899,12 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
           llvm::errs() << "<!=> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Different.\n\n";
   #endif
           diffFound = true;
+
+          // postMutOnly case
+          if (postMutOnly) {
+            postMutOnly_hasdiff.insert(mState);
+            return diffFound
+          }
 
           // Consider only critical diffs if outEnvOnly is True (semuTestgenOnlyForCriticalDiffs is overriden)
           if (outputTestCases && (!(semuTestgenOnlyForCriticalDiffs || outEnvOnly) || ExecutionState::ks_isCriticalDiff(sDiff))) {
@@ -4843,7 +4979,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
   
   //compare children as well
   for (ExecutionState *es: mState->ks_childrenStates) {
-    diffFound |= ks_compareRecursive (es, mSisStatesVect, origSuffConstr, outEnvOnly);
+    diffFound |= ks_compareRecursive (es, mSisStatesVect, origSuffConstr, outEnvOnly, postMutOnly);
   }
   
   return diffFound;
@@ -4934,7 +5070,7 @@ void Executor::ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id
   std::ofstream ofs(out_file_name, std::ofstream::out | std::ofstream::app); 
   if (ofs.is_open()) {
     ofs << header << ellapsedtime<<","<<mutant_id << "," << nSoftClauses << "," << nMaxFeasibleDiffs << "," << nMaxFeasibleEqs 
-        << "," << sDiff << "," << origState << "," << ks_watchPointID << "," << ks_maxDepthID <<"\n";
+        << "," << sDiff << "," << origState << "," << ks_checkID << "," << ks_nextDepthID <<"\n";
     ofs.close();
   } else {
     llvm::errs() << "Error: Unable to create info file: " << out_file_name 
@@ -5067,10 +5203,10 @@ inline void Executor::ks_CheckAndBreakInfinitLoop(ExecutionState &curState, Exec
 
 /// Return true if the state comparison actually happened, false otherwise. This help to know if we need to call updateStates or not
 inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, bool isSeeding, uint64_t precond_offset) {
-  // // FIXME: We just checked memory and some states will be killed if exeeded and we will have some problem in comparison
-  // // FIXME: For now we assume that the memory limitmust not be exceeded, need to find a way to handle this later
+  // // FIXME: We just checked memory and some states will be killed if memory exeeded and we will have some problem in comparison
+  // // FIXME: For now we assume that the memory limit must not be exceeded, need to find a way to handle this later
   if (atMemoryLimit) {
-    klee_error("SEMU@ERROR: Must not reach memory limit and kill states. increase memory limit or restrict symbex");
+    klee_error("SEMU@ERROR: Must not reach memory limit and kill states. increase memory limit or restrict symbex (FIXME)");
     exit(1);
   }
 
@@ -5079,6 +5215,8 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   bool ks_terminated = false;
   bool ks_OutEnvReached = false;
   bool ks_WPReached = false;
+  bool ks_atPostMutation = false;
+  bool ks_atNextCheck = false;
 
   // If next instruction is unreachable instruction, terminate the state early
   //if (/*llvm::isa<llvm::UnreachableInst>(curState.pc->inst) || */llvm::isa<llvm::UnreachableInst>(curState.prevPC->inst)) {
@@ -5086,16 +5224,32 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   //  ks_terminated = true;
   //} else {
     ks_terminated = !ks_justTerminatedStates.empty();
-    ks_OutEnvReached = ks_nextIsOutEnv (curState);
-    ks_WPReached = ks_watchPointReached (curState, ki);
+    // XXX Do not check whe the instruction is PHI or EHPad, except the state terminated
+    if (ks_terminated || !(llvm::isa<llvm::PHINode>(ki->inst) || ki->inst->isEHPad())) {
+      // A state can have both in ks_atPostMutation and ks_atNextCheck true
+      ks_OutEnvReached = ks_nextIsOutEnv (curState);
+      ks_WPReached = ks_watchPointReached (curState, ki);
+      if (ks_WPReached) {
+        if (curState.ks_mutantID == 0) {
+          // Original (ks_mutantID == 0) do not have WP
+          // instead has next check
+          // Note that bot ks_atPostMutation and ks_atNextCheck ar false here
+          std::swap(ks_WPReached, ks_atNextCheck);
+        }
+      } else {
+        ks_atPostMutation = (curState.ks_hasToReachPostMutationPoint && 
+                              ks_checkAtPostMutationPoint(curState, ki));
+        ks_atNextCheck = !ks_atPostMutation && ks_reachedCheckNextDepth(curState);
+      }
+    }
   //}
 
-  if (ks_terminated | ks_WPReached | ks_OutEnvReached) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
+  if (ks_terminated | ks_WPReached | ks_OutEnvReached | ks_atPostMutation | ks_atNextCheck) {   //(ks_terminatedBeforeWP.count(&curState) == 1)
 
     bool curTerminated = ks_justTerminatedStates.count(&curState) > 0;
     
     //remove from searcher or seed map if the curState is concerned (guaranteed for WP and Out Env, but not term: termination while forking)
-    if (ks_WPReached | ks_OutEnvReached | curTerminated)  {
+    if (ks_WPReached | ks_OutEnvReached | curTerminated | ks_atPostMutation | ks_atNextCheck) {
       if (isSeeding) {
         std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
           seedMap.find(&curState);
@@ -5113,8 +5267,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         // add to ks_reachedWatchPoint if so
         if (ks_OutEnvReached)
           ks_reachedOutEnv.insert(&curState);
-        else // ! ks_OutEnvReached and ks_WPReached
+        else if (ks_atPostMutation)
+          ks_atPointPostMutation.insert(&curState);
+        else if (ks_WPReached) // ! ks_OutEnvReached and !ks_atPointPostMutation and ks_WPReached
           ks_reachedWatchPoint.insert(&curState);
+        else // ks_atNextCheck or is original
+          ks_ongoingExecutionAtWP.insert(&curState);
       } 
     }
 
@@ -5133,7 +5291,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       ks_justTerminatedStates.clear();
     }
 
-    // Put it here to make sure that any newly added state is considered (addesStates and removedStates are empty after)
+    // Put this here to make sure that any newly added state is considered (addesStates and removedStates are empty after)
     updateStates(0);
 
     // Remove addedNdeleted form both searcher and seedMap
@@ -5152,43 +5310,100 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       addedNdeleted.clear();
     }
 
-    //Check if all reached and compare states
+    //Check if all reached a stop point and compare states
     if (precond_offset + 
         ks_reachedOutEnv.size() + 
         ks_reachedWatchPoint.size() + 
-        ks_terminatedBeforeWP.size() >= states.size()) {   //Temporary solution here(assumed that all states reach that point). TODO
+        ks_terminatedBeforeWP.size() +
+        ks_atPointPostMutation.size() +
+        ks_ongoingExecutionAtWP.size() >= states.size()) {   
       std::vector<ExecutionState *> remainWPStates;
-      ks_watchPointID++;
+      ks_checkID++;
       bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
-      llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() << " States" << (ks_hasOutEnv?" (OutEnv)":" (Checkpoint)") << ".\n";
+      bool ks_isAtPostMut = (!ks_hasOutEnv && !ks_atPointPostMutation.empty());
+      llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() 
+                    << " States" << (ks_hasOutEnv?" (OutEnv)":
+                        (ks_isAtPostMut?" (PostMutationPoint)":" (Checkpoint)"))
+                    << ".\n";
       auto elapsInittime = util::getWallTime();
-      ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/);
+      ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/, ks_isAtPostMut/*postMutOnly*/);
       llvm::errs() << "# SEMU@Status: State Comparison Done! (" << (util::getWallTime() - elapsInittime) << " seconds)\n";
       
       //continue the execution
-      addedStates.insert(addedStates.end(), remainWPStates.begin(), remainWPStates.end());
-      
+      if (ks_isAtPostMut) {
+        // print stats
+        llvm::errs() << "# SEMU@Status: post mutantion Discarded/created mutants states: "
+                      << ks_numberOfMutantStatesCheckedAtMutationPoint << "/"
+                      << ks_numberOfMutantStatesDiscardedAtMutationPoint << "\n";
+        if (remainWPStates.empty()) {
+          // XXX Make sure there is something in addedStates
+          assert (false && 
+                  "There must be remaining after post mutation point check");
+        } else {
+          // XXX Make sure there is something in addedStates.
+          // keep the first to add in the worse case
+          ExecutionState * r_backup = remainWPStates.front();
+          for (auto it=remainWPStates.begin()+1, ie=remainWPStates.end();
+                    it != ie; ++it) {
+            // The state that at the same time reached postmutation 
+            // and next check are added into ongoing
+            if (ks_reachedCheckNextDepth(*(*it)))
+              ks_ongoingExecutionAtWP.insert(*it);
+            else
+              addedStates.push_back(*it);
+          }
+          if (addedStates.empty()) {
+            addedStates.push_back(r_backup);
+          } else {
+            if (ks_reachedCheckNextDepth(*r_backup))
+              ks_ongoingExecutionAtWP.insert(r_backup);
+            else
+              addedStates.push_back(r_backup);
+          }
+        }
+      } else {
+        addedStates.insert(addedStates.end(), remainWPStates.begin(), remainWPStates.end());
+      }
+        
       // If outenv is empty, it means that every state reached checkpoint,
       // We can then termintate crash states and clear the term and WP sets
-      if (!ks_hasOutEnv) {
-        for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
-              ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
-          terminateState (**it);
+      if (!ks_hasOutEnv) { 
+        if (!ks_isAtPostMut) {
+          for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
+                ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
+            terminateState (**it);
+          }
+          // Clear
+          ks_terminatedBeforeWP.clear();
+          ks_nextDepthID++; 
+
+          // Clear
+          ks_reachedWatchPoint.clear();
+
+          // add back ongoing states
+          addedStates.insert(addedStates.end(), ks_ongoingExecutionAtWP.begin(), ks_ongoingExecutionAtWP.end());
+          // Clear
+          ks_ongoingExecutionAtWP.clear();
+        } else {
+          // Clear
+          ks_atPointPostMutation.clear();
         }
-        ks_terminatedBeforeWP.clear();
-        ks_maxDepthID++;
 
         // add all terminated states to the searcher so that update won't assert that the states are not in searcher
         // XXX The searcher is empty here. This is necessary because in updateStates, removedStates must be in searcher
         if (searcher)
           searcher->update(0, removedStates/*adding*/, std::vector<ExecutionState *>());
-        llvm::errs() << "# SEMU@Status: After checkpoint ID=" << (ks_maxDepthID-1) << " There are " << addedStates.size() <<" States remaining (seeding is "<<(isSeeding?"True":"False")<<")!\n";
+        llvm::errs() << "# SEMU@Status: After checkpoint ID=" << (ks_nextDepthID-1) 
+                      << " There are " << addedStates.size() 
+                      <<" States remaining (seeding is "
+                      <<(isSeeding?"True":"False")<<")!\n";
 
       } else { // there should be no terminated state
         if (ks_reachedOutEnv.size() != remainWPStates.size()) {
           klee_error("SEMU@ERROR: BUG, states reaching outenv different after compare states");
           exit(1);
         }
+        // Clear
         ks_reachedOutEnv.clear();
       }
 
