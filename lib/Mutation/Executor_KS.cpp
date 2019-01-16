@@ -5361,8 +5361,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           // XXX Make sure there is something in addedStates.
           // keep the first to add in the worse case
           ExecutionState * r_backup = remainWPStates.front();
+          // disable ks_hasToReachPostMutationPoint
+          r_backup->ks_hasToReachPostMutationPoint = false;
           for (auto it=remainWPStates.begin()+1, ie=remainWPStates.end();
                     it != ie; ++it) {
+            // disable ks_hasToReachPostMutationPoint
+            (*it)->ks_hasToReachPostMutationPoint = false;
             // The state that at the same time reached postmutation 
             // and next check are added into ongoing
             if (ks_reachedCheckNextDepth(*(*it)))
