@@ -5332,9 +5332,9 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       //continue the execution
       if (ks_isAtPostMut) {
         // print stats
-        llvm::errs() << "# SEMU@Status: post mutantion Discarded/created mutants states: "
-                      << ks_numberOfMutantStatesCheckedAtMutationPoint << "/"
-                      << ks_numberOfMutantStatesDiscardedAtMutationPoint << "\n";
+        llvm::errs() << "# SEMU@Status: post mutation Discarded/created mutants states: "
+                      << ks_numberOfMutantStatesDiscardedAtMutationPoint << "/"
+                      << ks_numberOfMutantStatesCheckedAtMutationPoint << "\n";
         if (remainWPStates.empty()) {
           // XXX Make sure there is something in addedStates
           assert (false && 
@@ -5430,7 +5430,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
     } else {
       // in Seen Mode, the seedMap must not be empty
       if (isSeeding && seedMap.empty()) {
-        llvm::errs() << ">> States size: "<<states.size()<<". Sum of check stages sizes: " 
+        llvm::errs() << "\n>> (BUG) States size: "<<states.size()<<". Sum of check stages sizes: " 
                      << (ks_reachedOutEnv.size() + ks_reachedWatchPoint.size() 
                                             + ks_terminatedBeforeWP.size() 
                                             + ks_atPointPostMutation.size()
