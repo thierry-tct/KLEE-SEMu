@@ -4812,9 +4812,13 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       remainStates.clear();
     } else {
       llvm::SmallPtrSet<ExecutionState *, 5> toremove;
-      for (auto *s: ks_atPointPostMutation)
-        if(s->ks_mutantID != 0 && postMutOnly_hasdiff.count(s) == 0)
+      llvm::SmallPtrSet<ExecutionState *, 5> originals;
+      for (auto *s: ks_atPointPostMutation) {
+        if (s->ks_mutantID == 0)
+          originals.insert(s);
+        else if(postMutOnly_hasdiff.count(s) == 0)
           toremove.insert(s);
+      }
       // Remove mutants states that are terminated form their parent's 'children set'
       // And set a new mutant parent if cur parent is terminated
       for (ExecutionState *es: mutParentStates) {
@@ -4831,7 +4835,8 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
         terminateState(*s);
 
       remainStates.clear();
-      remainStates.insert(remainStates.begin(), postMutOnly_hasdiff.begin(), postMutOnly_hasdiff.end());
+      remainStates.insert(remainStates.begin(), originals.begin(), originals.end());
+      remainStates.insert(remainStates.end(), postMutOnly_hasdiff.begin(), postMutOnly_hasdiff.end());
     }
   } else {
     remainStates.clear();
