@@ -5419,7 +5419,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       // in seeding mode, since seedMap is not augmented in updateState,
       // we update it with remaining states (in addesStates vector) before updateStates
       if (isSeeding) {
-        assert ((ks_hasOutEnv || seedMap.empty()) && "SeedMap must be empty at checkpoint");
+        assert ((/*ks_hasOutEnv */|| seedMap.empty()) && "SeedMap must be empty at checkpoint");
         for(auto *s: addedStates) {
           std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
             backed_seedMap.find(s);
@@ -5428,7 +5428,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           backed_seedMap.erase(it);
         }
         // if checkpoint, clear backed_seedMap.
-        if (!ks_hasOutEnv)
+        if (!ks_hasOutEnv && !ks_isAtPostMut)
           backed_seedMap.clear();
       } else {
         backed_seedMap.clear(); // seed mode already passed, clear any ramining
