@@ -5346,6 +5346,15 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
                       << ks_numberOfMutantStatesCheckedAtMutationPoint << "\n";
         if (remainWPStates.empty()) {
           // XXX Make sure there is something in addedStates
+          unsigned numOriginals = 0;
+          for (auto *s: ks_atPointPostMutation)
+            if (s->ks_mutantID == 0)
+              ++numOriginals;
+          llvm::errs() << "\n>> "
+                    << "(BUG) No remaining after post Mutation point check."
+                    << "Number of original states in ks_atPointPostMutation is:"
+                    << numOriginals;
+                    << "\n";
           assert (false && 
                   "There must be remaining after post mutation point check");
         } else {

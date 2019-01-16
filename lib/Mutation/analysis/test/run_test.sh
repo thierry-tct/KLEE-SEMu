@@ -4,6 +4,7 @@
 # >> ./run_test.sh tritype
 #
 # Env vars:
+# DO_CLEANSTART=on         --> apply cleanstart on MFI to start everything over
 # FROM_SEMU_EXECUTION=on   --> Execute this script from SEMU execution
 # MFIRUNSHADOW_VERBOSE=on  --> make klee test generation of MFI verbose
 # 
@@ -31,7 +32,7 @@ export MART_BINARY_DIR=$(readlink -f ~/mytools/mart/build/tools)
 if [ "${FROM_SEMU_EXECUTION:-}" != "on" ] #true 
 then
     cleanstart=""
-    #cleanstart=cleanstart
+    [ "${DO_CLEANSTART:-}" = "on" ] && cleanstart=cleanstart
     echo "# RUNNING MFI 1..."
     cd $metadir || error_exit "cd $metadir"
     ~/mytools/MFI-V2.0/MFI.sh "$projID"_conf-script.conf $cleanstart || error_exit "MFI Failed!"
