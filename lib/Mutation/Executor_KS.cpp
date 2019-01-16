@@ -4632,6 +4632,9 @@ inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction 
 
 
 inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
+  if (toremove.empty())
+    return;
+
   ks_fixTerminatedChildrenRecursive (es, toremove);
 
   // let a child mutant state be the new parent of the group in case this parent terminated
@@ -4650,7 +4653,7 @@ void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::Sma
   std::vector<ExecutionState *> children(pes->ks_childrenStates.begin(), pes->ks_childrenStates.end());
   for (ExecutionState *ces: children) {
     ks_fixTerminatedChildrenRecursive(ces, toremove);
-    if (ks_terminatedBeforeWP.count(ces) > 0) {
+    if (toremove.count(ces) > 0) {
       pes->ks_childrenStates.erase(ces);
       if (! ces->ks_childrenStates.empty()) {
         auto *newparent = *(ces->ks_childrenStates.begin());
@@ -4734,6 +4737,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
     if (correspOriginals.empty()) {
       // No need to continue with the mutants since original finished
       // Remove the mutants of the subtree from ks_reachedWatchPoint, add to terminated
+      // TODO: remove this, will actually neve be executed
       ks_terminateSubtreeMutants(es);
       continue;
     }
@@ -5337,7 +5341,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       //continue the execution
       if (ks_isAtPostMut) {
         // print stats
-        llvm::errs() << "# SEMU@Status: post mutation Discarded/created mutants states: "
+        llvm::errs() << "# SEMU@Status: Aggregated post mutation Discarded/created mutants states: "
                       << ks_numberOfMutantStatesDiscardedAtMutationPoint << "/"
                       << ks_numberOfMutantStatesCheckedAtMutationPoint << "\n";
         if (remainWPStates.empty()) {
