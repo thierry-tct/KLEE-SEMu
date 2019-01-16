@@ -4694,26 +4694,25 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
 
   //TODO TODO: Make efficient
   std::vector<ExecutionState *> mutParentStates;
-  if (postMutOnly) {
-    for(ExecutionState *es: ks_atPointPostMutation) {
-      if (es->ks_originalMutSisterStates != nullptr)
-        mutParentStates.push_back(es);
-    }
-  } else {
-    for(ExecutionState *es: ks_reachedOutEnv) {
-      if (es->ks_originalMutSisterStates != nullptr)
-        mutParentStates.push_back(es);
-    }
-    if (!outEnvOnly) {
-      for(ExecutionState *es: ks_reachedWatchPoint) {
-        if (es->ks_originalMutSisterStates != nullptr)
-          mutParentStates.push_back(es);
-      }
-      for(ExecutionState *es: ks_terminatedBeforeWP) {
-        if (es->ks_originalMutSisterStates != nullptr)
-          mutParentStates.push_back(es);
-      }
-    }
+  for(ExecutionState *es: ks_atPointPostMutation) {
+    if (es->ks_originalMutSisterStates != nullptr)
+      mutParentStates.push_back(es);
+  }
+  for(ExecutionState *es: ks_ongoingExecutionAtWP) {
+    if (es->ks_originalMutSisterStates != nullptr)
+      mutParentStates.push_back(es);
+  }
+  for(ExecutionState *es: ks_reachedOutEnv) {
+    if (es->ks_originalMutSisterStates != nullptr)
+      mutParentStates.push_back(es);
+  }
+  for(ExecutionState *es: ks_reachedWatchPoint) {
+    if (es->ks_originalMutSisterStates != nullptr)
+      mutParentStates.push_back(es);
+  }
+  for(ExecutionState *es: ks_terminatedBeforeWP) {
+    if (es->ks_originalMutSisterStates != nullptr)
+      mutParentStates.push_back(es);
   }
   std::sort(mutParentStates.begin(), mutParentStates.end(),
             [](const ExecutionState *a, const ExecutionState *b)
@@ -4863,7 +4862,8 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
   std::vector<ref<Expr>> inStateDiffExp;
   bool diffFound = false;
 
-  if (!outEnvOnly || ks_reachedOutEnv.count(mState) > 0) {
+  if (!outEnvOnly || ks_reachedOutEnv.count(mState) > 0
+      || !postMutOnly || ks_atPointPostMutation.count(mState) > 0) {
     for (auto mSisState: mSisStatesVect) {
       bool result;
       ref<Expr> origpathPrefix = origSuffConstr.at(mSisState);
@@ -5351,10 +5351,10 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
             if (s->ks_mutantID == 0)
               ++numOriginals;
           llvm::errs() << "\n>> "
-                << "(BUG) No remaining after post Mutation point check."
+                << "(BUG) No remaining after post Mutation point check. "
                 << "Number of original states in ks_atPointPostMutation is: "
                 << numOriginals
-                << "\n";
+                << "\n\n";
           assert (false && 
                   "There must be remaining after post mutation point check");
         } else {
