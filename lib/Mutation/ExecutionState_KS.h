@@ -186,6 +186,9 @@ public:
   bool ks_hasToReachPostMutationPoint = false;
 
   unsigned ks_startdepth;
+
+  // Useful for cases where original reach outenv but not the mutant
+  unsigned ks_numberOfOutEnvSeen = 0;
   
   ExecutionState *ks_branchMut();
   

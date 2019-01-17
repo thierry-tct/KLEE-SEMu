@@ -1451,6 +1451,18 @@ void Executor::executeCall(ExecutionState &state,
     if (InvokeInst *ii = dyn_cast<InvokeInst>(i))
       transferToBasicBlock(ii->getNormalDest(), i->getParent(), state);
   } else {
+  // @KLEE-SEMu
+    // Make sure to unset the ks_hasToReachPostMutationPoint so to avoid
+    // post mutation point checking when the execution of the mutated stmt
+    // calls a function. the reason for this are:
+    // - Other mutants may be spawn in the called function, confusing
+    // therefore the original.
+    // - A mutant may mutate the value returned by the function call
+    // and considered same as original because no diff found 
+    // within the called funcion.
+    if (state.ks_hasToReachPostMutationPoint)
+      state.ks_hasToReachPostMutationPoint = false;
+  //~KS
     // FIXME: I'm not really happy about this reliance on prevPC but it is ok, I
     // guess. This just done to avoid having to pass KInstIterator everywhere
     // instead of the actual instruction, since we can't make a KInstIterator
@@ -4675,6 +4687,9 @@ void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
     } else if (ks_ongoingExecutionAtWP.count(ces) > 0) {
       ks_terminatedBeforeWP.insert(ces);
       ks_ongoingExecutionAtWP.erase(ces);
+    } else if (ks_atPointPostMutation.count(ces) > 0) {
+      ks_terminatedBeforeWP.insert(ces);
+      ks_atPointPostMutation.erase(ces);
     }
   }
   if (ks_reachedWatchPoint.count(pes) > 0) {
@@ -4683,6 +4698,9 @@ void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
   } else if (ks_ongoingExecutionAtWP.count(pes) > 0) {
     ks_terminatedBeforeWP.insert(pes);
     ks_ongoingExecutionAtWP.erase(pes);
+  } else if (ks_atPointPostMutation.count(pes) > 0) {
+    ks_terminatedBeforeWP.insert(pes);
+    ks_atPointPostMutation.erase(pes);
   }
 }
 
@@ -4727,30 +4745,36 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
   for (ExecutionState *es: mutParentStates) {
     correspOriginals.clear();
     es->ks_originalMutSisterStates->getAllStates(correspOriginals);
-    assert (correspOriginals.size() > 0 && (std::string("Error: Empty original state list - Comparing with mutant ID: ")+std::to_string(es->ks_mutantID)).c_str());
+    //assert (correspOriginals.size() > 0 && (std::string("Error: Empty original state list - Comparing with mutant ID: ")+std::to_string(es->ks_mutantID)).c_str());
 
     // TODO: CHECK WHY ORIGINAL FINISHES FIRST
     //for(auto xy: correspOriginals)llvm::errs()<<" "<<xy->ks_mutantID;llvm::errs()<<" **\n";
     //llvm::errs()<<mutParentStates.size()<<" ~~~~~~\n";
     
+    // This may happend because an original ma terminate before its corresponding mutant
+    // and thus, it will be removed from ks_terminatedBeforeWP at a "next check" before the mutant's watch point
     if (correspOriginals.empty()) {
       // No need to continue with the mutants since original finished
-      // Remove the mutants of the subtree from ks_reachedWatchPoint, add to terminated
-      // TODO: remove this, will actually neve be executed
+      // Remove the mutants of the subtree from ks_reachedWatchPoint..., add to terminated
       ks_terminateSubtreeMutants(es);
-      continue;
-    }
-    
-    //compute constraint for each original (only if the previous is descendent of this). for this, if any leave is common and the the previous subtree is bigger or equal to this, then 
-    if (origSuffConstr.find(correspOriginals.at(0)) == origSuffConstr.end() || correspOriginals.size() > origSuffConstr.size()) {
+      //continue;
+
+      // use a sisstate null and the path condition true to just generate the test for the mutant
       origSuffConstr.clear();
-      for (ExecutionState *tmpes: correspOriginals) {
-        ref<Expr> sconstr = ConstantExpr::alloc(1, Expr::Bool);
-        for (ConstraintManager::constraint_iterator it = tmpes->constraints.begin(), 
-                          ie = tmpes->constraints.end(); it != ie; ++it) {
-          sconstr = AndExpr::create(sconstr, *it);
+      correspOriginals.push_back(nullptr);
+      origSuffConstr.insert(std::pair<ExecutionState *, ref<Expr>>(nullptr, ConstantExpr::alloc(1, Expr::Bool)));
+    } else {
+      //compute constraint for each original (only if the previous is descendent of this). for this, if any leave is common and the the previous subtree is bigger or equal to this, then 
+      if (origSuffConstr.find(correspOriginals.at(0)) == origSuffConstr.end() || correspOriginals.size() > origSuffConstr.size()) {
+        origSuffConstr.clear();
+        for (ExecutionState *tmpes: correspOriginals) {
+          ref<Expr> sconstr = ConstantExpr::alloc(1, Expr::Bool);
+          for (ConstraintManager::constraint_iterator it = tmpes->constraints.begin(), 
+                            ie = tmpes->constraints.end(); it != ie; ++it) {
+            sconstr = AndExpr::create(sconstr, *it);
+          }
+          origSuffConstr.insert(std::pair<ExecutionState *, ref<Expr>>(tmpes, sconstr));
         }
-        origSuffConstr.insert(std::pair<ExecutionState *, ref<Expr>>(tmpes, sconstr));
       }
     }
 
@@ -4862,8 +4886,11 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
   std::vector<ref<Expr>> inStateDiffExp;
   bool diffFound = false;
 
-  if (!outEnvOnly || ks_reachedOutEnv.count(mState) > 0
-      || !postMutOnly || ks_atPointPostMutation.count(mState) > 0) {
+  // enter if WP (neither outenv nor post mutation) and the state in not ongoing
+  // or is outenv and in its data or is post mutation and is in its data
+  if ((!outEnvOnly && !postMutOnly && ks_ongoingExecutionAtWP.count(mState) == 0)
+      || (outEnvOnly && ks_reachedOutEnv.count(mState) > 0)
+      || (postMutOnly && ks_atPointPostMutation.count(mState) > 0)) {
     for (auto mSisState: mSisStatesVect) {
       bool result;
       ref<Expr> origpathPrefix = origSuffConstr.at(mSisState);
@@ -4878,27 +4905,36 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
         // compare these
         int sDiff = ExecutionState::KS_StateDiff_t::ksNO_DIFF; 
 
-        if (/*mState->pc &&*/ (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
-          sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp, feasibleChecker) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
-          // XXX: we also compare states (ks_compareStateWith) here or not?
-
-          if (!ExecutionState::ks_isNoDiff(sDiff))
-            sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, &feasibleChecker, false/*post...*/);
+        if (mSisState == nullptr) {
+          // Do not have corresponding original anymore.
+          sDiff |= ExecutionState::KS_StateDiff_t::ksPC_DIFF;
         } else {
-          sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, &feasibleChecker, true/*post...*/);
-          // XXX if mutant terminated and not original or vice versa, set the main return diff
-          // TODO: Meke this more efficient
-          if (ks_terminatedBeforeWP.count(mSisState) != ks_terminatedBeforeWP.count(mState))
-            sDiff |= ExecutionState::KS_StateDiff_t::ksRETCODE_DIFF_MAINFUNC;
+          if (mState->ks_numberOfOutEnvSeen != mSisState->ks_numberOfOutEnvSeen) {
+            sDiff |= ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF;
+          }
+
+          if (/*mState->pc &&*/ (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
+            sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp, feasibleChecker) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
+            // XXX: we also compare states (ks_compareStateWith) here or not?
+
+            if (!ExecutionState::ks_isNoDiff(sDiff))
+              sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, &feasibleChecker, false/*post...*/);
+          } else {
+            sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, &feasibleChecker, true/*post...*/);
+            // XXX if mutant terminated and not original or vice versa, set the main return diff
+            // TODO: Meke this more efficient
+            if (ks_terminatedBeforeWP.count(mSisState) != ks_terminatedBeforeWP.count(mState))
+              sDiff |= ExecutionState::KS_StateDiff_t::ksRETCODE_DIFF_MAINFUNC;
+          }
         }
-        
         // make sure that the sDiff is not having an error. If error, abort
         ExecutionState::ks_checkNoDiffError(sDiff, mState->ks_mutantID);
 
         if (ExecutionState::ks_isNoDiff(sDiff)) {
           if (!outEnvOnly/*at check point*/ && doMaxSat) {
             // XXX put out the paths showing no differences as well
-            ks_checkMaxSat(mState->constraints, mSisState, inStateDiffExp, mState->ks_mutantID, sDiff);
+            if (mSisState != nullptr)
+              ks_checkMaxSat(mState->constraints, mSisState, inStateDiffExp, mState->ks_mutantID, sDiff);
           }
   #ifdef ENABLE_KLEE_SEMU_DEBUG
           llvm::errs() << "<==> a state pair of Original and Mutant-" << mState->ks_mutantID << " are Equivalent.\n\n";
@@ -5274,14 +5310,16 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       // Terminated has priority, then outEnv
       if (! curTerminated) {
         // add to ks_reachedWatchPoint if so
-        if (ks_OutEnvReached)
+        if (ks_OutEnvReached) {
           ks_reachedOutEnv.insert(&curState);
-        else if (ks_atPostMutation)
+          curState.ks_numberOfOutEnvSeen++;
+        } else if (ks_atPostMutation) {
           ks_atPointPostMutation.insert(&curState);
-        else if (ks_WPReached) // ! ks_OutEnvReached and !ks_atPointPostMutation and ks_WPReached
+        } else if (ks_WPReached) { // ! ks_OutEnvReached and !ks_atPointPostMutation and ks_WPReached
           ks_reachedWatchPoint.insert(&curState);
-        else // ks_atNextCheck or is original
+        } else { // ks_atNextCheck or is original
           ks_ongoingExecutionAtWP.insert(&curState);
+        }
       } 
     }
 
@@ -5319,150 +5357,166 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       addedNdeleted.clear();
     }
 
-    //Check if all reached a stop point and compare states
-    if (precond_offset + 
-        ks_reachedOutEnv.size() + 
-        ks_reachedWatchPoint.size() + 
-        ks_terminatedBeforeWP.size() +
-        ks_atPointPostMutation.size() +
-        ks_ongoingExecutionAtWP.size() >= states.size()) {   
-      std::vector<ExecutionState *> remainWPStates;
-      ks_checkID++;
-      bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
-      bool ks_isAtPostMut = (!ks_hasOutEnv && !ks_atPointPostMutation.empty());
-      llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() 
-                    << " States" << (ks_hasOutEnv?" (OutEnv)":
-                        (ks_isAtPostMut?" (PostMutationPoint)":" (Checkpoint)"))
-                    << ".\n";
-      auto elapsInittime = util::getWallTime();
-      ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/, ks_isAtPostMut/*postMutOnly*/);
-      llvm::errs() << "# SEMU@Status: State Comparison Done! (" << (util::getWallTime() - elapsInittime) << " seconds)\n";
-      
-      //continue the execution
-      if (ks_isAtPostMut) {
-        // print stats
-        llvm::errs() << "# SEMU@Status: Aggregated post mutation Discarded/created mutants states: "
-                      << ks_numberOfMutantStatesDiscardedAtMutationPoint << "/"
-                      << ks_numberOfMutantStatesCheckedAtMutationPoint << "\n";
-        if (remainWPStates.empty()) {
-          // XXX Make sure there is something in addedStates
-          unsigned numOriginals = 0;
-          for (auto *s: ks_atPointPostMutation)
-            if (s->ks_mutantID == 0)
-              ++numOriginals;
-          llvm::errs() << "\n>> "
-                << "(BUG) No remaining after post Mutation point check. "
-                << "Number of original states in ks_atPointPostMutation is: "
-                << numOriginals
-                << "\n\n";
-          assert (false && 
-                  "There must be remaining after post mutation point check");
+    bool recheck_for_no_postmutation_remaining = false;
+
+    do {
+      // disable rexecution of this loop by default
+      recheck_for_no_postmutation_remaining = false;
+
+      //Check if all reached a stop point and compare states
+      if (precond_offset + 
+          ks_reachedOutEnv.size() + 
+          ks_reachedWatchPoint.size() + 
+          ks_terminatedBeforeWP.size() +
+          ks_atPointPostMutation.size() +
+          ks_ongoingExecutionAtWP.size() >= states.size()) {
+        std::vector<ExecutionState *> remainWPStates;
+        ks_checkID++;
+        bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
+        bool ks_isAtPostMut = (!ks_hasOutEnv && !ks_atPointPostMutation.empty());
+
+        if (ks_reachedOutEnv.empty() && ks_reachedWatchPoint.empty()
+            && ks_terminatedBeforeWP.empty() && ks_atPointPostMutation.empty()) {
+          // all states are ongoing, no need to compare, just put them back
+          // XXX Will be added into added states bellow
         } else {
-          // XXX Make sure there is something in addedStates.
-          // keep the first to add in the worse case
-          ExecutionState * r_backup = remainWPStates.front();
-          // disable ks_hasToReachPostMutationPoint
-          r_backup->ks_hasToReachPostMutationPoint = false;
-          for (auto it=remainWPStates.begin()+1, ie=remainWPStates.end();
-                    it != ie; ++it) {
-            // disable ks_hasToReachPostMutationPoint
-            (*it)->ks_hasToReachPostMutationPoint = false;
-            // The state that at the same time reached postmutation 
-            // and next check are added into ongoing
-            if (ks_reachedCheckNextDepth(*(*it)))
-              ks_ongoingExecutionAtWP.insert(*it);
-            else
-              addedStates.push_back(*it);
-          }
-          if (addedStates.empty()) {
-            addedStates.push_back(r_backup);
-          } else {
-            if (ks_reachedCheckNextDepth(*r_backup))
-              ks_ongoingExecutionAtWP.insert(r_backup);
-            else
-              addedStates.push_back(r_backup);
-          }
+          llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() 
+                        << " States" << (ks_hasOutEnv?" (OutEnv)":
+                            (ks_isAtPostMut?" (PostMutationPoint)":" (Checkpoint)"))
+                        << ".\n";
+          auto elapsInittime = util::getWallTime();
+          ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/, ks_isAtPostMut/*postMutOnly*/);
+          llvm::errs() << "# SEMU@Status: State Comparison Done! (" << (util::getWallTime() - elapsInittime) << " seconds)\n";
         }
-      } else {
-        addedStates.insert(addedStates.end(), remainWPStates.begin(), remainWPStates.end());
-      }
         
-      // If outenv is empty, it means that every state reached checkpoint,
-      // We can then termintate crash states and clear the term and WP sets
-      if (!ks_hasOutEnv) { 
-        if (!ks_isAtPostMut) {
-          for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
-                ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
-            terminateState (**it);
+        //continue the execution
+        if (ks_isAtPostMut) {
+          // print stats
+          llvm::errs() << "# SEMU@Status: Aggregated post mutation Discarded/created mutants states: "
+                        << ks_numberOfMutantStatesDiscardedAtMutationPoint << "/"
+                        << ks_numberOfMutantStatesCheckedAtMutationPoint << "\n";
+          if (remainWPStates.empty()) {
+            // XXX Make sure there is something in addedStates
+            if (addedStates.empty())
+              recheck_for_no_postmutation_remaining = true;
+            /*unsigned numOriginals = 0;
+            for (auto *s: ks_atPointPostMutation)
+              if (s->ks_mutantID == 0)
+                ++numOriginals;
+            llvm::errs() << "\n>> "
+                  << "(BUG) No remaining after post Mutation point check. "
+                  << "Number of original states in ks_atPointPostMutation is: "
+                  << numOriginals
+                  << "\n\n";
+            assert (false && 
+                    "There must be remaining after post mutation point check");*/
+          } else {
+            // XXX Make sure there is something in addedStates.
+            // keep the first to add in the worse case
+            ExecutionState * r_backup = remainWPStates.front();
+            // disable ks_hasToReachPostMutationPoint
+            r_backup->ks_hasToReachPostMutationPoint = false;
+            for (auto it=remainWPStates.begin()+1, ie=remainWPStates.end();
+                      it != ie; ++it) {
+              // disable ks_hasToReachPostMutationPoint
+              (*it)->ks_hasToReachPostMutationPoint = false;
+              // The state that at the same time reached postmutation 
+              // and next check are added into ongoing
+              if (ks_reachedCheckNextDepth(*(*it)))
+                ks_ongoingExecutionAtWP.insert(*it);
+              else
+                addedStates.push_back(*it);
+            }
+            if (addedStates.empty()) {
+              addedStates.push_back(r_backup);
+            } else {
+              if (ks_reachedCheckNextDepth(*r_backup))
+                ks_ongoingExecutionAtWP.insert(r_backup);
+              else
+                addedStates.push_back(r_backup);
+            }
+          }
+        } else {
+          addedStates.insert(addedStates.end(), remainWPStates.begin(), remainWPStates.end());
+        }
+          
+        // If outenv is empty, it means that every state reached checkpoint,
+        // We can then termintate crash states and clear the term and WP sets
+        if (!ks_hasOutEnv) { 
+          if (!ks_isAtPostMut) {
+            for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
+                  ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
+              terminateState (**it);
+            }
+            // Clear
+            ks_terminatedBeforeWP.clear();
+            ks_nextDepthID++; 
+
+            // Clear
+            ks_reachedWatchPoint.clear();
+
+            // add back ongoing states
+            addedStates.insert(addedStates.end(), ks_ongoingExecutionAtWP.begin(), ks_ongoingExecutionAtWP.end());
+            // Clear
+            ks_ongoingExecutionAtWP.clear();
+          } else {
+            // Clear
+            ks_atPointPostMutation.clear();
+          }
+
+          // add all terminated states to the searcher so that update won't assert that the states are not in searcher
+          // XXX The searcher is empty here. This is necessary because in updateStates, removedStates must be in searcher
+          if (searcher)
+            searcher->update(0, removedStates/*adding*/, std::vector<ExecutionState *>());
+          llvm::errs() << "# SEMU@Status: After nextdepth point ID=" << (ks_nextDepthID-1) 
+                        << " There are " << addedStates.size() 
+                        <<" States remaining (seeding is "
+                        <<(isSeeding?"True":"False")<<")!\n";
+
+        } else { // there should be no terminated state
+          if (ks_reachedOutEnv.size() != remainWPStates.size()) {
+            klee_error("SEMU@ERROR: BUG, states reaching outenv different after compare states");
+            exit(1);
           }
           // Clear
-          ks_terminatedBeforeWP.clear();
-          ks_nextDepthID++; 
-
-          // Clear
-          ks_reachedWatchPoint.clear();
-
-          // add back ongoing states
-          addedStates.insert(addedStates.end(), ks_ongoingExecutionAtWP.begin(), ks_ongoingExecutionAtWP.end());
-          // Clear
-          ks_ongoingExecutionAtWP.clear();
-        } else {
-          // Clear
-          ks_atPointPostMutation.clear();
+          ks_reachedOutEnv.clear();
         }
 
-        // add all terminated states to the searcher so that update won't assert that the states are not in searcher
-        // XXX The searcher is empty here. This is necessary because in updateStates, removedStates must be in searcher
-        if (searcher)
-          searcher->update(0, removedStates/*adding*/, std::vector<ExecutionState *>());
-        llvm::errs() << "# SEMU@Status: After nextdepth point ID=" << (ks_nextDepthID-1) 
-                      << " There are " << addedStates.size() 
-                      <<" States remaining (seeding is "
-                      <<(isSeeding?"True":"False")<<")!\n";
+        // in seeding mode, since seedMap is not augmented in updateState,
+        // we update it with remaining states (in addesStates vector) before updateStates
+        if (isSeeding) {
+          assert ((/*ks_hasOutEnv || */seedMap.empty()) && "SeedMap must be empty at checks"/*point"*/);
+          for(auto *s: addedStates) {
+            std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
+              backed_seedMap.find(s);
+            assert (it != backed_seedMap.end() && "A state is not in backed seed map but remains."); 
+            seedMap[s] = it->second;
+            backed_seedMap.erase(it);
+          }
+          // if checkpoint, clear backed_seedMap.
+          if (!ks_hasOutEnv && !ks_isAtPostMut)
+            backed_seedMap.clear();
+        } else {
+          backed_seedMap.clear(); // seed mode already passed, clear any ramining
+        }
 
-      } else { // there should be no terminated state
-        if (ks_reachedOutEnv.size() != remainWPStates.size()) {
-          klee_error("SEMU@ERROR: BUG, states reaching outenv different after compare states");
+        // take account of addedStates and removedStates
+        updateStates(0);
+      } else {
+        // in Seen Mode, the seedMap must not be empty
+        if (isSeeding && seedMap.empty()) {
+          llvm::errs() << "\n>> (BUG) States size: "<<states.size()<<". Sum of check stages sizes: " 
+                       << (ks_reachedOutEnv.size() + ks_reachedWatchPoint.size() 
+                                              + ks_terminatedBeforeWP.size() 
+                                              + ks_atPointPostMutation.size()
+                                              + ks_ongoingExecutionAtWP.size() 
+                                              + precond_offset)
+                        <<".\n";
+          klee_error("SEMU@ERROR: on seeding phase, the seedMap is empty while some some states are not at a check stage of preconditioned");
           exit(1);
         }
-        // Clear
-        ks_reachedOutEnv.clear();
       }
-
-      // in seeding mode, since seedMap is not augmented in updateState,
-      // we update it with remaining states (in addesStates vector) before updateStates
-      if (isSeeding) {
-        assert ((/*ks_hasOutEnv || */seedMap.empty()) && "SeedMap must be empty at checks"/*point"*/);
-        for(auto *s: addedStates) {
-          std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
-            backed_seedMap.find(s);
-          assert (it != backed_seedMap.end() && "A state is not in backed seed map but remains."); 
-          seedMap[s] = it->second;
-          backed_seedMap.erase(it);
-        }
-        // if checkpoint, clear backed_seedMap.
-        if (!ks_hasOutEnv && !ks_isAtPostMut)
-          backed_seedMap.clear();
-      } else {
-        backed_seedMap.clear(); // seed mode already passed, clear any ramining
-      }
-
-      // take account of addedStates and removedStates
-      updateStates(0);
-    } else {
-      // in Seen Mode, the seedMap must not be empty
-      if (isSeeding && seedMap.empty()) {
-        llvm::errs() << "\n>> (BUG) States size: "<<states.size()<<". Sum of check stages sizes: " 
-                     << (ks_reachedOutEnv.size() + ks_reachedWatchPoint.size() 
-                                            + ks_terminatedBeforeWP.size() 
-                                            + ks_atPointPostMutation.size()
-                                            + ks_ongoingExecutionAtWP.size() 
-                                            + precond_offset)
-                      <<".\n";
-        klee_error("SEMU@ERROR: on seeding phase, the seedMap is empty while some some states are not at a check stage of preconditioned");
-        exit(1);
-      }
-    }
+    } while(recheck_for_no_postmutation_remaining);
 
     return true;
   }
