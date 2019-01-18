@@ -1722,8 +1722,8 @@ def main():
     if len(set(zip(semupreconditionlength_list, semumutantmaxfork_list))) < \
             len(semupreconditionlength_list):
         assert False, "The precondition, mutant maxfork pair apperas more than once: "+ \
-                str([x for x in zip(semupreconditionlength_list, semumutantmaxfork_list) if \
-                        zip(semupreconditionlength_list, semumutantmaxfork_list).count(x) > 1])
+                str(set([x for x in zip(semupreconditionlength_list, semumutantmaxfork_list) if \
+                        zip(semupreconditionlength_list, semumutantmaxfork_list).count(x) > 1]))
 
     fmnt = args.fixedmutantnumbertarget.split(':')
     if len(fmnt) == 2:
