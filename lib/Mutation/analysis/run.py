@@ -1207,7 +1207,7 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
             runSemuCmd = " ".join([semuExe, kleeArgs, semukleearg, semuArgs, metaMutantBCFilePath, " ".join(symArgs), "> /dev/null"]) #,"2>&1"])
             #sretcode = os.system(runSemuCmd)
             # Timeout (Since watchdog is not use, ensure timeout with timeout (Future, use subprocess.call... of puthon3))
-            max_time_argument = str(float(tuning['KLEE']['-max-time']) + 3600)
+            max_time_argument = str(float(tuning['KLEE']['-max-time']) + 30) #3600)
             runSemuCmd = " ".join(["timeout --kill-after=600s", max_time_argument, runSemuCmd])
             runSemuCmd += " 2>"+logFile
             runSemuCmds.append(runSemuCmd)
