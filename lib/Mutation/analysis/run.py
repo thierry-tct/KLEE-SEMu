@@ -1217,6 +1217,7 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
         if len(pending_threads) > 1:
             threadpool = ThreadPool(len(pending_threads))
             sretcodes = threadpool.map(os.system, runSemuCmds)
+            threadpool.terminate()
             threadpool.close()
             threadpool.join()
         else:
@@ -1718,6 +1719,11 @@ def main():
     semupreconditionlength_list = args.semupreconditionlength.split()
     semumutantmaxfork_list = args.semumutantmaxfork.split()
     assert len(semupreconditionlength_list) == len(semumutantmaxfork_list), "inconsistency between number of pre and post conditions. They must match (pair wise space separated)" 
+    if len(set(zip(semupreconditionlength_list, semumutantmaxfork_list))) < \
+            len(semupreconditionlength_list):
+        assert False, "The precondition, mutant maxfork pair apperas more than once: "+ \
+                str([x for x in zip(semupreconditionlength_list, semumutantmaxfork_list) if \
+                        zip(semupreconditionlength_list, semumutantmaxfork_list).count(x) > 1])
 
     fmnt = args.fixedmutantnumbertarget.split(':')
     if len(fmnt) == 2:
@@ -2106,6 +2112,7 @@ def main():
         if len(semuTuningList) > 1:
             conf_threadpool = ThreadPool(len(semuTuningList))
             ctp_return = conf_threadpool.map(configParallel, semuTuningList)
+            conf_threadpool.terminate()
             conf_threadpool.close()
             conf_threadpool.join()
         else:
