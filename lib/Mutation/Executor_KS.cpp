@@ -4557,8 +4557,8 @@ inline bool Executor::ks_isOutEnvCall (CallInst *ci, ExecutionState *state) {
 inline bool Executor::ks_nextIsOutEnv (ExecutionState &state) {
   //if ((uint64_t)state.pc->inst==1) {state.prevPC->inst->getParent()->dump();state.prevPC->inst->dump();} 
   // Is the next instruction to execute an external call that change output
-  if (llvm::dyn_cast_or_null<llvm::UnreachableInst>(state.prevPC->inst != nullptr) 
-        && state.pc->inst->getOpcode() == Instruction::Call) { 
+  if (llvm::dyn_cast_or_null<llvm::UnreachableInst>(state.prevPC->inst) 
+        != nullptr && state.pc->inst->getOpcode() == Instruction::Call) { 
     if (ks_isOutEnvCall(dyn_cast<CallInst>(state.pc->inst), &state)) {
       return true;
     }
