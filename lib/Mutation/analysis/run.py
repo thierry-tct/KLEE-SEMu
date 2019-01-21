@@ -1208,7 +1208,7 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
             #sretcode = os.system(runSemuCmd)
             # Timeout (Since watchdog is not use, ensure timeout with timeout (Future, use subprocess.call... of puthon3))
             max_time_argument = str(float(tuning['KLEE']['-max-time']) + 30) #3600)
-            runSemuCmd = " ".join(["timeout --kill-after=600s", max_time_argument, runSemuCmd])
+            runSemuCmd = " ".join(["timeout --foreground --kill-after=600s", max_time_argument, runSemuCmd])
             runSemuCmd += " 2>"+logFile
             runSemuCmds.append(runSemuCmd)
 
@@ -1243,7 +1243,8 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
                 print "# Execution failed for", len(failed_thread_executions), "threads:"
                 for thread_id, sretcode in failed_thread_executions:
                     print "-- Returned Code:", sretcode, ", for thread", thread_id,". Command: ", runSemuCmds[thread_id]
-                error_exit("Error: klee-semu symbex failled! (name is: "+tuning['name']+")") # with code "+str(sretcode))
+                #error_exit("Error: klee-semu symbex failled! (name is: "+tuning['name']+")") # with code "+str(sretcode))
+                return ("@@Error: klee-semu symbex failled! (name is: "+tuning['name']+")") # with code "+str(sretcode))
             else:
                 # The execution failed for some threads, probably due to Seg Fault during external call.
                 # Rerun those thread in mode where a new process is forked everytime
@@ -1323,6 +1324,7 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
     #        aggrmutfilepath = os.path.join(semuOutDir, mutFile)
     #        mutDataframes[mutFile].to_csv(aggrmutfilepath, index=False)
 
+    return None
 #~ def executeSemu()
 
 # Maxtime is for experiment, allow to only consider the data wrtten within the maxtime execution of semu
@@ -2002,7 +2004,10 @@ def main():
             # Execute SEMU
             if SEMU_EXECUTION in toExecute: 
                 if martOut is not None:
-                    executeSemu (semuoutputs, semuSeedsDir, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, exemode=executionMode) 
+                    ret = executeSemu (semuoutputs, semuSeedsDir, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, exemode=executionMode) 
+                    if ret is not None:
+                        print ret
+                        return None
 
             if executionMode == FilterHardToKill:
                 if len(thisOut_list) == 1 and os.path.isdir(mergeSemuThreadsDir): #only have one thread, only process that
@@ -2117,6 +2122,9 @@ def main():
             conf_threadpool.join()
         else:
             ctp_return = map(configParallel, semuTuningList)
+
+        if None in ctp_return:
+            error_exit("error: There were some failures (see above)!")
 
         # Remove used seeds
         if SEMU_EXECUTION in toExecute:
