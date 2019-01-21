@@ -2006,7 +2006,7 @@ def main():
                 if martOut is not None:
                     ret = executeSemu (semuoutputs, semuSeedsDir, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, exemode=executionMode) 
                     if ret is not None:
-                        print ret
+                        print '\n'+ret+'\n'
                         return None
 
             if executionMode == FilterHardToKill:

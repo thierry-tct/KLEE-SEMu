@@ -4557,7 +4557,8 @@ inline bool Executor::ks_isOutEnvCall (CallInst *ci, ExecutionState *state) {
 inline bool Executor::ks_nextIsOutEnv (ExecutionState &state) {
   //if ((uint64_t)state.pc->inst==1) {state.prevPC->inst->getParent()->dump();state.prevPC->inst->dump();} 
   // Is the next instruction to execute an external call that change output
-  if (state.pc->inst->getOpcode() == Instruction::Call) { 
+  if (llvm::dyn_cast_or_null<llvm::UnreachableInst>(state.prevPC->inst != nullptr) 
+        && state.pc->inst->getOpcode() == Instruction::Call) { 
     if (ks_isOutEnvCall(dyn_cast<CallInst>(state.pc->inst), &state)) {
       return true;
     }
@@ -4913,7 +4914,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             sDiff |= ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF;
           }
 
-          if (/*mState->pc &&*/ (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
+          if (outEnvOnly &&  (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
             sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp, feasibleChecker) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
             // XXX: we also compare states (ks_compareStateWith) here or not?
 
