@@ -111,6 +111,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <cmath>
 
 #include <sys/mman.h>
 
@@ -140,6 +141,16 @@ cl::opt<std::string> semuCandidateMutantsFile("semu-candidate-mutants-list-file"
 cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork", 
                                  cl::init(0), 
                                  cl::desc("Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
+
+cl::opt<unsigned> semuGenTestDiscardedFromCheckNum(
+                                 "semu-checknum-before-testgen-for-discarded",
+                                 cl::init(0),
+                                 cl::desc("Number of checkpoints where mutants states that reach are discarded without test generated for them, before a test is generated. Help to generate test only for the states, for a mutant, that goes deep"));
+
+// TODO implement different selection strategies on which to continue
+cl::opt<double> semuPostCheckpointMutantStateContinueProba("semu-mutant-state-continue-proba", 
+                                 cl::init(0.0), 
+                                 cl::desc("Set the proportion of mutant states of a particular mutant that will continue after checkpoint(checkpoint postponing). For a given mutant ID, will see the states that reach checkpoint and remove the specified proportion to continue past the checkpoint."));
 
 // TODO, actually detect loop and limit the number of iterations. For now just limit the time. set this time large enough to capture loop, not simple instructions
 cl::opt<double> semuLoopBreakDelay("semu-loop-break-delay", 
@@ -5376,6 +5387,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
         bool ks_isAtPostMut = (!ks_hasOutEnv && !ks_atPointPostMutation.empty());
 
+        // if all mutants states reached a branching point
+        // apply mutant search
+        if (!(ks_hasOutEnv || ks_isAtPostMut)) {
+          ks_applyMutantSearchStrategy();
+        }
+
         if (ks_reachedOutEnv.empty() && ks_reachedWatchPoint.empty()
             && ks_terminatedBeforeWP.empty() && ks_atPointPostMutation.empty()) {
           // all states are ongoing, no need to compare, just put them back
@@ -5522,6 +5539,84 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
     return true;
   }
   return false;
+}
+
+
+void Executor::ks_randomContinueStates (std::vector<ExecutionState*> const &statelist,
+                            std::vector<ExecutionState*> &toContinue,
+                            std::vector<ExecutionState*> &toStop) {
+  // determine the number of mutants to continue
+  assert(semuPostCheckpointMutantStateContinueProba >= 0.0 
+        && semuPostCheckpointMutantStateContinueProba <= 1.0 
+        && "Error, invalid semuPostCheckpointMutantStateContinueProba. Must be between 0.0 adn 1.0");
+  unsigned keep = std::round(statelist.size() * semuPostCheckpointMutantStateContinueProba);
+  toContinue.clear();
+  toStop.clear();
+  toContinue.assign(statelist.begin(), statelist.end());
+  //std::srand ( unsigned ( std::time(0) ) );
+  std::random_shuffle (toContinue.begin(), toContinue.end());
+  //std::srand(1); //revert
+  toStop.assign(toContinue.begin()+keep, toContinue.end());
+  toContinue.resize(keep);
+}
+
+void Executor::ks_applyMutantSearchStrategy() {
+  // whether to apply the search also for the original (discard some states)
+  const bool original_too = false;
+  // Whether to apply for a mutant ID regardless of whether 
+  //ganerated from same original state
+  const bool mutant_alltogether = false;
+  std::map<ExecutionState::KS_MutantIDType, std::vector<ExecutionState*>> 
+                                                    mutId2states;
+  for (auto *s: ks_reachedWatchPoint) {
+    if (original_too || s->ks_mutantID != 0)
+      mutId2states[s->ks_mutantID].push_back(s);
+  }
+
+  // Update seenCheckpoint
+  for (auto &p: mutId2states)
+    for (auto *s: p.second)
+      s->ks_numSeenCheckpoints++;
+  
+  // add ongoing too if enabled
+  if (mutant_alltogether) {
+    for (auto *s: ks_ongoingExecutionAtWP) {
+      // TODO Optimize the first condition with iterator
+      if (mutId2states.count(s->ks_mutantID) > 0 && 
+              (original_too || s->ks_mutantID != 0)) {
+        mutId2states[s->ks_mutantID].push_back(s);
+      }
+    }
+  }
+
+  std::vector<ExecutionState*> toContinue, toStop;
+  for (auto p: mutId2states) {
+    toContinue.clear();
+    toStop.clear();
+    // XXX Choose strategy here
+    ks_randomContinueStates(p.second, toContinue, toStop);
+
+    // Handle continue and stop
+    for (auto *s: toContinue) {
+      ks_ongoingExecutionAtWP.insert(s);
+      if (ks_reachedWatchPoint.count(s)) {
+        s->ks_startdepth = s->depth;
+        ks_reachedWatchPoint.erase(s);
+      }
+    }
+    for (auto *s: toStop) {
+      if (ks_reachedWatchPoint.count(s)) {
+        if (s->ks_numSeenCheckpoints < semuGenTestDiscardedFromCheckNum) {
+          ks_reachedWatchPoint.erase(s);
+          terminateState(*s);
+        }
+      }
+      if (ks_ongoingExecutionAtWP.count(s)) {
+        ks_ongoingExecutionAtWP.erase(s);
+        terminateState(*s);
+      }
+    }
+  }
 }
 
 /**/

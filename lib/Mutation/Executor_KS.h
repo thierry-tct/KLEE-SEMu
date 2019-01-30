@@ -642,6 +642,12 @@ public:
 
   inline bool ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, bool isSeeding, uint64_t precond_offset=0);
 
+  void ks_randomContinueStates (std::vector<ExecutionState*> const &statelist,
+                                std::vector<ExecutionState*> &toContinue,
+                                std::vector<ExecutionState*> &toStop);
+
+  void ks_applyMutantSearchStrategy();
+
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS
 };
