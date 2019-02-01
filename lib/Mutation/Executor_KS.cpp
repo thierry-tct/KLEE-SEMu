@@ -142,6 +142,11 @@ cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork",
                                  cl::init(0), 
                                  cl::desc("Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
 
+cl::opt<bool> semuApplyMinDistToOutputForMutContinue(
+                                 "semu-continue-mindist-heuristic",
+                                 cl::init(false),
+                                 cl::desc("Enable using the distance to the output to select which states to continue post mutant checkpoint"));
+
 cl::opt<unsigned> semuGenTestDiscardedFromCheckNum(
                                  "semu-checknum-before-testgen-for-discarded",
                                  cl::init(0),
@@ -5542,7 +5547,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
 }
 
 
-void Executor::ks_randomContinueStates (std::vector<ExecutionState*> const &statelist,
+void Executor::ks_heuristicbasedContinueStates (std::vector<ExecutionState*> const &statelist,
                             std::vector<ExecutionState*> &toContinue,
                             std::vector<ExecutionState*> &toStop) {
   // determine the number of mutants to continue
@@ -5554,10 +5559,43 @@ void Executor::ks_randomContinueStates (std::vector<ExecutionState*> const &stat
   toStop.clear();
   toContinue.assign(statelist.begin(), statelist.end());
   //std::srand ( unsigned ( std::time(0) ) );
+  // Random is enabled when no other is enabled
   std::random_shuffle (toContinue.begin(), toContinue.end());
   //std::srand(1); //revert
+  if (semuApplyMinDistToOutputForMutContinue)
+    std::sort(toContinue.begin(), toContinue.end(), ks_getMinDistToOutput)
   toStop.assign(toContinue.begin()+keep, toContinue.end());
   toContinue.resize(keep);
+}
+
+unsigned ks_process_closestout_recursive(std::map<llvm::Function, unsigned> &visited_funcs,
+                                          llvm::Function *func=nullptr, 
+                                          llvm::BasicBlock *bb=nullptr) {
+  /*const unsigned ABigNum = 10000000;
+  if (func != nullptr) {
+    if (visited_funcs.count(func)) {
+      return visited_funcs[func];
+    } else {
+      visited_funcs[func] = ABigNum;
+      for (auto *f_bb: func)
+        visited_funcs[func] = std::min(visited_funcs[func], 
+                    ks_process_closestout_recursive(visited_funcs, nullptr, f_bb));
+    }
+  } else {
+    // bb != nullptr
+    if (ks_basicblock2closestout_distance.count(f_bb) == 0)
+  }*/ 
+  (// TODO TODO FIXME
+}
+
+void Executor::ks_initialize_ks_basicblock2closestout_distance(llvm::Module* mod) {
+  (// TODO TODO FIXME compute distance
+}
+
+unsigned Executor::ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh) {
+  llvm::BasicBlock *lhBB = lh->prevPC->inst->getParent();
+  llvm::BasicBlock *rhBB = rh->prevPC->inst->getParent();
+  return ks_basicblock2closestout_distance[lhBB] < ks_basicblock2closestout_distance[rhBB];
 }
 
 void Executor::ks_applyMutantSearchStrategy() {
@@ -5594,7 +5632,7 @@ void Executor::ks_applyMutantSearchStrategy() {
     toContinue.clear();
     toStop.clear();
     // XXX Choose strategy here
-    ks_randomContinueStates(p.second, toContinue, toStop);
+    ks_heuristicbasedContinueStates(p.second, toContinue, toStop);
 
     // Handle continue and stop
     for (auto *s: toContinue) {
@@ -5606,7 +5644,8 @@ void Executor::ks_applyMutantSearchStrategy() {
     }
     for (auto *s: toStop) {
       if (ks_reachedWatchPoint.count(s)) {
-        if (s->ks_numSeenCheckpoints < semuGenTestDiscardedFromCheckNum) {
+        if (!toContinue.empty() && // make sure that not everything is removed
+                s->ks_numSeenCheckpoints < semuGenTestDiscardedFromCheckNum) {
           ks_reachedWatchPoint.erase(s);
           terminateState(*s);
         }

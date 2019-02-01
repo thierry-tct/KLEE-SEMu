@@ -9,7 +9,8 @@
 # - The path to executable in project
 # - topDir for output (required)
 ########################
-## TODO: implement runZesti
+#INFO: In case there are some tests that fail with zesti and want to skip them,
+#INFO: Just rerun passing the environment variable: SEMU_ZESTI_RUN_SKIP_FAILURE=on
 
 import os, sys, stat
 import json, re
@@ -229,6 +230,9 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
     # Run Semu through tests running
     testrunlog = " > /dev/null" #+" 2>&1"
     nKleeOut = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
+
+    SEMU_ZESTI_RUN_SKIP_FAILURE = "SEMU_ZESTI_RUN_SKIP_FAILURE"
+
     assert nKleeOut == 0, "Must be no klee out in the begining"
     for tc in unwrapped_testlist:
         semuExecLog = os.path.join(outpdir, "semu.out")
@@ -238,8 +242,20 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
         retCode = os.system(zestCmd)
         nNew = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
         if nNew == nKleeOut:
-            print ">> command: "+ zestCmd
-            error_exit ("Test execution failed for test case '"+tc+"', retCode was: "+str(retCode))
+            print ">> problem with command: "+ zestCmd
+
+            if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().ower == 'on' :
+                # avoid failure by creating an invalid test that will be skipped
+                fix_dir = os.path.join(outpdir, "klee-out-"+str(nNew))
+                os.mkdir(fix_dir)
+                with open(os.path.join(fix_dir, 'test000001.ktest'), 'w') as f:
+                    f.write(">> There was a failure: "+"Test execution failed for test case '"+tc+"', retCode was: "+str(retCode)+'\n')
+                # update klee-last
+                os.symlink(fix_dir, os.path.join(outpdir, 'klee-last'))
+                # update nNew
+                nNew += 1
+            else:
+                error_exit ("Test execution failed for test case '"+tc+"', retCode was: "+str(retCode))
         assert nNew > nKleeOut, "Test was not run: "+tc
 
         # Premissions on changing output klee stuffs
@@ -275,7 +291,12 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
                     if cantgentest and kleedone:
                         shutil.copy2 (semuExecLog, os.path.join(kleeoutdir, 'test000001.ktest'))
 
-            assert len(glob.glob(kleeoutdir+'/*.ktest')) > 0, "No ktest was generated for "+wrapTestName+". Folder is: "+kleeoutdir+". ZEST CMD: "+zestCmd
+            if len(glob.glob(kleeoutdir+'/*.ktest')) <= 0:
+                if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().ower == 'on' :
+                    with open(os.path.join(kleeoutdir, 'test000001.ktest'), 'w') as f:
+                        f.write(">> There was a failure: "+"No ktest was generated for "+wrapTestName+". Folder is: "+kleeoutdir+". ZEST CMD: "+zestCmd+'\n')
+                else:
+                    assert False, "No ktest was generated for "+wrapTestName+". Folder is: "+kleeoutdir+". ZEST CMD: "+zestCmd
 
             test2outdirMap[wrapTestName] = kleeoutdir
         # update

@@ -572,6 +572,9 @@ private:
   // Set of mutants that reached the maximum number of generated tests per mutants
   std::map<ExecutionState::KS_MutantIDType, unsigned> mutants2gentestsNum;
 
+  // Used by strategy that prioritize the mutants states closer to the output
+  std::map<llvm::BasicBlock*, unsigned> ks_basicblock2closestout_distance;
+
 #ifdef KS_Z3MAXSAT_SOLVER__H
   // Partial Max Sat Solver
   // Make this with cache
@@ -642,9 +645,13 @@ public:
 
   inline bool ks_CheckpointingMainCheck(ExecutionState &curState, KInstruction *ki, bool isSeeding, uint64_t precond_offset=0);
 
-  void ks_randomContinueStates (std::vector<ExecutionState*> const &statelist,
+  void ks_heuristicbasedContinueStates (std::vector<ExecutionState*> const &statelist,
                                 std::vector<ExecutionState*> &toContinue,
                                 std::vector<ExecutionState*> &toStop);
+
+  void ks_initialize_ks_basicblock2closestout_distance(llvm::Module *mod);
+
+  unsigned ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh);
 
   void ks_applyMutantSearchStrategy();
 
