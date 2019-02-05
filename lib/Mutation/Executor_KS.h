@@ -27,6 +27,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/ADT/Twine.h"
+#include "llvm/Analysis/CallGraph.h"
 
 #include <vector>
 #include <string>
@@ -573,7 +574,7 @@ private:
   std::map<ExecutionState::KS_MutantIDType, unsigned> mutants2gentestsNum;
 
   // Used by strategy that prioritize the mutants states closer to the output
-  std::map<llvm::BasicBlock*, unsigned> ks_basicblock2closestout_distance;
+  std::map<llvm::Instruction*, unsigned> ks_instruction2closestout_distance;
 
 #ifdef KS_Z3MAXSAT_SOLVER__H
   // Partial Max Sat Solver
@@ -620,7 +621,7 @@ public:
   
   bool ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp, KScheckFeasible &feasibleChecker);
   
-  bool ks_isOutEnvCall (llvm::CallInst *ci, ExecutionState *state=nullptr);
+  bool ks_isOutEnvCallInvoke (llvm::CallInst *ci);
 
   // This take the path condition common to a mutant and original, together 
   // with the conditions of equality, for each state variable, between
@@ -649,11 +650,16 @@ public:
                                 std::vector<ExecutionState*> &toContinue,
                                 std::vector<ExecutionState*> &toStop);
 
-  void ks_initialize_ks_basicblock2closestout_distance(llvm::Module *mod);
+  unsigned ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
+                              std::map<llvm::Function*, unsigned> &visited_cgnodes);
+
+  void ks_initialize_ks_instruction2closestout_distance(llvm::Module *mod);
 
   unsigned ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh);
 
   void ks_applyMutantSearchStrategy();
+
+  void ks_eliminateMutanStatesWithMaxTests();
 
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS

@@ -143,9 +143,12 @@ cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork",
                                  cl::desc("Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
 
 cl::opt<bool> semuApplyMinDistToOutputForMutContinue(
-                                 "semu-continue-mindist-heuristic",
+                                "semu-continue-mindist-heuristic",
                                  cl::init(false),
                                  cl::desc("Enable using the distance to the output to select which states to continue post mutant checkpoint"));
+cl::opt<bool> semuUseBBForDistance("semu-use-basicblock-for-distance",
+                                 cl::init(false),
+                                 cl::desc("Enable using number of Basic blocks instead of number of instructions for distance"));
 
 cl::opt<unsigned> semuGenTestDiscardedFromCheckNum(
                                  "semu-checknum-before-testgen-for-discarded",
@@ -514,6 +517,7 @@ const Module *Executor::setModule(llvm::Module *module,
     "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
 
   ks_FilterMutants(module);
+  ks_initialize_ks_instruction2closestout_distance(module);
   //~KS
   
   kmodule = new KModule(module);
@@ -4460,13 +4464,24 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
 
     // Mutants just created thus ks_hasToReachPostMutationPoint set to true
     // The mutants created will inherit the value
-    if (mut_IDs.size() > 0)
+    if (mut_IDs.size() > 0) {
       state.ks_hasToReachPostMutationPoint = true;
       state.ks_startdepth = state.depth;
+    }
 
     // create the mutants states
     for (std::vector<uint64_t>::iterator it = mut_IDs.begin(),
                                    ie = mut_IDs.end(); it != ie; ++it) {
+      // In the test generation mode, do not even generate more mutants 
+      // If reached max number of tests
+      if (ks_outputTestsCases) {
+        auto mapit = mutants2gentestsNum.find(*it);
+        if (mapit != mutants2gentestsNum.end() 
+                    && mapit.second >= semuMaxNumTestGenPerMutant) {
+          continue;
+        }
+      }
+
       ExecutionState *ns = state.ks_branchMut();
       addedStates.push_back(ns);
       //result.push_back(ns);
@@ -4550,9 +4565,23 @@ inline bool Executor::ks_outEnvCallDiff (const ExecutionState &a, const Executio
 // If there is already an env call on the stack (previously checked) 
 // Do not check anymore
 // XXX this is checked befor KLEE executes the corresponding call instruction
-inline bool Executor::ks_isOutEnvCall (CallInst *ci, ExecutionState *state) {
-  static std::set<std::string> outEnvFuncs = {"printf", "vprintf" "puts", "putchar", "putc", "fprintf", "vfprintf", "write", "fwrite", "fputs", "fputs_unlocked", "putchar_unlocked", "fputc", "fflush", "perror", "assert", "exit", "_exit", "abort", "syscall"};
-  Function *f = ci->getCalledFunction();  //TODO: consider indirect, maybe getCalledValue is better
+inline bool Executor::ks_isOutEnvCallInvoke (Instruction *cii) {
+  static const std::set<std::string> outEnvFuncs = {"printf", "vprintf" "puts", 
+                                              "putchar", "putc", "fprintf", 
+                                              "vfprintf", "write", "fwrite", 
+                                              "fputs", "fputs_unlocked", 
+                                              "putchar_unlocked", "fputc", 
+                                              "fflush", "perror", "assert", 
+                                              "exit", "_exit", "abort", 
+                                              "syscall"};
+  Function *f = nullptr;
+  if (auto *ci = llvm::dyn_cast<llvm::CallInst>(cii))
+    f = ci->getCalledFunction();  //TODO: consider indirect, maybe getCalledValue is better
+  else if (auto *ii = llvm::dyn_cast<llvm::CallInst>(cii))
+    f = ii->getCalledFunction();  //TODO: consider indirect, maybe getCalledValue is better
+  else
+    return false;
+
   // Out env must be declaration only
   /*static std::set<std::string> tmpextern; //DBG*/
   if (f && f->isDeclaration()) {
@@ -4574,8 +4603,8 @@ inline bool Executor::ks_nextIsOutEnv (ExecutionState &state) {
   //if ((uint64_t)state.pc->inst==1) {state.prevPC->inst->getParent()->dump();state.prevPC->inst->dump();} 
   // Is the next instruction to execute an external call that change output
   if (llvm::dyn_cast_or_null<llvm::UnreachableInst>(state.prevPC->inst) 
-        != nullptr && state.pc->inst->getOpcode() == Instruction::Call) { 
-    if (ks_isOutEnvCall(dyn_cast<CallInst>(state.pc->inst), &state)) {
+                                                                != nullptr) {
+    if (ks_isOutEnvCallInvoke(state.pc->inst)) {
       return true;
     }
   }
@@ -4930,7 +4959,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             sDiff |= ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF;
           }
 
-          if (outEnvOnly &&  (KInstruction*)(mState->pc) && mState->pc->inst->getOpcode() == Instruction::Call && ks_isOutEnvCall(dyn_cast<CallInst>(mState->pc->inst))) {
+          if (outEnvOnly &&  (KInstruction*)(mState->pc) && ks_isOutEnvCallInvoke(mState->pc->inst)) {
             sDiff |= ks_outEnvCallDiff (*mState, *mSisState, inStateDiffExp, feasibleChecker) ? ExecutionState::KS_StateDiff_t::ksOUTENV_DIFF : ExecutionState::KS_StateDiff_t::ksNO_DIFF;
             // XXX: we also compare states (ks_compareStateWith) here or not?
 
@@ -5387,6 +5416,13 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           ks_terminatedBeforeWP.size() +
           ks_atPointPostMutation.size() +
           ks_ongoingExecutionAtWP.size() >= states.size()) {
+
+        // Make sure that on test gen mode, the mutants that reached maximum
+        // generated tests are removed
+        if (ks_outputTestsCases) {
+          ks_eliminateMutanStatesWithMaxTests();
+        }
+
         std::vector<ExecutionState *> remainWPStates;
         ks_checkID++;
         bool ks_hasOutEnv = !ks_reachedOutEnv.empty();
@@ -5568,34 +5604,129 @@ void Executor::ks_heuristicbasedContinueStates (std::vector<ExecutionState*> con
   toContinue.resize(keep);
 }
 
-unsigned ks_process_closestout_recursive(std::map<llvm::Function, unsigned> &visited_funcs,
-                                          llvm::Function *func=nullptr, 
-                                          llvm::BasicBlock *bb=nullptr) {
-  /*const unsigned ABigNum = 10000000;
-  if (func != nullptr) {
-    if (visited_funcs.count(func)) {
-      return visited_funcs[func];
-    } else {
-      visited_funcs[func] = ABigNum;
-      for (auto *f_bb: func)
-        visited_funcs[func] = std::min(visited_funcs[func], 
-                    ks_process_closestout_recursive(visited_funcs, nullptr, f_bb));
+unsigned Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
+                  std::map<llvm::Function*, unsigned> &visited_cgnodes) {
+  static const unsigned MaxLens = 100000000;
+  bool useInstDist = !semuUseBBForDistance;
+
+  if (visited_cgnodes.count(cgnode))
+    return;
+
+  llvm::Function * func = cgnode->getFunction();
+
+  // visit
+  if (func.isDeclaration()) {
+    visited_cgnodes[cgnode] = 0; 
+    return
+  }
+  visited_cgnodes[cgnode] = MaxLens;
+
+  std::map<llvm::Function*, llvm::CallGraphNode*> func2cgnode;
+  // Compute every dependency
+  for (auto cg_it = cgnode.begin(); cg_i != cgnode.end(); ++cg_it) {
+    ks_process_closestout_recursive(*cg_it, visited_cgnodes)
+    func2cgnode[cg_it->getFunction()] = *cg_it
+  }
+
+  // Compute for this one using the dependencies
+  std::vector<llvm::Instruction *> outInsts;
+
+  for (auto &BB: *func) {
+    for (auto &Inst: BB) {
+      ks_instruction2closestout_distance[&Inst] = MaxLens;
+      if (ks_isOutEnvCallInvoke (&Inst)) {
+        outInsts.push_back(&Inst);
+        ks_instruction2closestout_distance[&Inst] = 0;
+      } else if (auto *ret = llvm::dyn_cast<llvm::ReturnInst>(&Inst)) {
+        outInsts.push_back(&Inst);
+        ks_instruction2closestout_distance[&Inst] = 0;
+      }
     }
-  } else {
-    // bb != nullptr
-    if (ks_basicblock2closestout_distance.count(f_bb) == 0)
-  }*/ 
-  (// TODO TODO FIXME
+  }
+
+  assert (outInsts.size() > 0 && "function having no outenv and no ret? (BUG)");
+
+  // start from outInst and go backward
+  std::queue<llvm::Instruction *> workQ;
+  for (auto *inst: outInsts)
+    workQ.push(inst);
+
+  while (!workQ.empty()) { // BFS
+    auto *inst = workQ.front();
+    workQ.pop();
+    unsigned inc = 0;
+    unsigned this_i_dist;
+    for (const llvm::Instruction *I = inst->getPrevNode(); I; I = I->getPrevNode()) {
+      //if (!llvm::isa<llvm::DbgInfoIntrinsic>(I))
+      if (useInstDist) {
+        inc++;
+      }
+      llvm::Function *tmpF = nullptr;
+      if (auto * ci = llvm::dyn_cast<llvm::CallInst>(term)) {
+        tmpF = ci->getCalledFunction();
+      } else (auto * ii = llvm::dyn_cast<llvm::InvokeInst>(term)) {
+        tmpF = ii->getCalledFunction();
+      }
+      if (tmpF) {
+        inc += visited_cgnodes[func2cgnode[tmpF]];
+      }
+      this_i_dist = std::min(ks_instruction2closestout_distance[inst] + inc, MaxLens);
+      if (this_i_dist < ks_instruction2closestout_distance[I])
+        ks_instruction2closestout_distance[I] = this_i_dist;
+    }
+
+    // update values of previouus basic block terminators
+    llvm::BasicBlock *bb = inst->getParent();
+    inc++;
+    for (auto pred=llvm::pred_begin(); pred != llvm::pred_end(); ++pred) {
+      auto *term = pred->getTerminator();
+      if (!term)
+        term = &(pred->back());
+      if (!term)
+        assert (false && "block without instruction??");
+      llvm::Function *tmpF = nullptr;
+      if (auto * ci = llvm::dyn_cast<llvm::CallInst>(term)) {
+        tmpF = ci->getCalledFunction();
+      } else (auto * ii = llvm::dyn_cast<llvm::InvokeInst>(term)) {
+        tmpF = ii->getCalledFunction();
+      }
+      if (tmpF) {
+        inc += visited_cgnodes[func2cgnode[tmpF]];
+      }
+      this_i_dist = std::min(ks_instruction2closestout_distance[inst] + inc, MaxLens);
+      if (this_i_dist < ks_instruction2closestout_distance[term]) {
+        ks_instruction2closestout_distance[I] = this_i_dist;
+        workQ.push(term);
+      }
+    }
+    if (bb == func->getEntryBlock()) {
+      visited_cgnodes[cgnode] = std::min(visited_cgnodes[cgnode], ks_instruction2closestout_distance[inst] + inc - 1)
+    } 
+  }
 }
 
-void Executor::ks_initialize_ks_basicblock2closestout_distance(llvm::Module* mod) {
-  (// TODO TODO FIXME compute distance
+void Executor::ks_initialize_ks_instruction2closestout_distance(llvm::Module* mod) {
+  if (semuApplyMinDistToOutputForMutContinue) {
+    // Compute Call graph
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
+    llvm::CallGraph call_graph = llvm::CallGraph(*mod):
+#else
+    llvm::CallGraph call_graph = llvm::CallGraph():
+    call_graph.runOnModule(*mod)
+#endif
+  
+    std::map<llvm::CallGraphNode*, unsigned> cgnode_to_midist_out_ret;
+    do {
+      auto *root = call_graph.getRoot();
+      ks_preocess_closestout_recursive(root, cgnode_to_midist_out_ret);
+    } while (false);
+  }
 }
 
 unsigned Executor::ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh) {
-  llvm::BasicBlock *lhBB = lh->prevPC->inst->getParent();
-  llvm::BasicBlock *rhBB = rh->prevPC->inst->getParent();
-  return ks_basicblock2closestout_distance[lhBB] < ks_basicblock2closestout_distance[rhBB];
+  llvm::Instruction *lhInst = lh->prevPC->inst;
+  llvm::Instruction *rhInst = rh->prevPC->inst;
+  return ks_instruction2closestout_distance[lhBB] < ks_instruction2closestout_distance[rhBB];
 }
 
 void Executor::ks_applyMutantSearchStrategy() {
@@ -5654,6 +5785,50 @@ void Executor::ks_applyMutantSearchStrategy() {
         ks_ongoingExecutionAtWP.erase(s);
         terminateState(*s);
       }
+    }
+  }
+}
+
+void Executor::ks_eliminateMutanStatesWithMaxTests() {
+  std::set<KS_MutantIDType> reached_max_tg;
+  for (auto mp: mutants2gentestsNum)
+    if (mp.second >= semuMaxNumTestGenPerMutant)
+      reached_max_tg.insert(mp.first);
+  if (reached_max_tg.size() > 0) {
+    for (auto m_it=ks_reachedOutEnv.begin(); 
+                                    m_it != ks_reachedOutEnv.end();) {
+      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
+        ks_reachedOutEnv.erase(m_it);
+      else:
+        ++m_it;
+    }
+    for (auto m_it=ks_reachedWatchPoint.begin(); 
+                                    m_it != ks_reachedWatchPoint.end();) {
+      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
+        ks_reachedWatchPoint.erase(m_it);
+      else:
+        ++m_it;
+    }
+    for (auto m_it=ks_terminatedBeforeWP.begin(); 
+                                    m_it != ks_terminatedBeforeWP.end();) {
+      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
+        ks_terminatedBeforeWP.erase(m_it);
+      else:
+        ++m_it;
+    }
+    for (auto m_it=ks_atPointPostMutation.begin(); 
+                                    m_it != ks_atPointPostMutation.end();) {
+      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
+        ks_atPointPostMutation.erase(m_it);
+      else:
+        ++m_it;
+    }
+    for (auto m_it=ks_ongoingExecutionAtWP.begin(); 
+                                    m_it != ks_ongoingExecutionAtWP.end();) {
+      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
+        ks_ongoingExecutionAtWP.erase(m_it);
+      else:
+        ++m_it;
     }
   }
 }

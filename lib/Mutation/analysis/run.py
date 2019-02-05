@@ -251,6 +251,8 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
                 with open(os.path.join(fix_dir, 'test000001.ktest'), 'w') as f:
                     f.write(">> There was a failure: "+"Test execution failed for test case '"+tc+"', retCode was: "+str(retCode)+'\n')
                 # update klee-last
+                if os.path.islink(os.path.join(outpdir, 'klee-last')):
+                    os.remove(os.path.join(outpdir, 'klee-last'))
                 os.symlink(fix_dir, os.path.join(outpdir, 'klee-last'))
                 # update nNew
                 nNew += 1
@@ -305,7 +307,17 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
         if os.path.isfile(semuExecLog):
             os.remove(semuExecLog)
     for wtc in devtests:
-        assert wtc in test2outdirMap, "test not in Test2SemuoutdirMap: \nMap: "+str(test2outdirMap)+"\nTest: "+wtc
+        if wtc not in test2outdirMap:
+            if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().ower == 'on' :
+                # avoid failure by creating an invalid test that will be skipped
+                fix_dir = os.path.join(outpdir, "klee-out-"+str(nKleeOut))
+                os.mkdir(fix_dir)
+                with open(os.path.join(fix_dir, 'test000001.ktest'), 'w') as f:
+                    f.write(">> There was a failure: "+"test not in Test2SemuoutdirMap: \nMap: "+str(test2outdirMap)+"\nTest: "+wtc+'\n')
+                test2outdirMap[wtc] = fix_dir
+                nKleeOut += 1
+            else:
+                assert False, "test not in Test2SemuoutdirMap: \nMap: "+str(test2outdirMap)+"\nTest: "+wtc
     return test2outdirMap
 #~ def runZestiOrSemuTC()
 
