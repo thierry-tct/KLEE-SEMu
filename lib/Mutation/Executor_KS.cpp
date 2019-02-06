@@ -31,6 +31,7 @@
 #include "expr/Parser.h"
 #include "klee/ExprBuilder.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/CFG.h"
 #include <unistd.h>
 #include <sys/wait.h>
 //~KS
@@ -4477,7 +4478,7 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
       if (ks_outputTestsCases) {
         auto mapit = mutants2gentestsNum.find(*it);
         if (mapit != mutants2gentestsNum.end() 
-                    && mapit.second >= semuMaxNumTestGenPerMutant) {
+                    && mapit->second >= semuMaxNumTestGenPerMutant) {
           continue;
         }
       }
@@ -5599,14 +5600,14 @@ void Executor::ks_heuristicbasedContinueStates (std::vector<ExecutionState*> con
   std::random_shuffle (toContinue.begin(), toContinue.end());
   //std::srand(1); //revert
   if (semuApplyMinDistToOutputForMutContinue)
-    std::sort(toContinue.begin(), toContinue.end(), ks_getMinDistToOutput)
+    std::sort(toContinue.begin(), toContinue.end(), ks_getMinDistToOutput);
   toStop.assign(toContinue.begin()+keep, toContinue.end());
   toContinue.resize(keep);
 }
 
-unsigned Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
-                  std::map<llvm::Function*, unsigned> &visited_cgnodes) {
-  static const unsigned MaxLens = 100000000;
+void Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
+                  std::map<llvm::CallGraphNode*, unsigned> &visited_cgnodes) {
+  static const unsigned MaxLens = 1000000000;
   bool useInstDist = !semuUseBBForDistance;
 
   if (visited_cgnodes.count(cgnode))
@@ -5615,17 +5616,17 @@ unsigned Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
   llvm::Function * func = cgnode->getFunction();
 
   // visit
-  if (func.isDeclaration()) {
+  if (func->isDeclaration()) {
     visited_cgnodes[cgnode] = 0; 
-    return
+    return;
   }
   visited_cgnodes[cgnode] = MaxLens;
 
   std::map<llvm::Function*, llvm::CallGraphNode*> func2cgnode;
   // Compute every dependency
-  for (auto cg_it = cgnode.begin(); cg_i != cgnode.end(); ++cg_it) {
-    ks_process_closestout_recursive(*cg_it, visited_cgnodes)
-    func2cgnode[cg_it->getFunction()] = *cg_it
+  for (auto cg_it = cgnode->begin(); cg_it != cgnode->end(); ++cg_it) {
+    ks_process_closestout_recursive(cg_it->second, visited_cgnodes);
+    func2cgnode[cg_it->second->getFunction()] = cg_it->second;
   }
 
   // Compute for this one using the dependencies
@@ -5656,15 +5657,15 @@ unsigned Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
     workQ.pop();
     unsigned inc = 0;
     unsigned this_i_dist;
-    for (const llvm::Instruction *I = inst->getPrevNode(); I; I = I->getPrevNode()) {
+    for (llvm::Instruction *I = inst->getPrevNode(); I; I = I->getPrevNode()) {
       //if (!llvm::isa<llvm::DbgInfoIntrinsic>(I))
       if (useInstDist) {
         inc++;
       }
       llvm::Function *tmpF = nullptr;
-      if (auto * ci = llvm::dyn_cast<llvm::CallInst>(term)) {
+      if (auto * ci = llvm::dyn_cast<llvm::CallInst>(I)) {
         tmpF = ci->getCalledFunction();
-      } else (auto * ii = llvm::dyn_cast<llvm::InvokeInst>(term)) {
+      } else if (auto * ii = llvm::dyn_cast<llvm::InvokeInst>(I)) {
         tmpF = ii->getCalledFunction();
       }
       if (tmpF) {
@@ -5678,16 +5679,16 @@ unsigned Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
     // update values of previouus basic block terminators
     llvm::BasicBlock *bb = inst->getParent();
     inc++;
-    for (auto pred=llvm::pred_begin(); pred != llvm::pred_end(); ++pred) {
-      auto *term = pred->getTerminator();
+    for (auto pred=llvm::pred_begin(bb); pred != llvm::pred_end(bb); ++pred) {
+      llvm::Instruction *term = (*pred)->getTerminator();
       if (!term)
-        term = &(pred->back());
+        term = &((*pred)->back());
       if (!term)
         assert (false && "block without instruction??");
       llvm::Function *tmpF = nullptr;
       if (auto * ci = llvm::dyn_cast<llvm::CallInst>(term)) {
         tmpF = ci->getCalledFunction();
-      } else (auto * ii = llvm::dyn_cast<llvm::InvokeInst>(term)) {
+      } else if (auto * ii = llvm::dyn_cast<llvm::InvokeInst>(term)) {
         tmpF = ii->getCalledFunction();
       }
       if (tmpF) {
@@ -5695,12 +5696,12 @@ unsigned Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
       }
       this_i_dist = std::min(ks_instruction2closestout_distance[inst] + inc, MaxLens);
       if (this_i_dist < ks_instruction2closestout_distance[term]) {
-        ks_instruction2closestout_distance[I] = this_i_dist;
+        ks_instruction2closestout_distance[term] = this_i_dist;
         workQ.push(term);
       }
     }
-    if (bb == func->getEntryBlock()) {
-      visited_cgnodes[cgnode] = std::min(visited_cgnodes[cgnode], ks_instruction2closestout_distance[inst] + inc - 1)
+    if (bb == &(func->getEntryBlock())) {
+      visited_cgnodes[cgnode] = std::min(visited_cgnodes[cgnode], ks_instruction2closestout_distance[inst] + inc - 1);
     } 
   }
 }
@@ -5709,24 +5710,27 @@ void Executor::ks_initialize_ks_instruction2closestout_distance(llvm::Module* mo
   if (semuApplyMinDistToOutputForMutContinue) {
     // Compute Call graph
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
-    llvm::CallGraph call_graph = llvm::CallGraph(*mod):
+    llvm::CallGraph call_graph(*mod);
 #else
-    llvm::CallGraph call_graph = llvm::CallGraph():
-    call_graph.runOnModule(*mod)
+    llvm::CallGraph call_graph;
+    call_graph.runOnModule(*mod);
 #endif
-  
+
     std::map<llvm::CallGraphNode*, unsigned> cgnode_to_midist_out_ret;
     do {
       auto *root = call_graph.getRoot();
-      ks_preocess_closestout_recursive(root, cgnode_to_midist_out_ret);
+      ks_process_closestout_recursive(root, cgnode_to_midist_out_ret);
     } while (false);
   }
 }
 
-unsigned Executor::ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh) {
-  llvm::Instruction *lhInst = lh->prevPC->inst;
-  llvm::Instruction *rhInst = rh->prevPC->inst;
-  return ks_instruction2closestout_distance[lhBB] < ks_instruction2closestout_distance[rhBB];
+bool Executor::ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh) {
+  // We safely use pc not prevPC because 
+  // the states here must be executing (not terminated)
+  // and pc is actually what will be executed next
+  llvm::Instruction *lhInst = lh->pc->inst;
+  llvm::Instruction *rhInst = rh->pc->inst;
+  return ks_instruction2closestout_distance[lhInst] < ks_instruction2closestout_distance[rhInst];
 }
 
 void Executor::ks_applyMutantSearchStrategy() {
@@ -5790,44 +5794,44 @@ void Executor::ks_applyMutantSearchStrategy() {
 }
 
 void Executor::ks_eliminateMutanStatesWithMaxTests() {
-  std::set<KS_MutantIDType> reached_max_tg;
+  std::set<ExecutionState::KS_MutantIDType> reached_max_tg;
   for (auto mp: mutants2gentestsNum)
     if (mp.second >= semuMaxNumTestGenPerMutant)
       reached_max_tg.insert(mp.first);
   if (reached_max_tg.size() > 0) {
     for (auto m_it=ks_reachedOutEnv.begin(); 
                                     m_it != ks_reachedOutEnv.end();) {
-      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
-        ks_reachedOutEnv.erase(m_it);
-      else:
+      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+        ks_reachedOutEnv.erase(*m_it);
+      else
         ++m_it;
     }
     for (auto m_it=ks_reachedWatchPoint.begin(); 
                                     m_it != ks_reachedWatchPoint.end();) {
-      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
-        ks_reachedWatchPoint.erase(m_it);
-      else:
+      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+        ks_reachedWatchPoint.erase(*m_it);
+      else
         ++m_it;
     }
     for (auto m_it=ks_terminatedBeforeWP.begin(); 
                                     m_it != ks_terminatedBeforeWP.end();) {
-      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
-        ks_terminatedBeforeWP.erase(m_it);
-      else:
+      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+        ks_terminatedBeforeWP.erase(*m_it);
+      else
         ++m_it;
     }
     for (auto m_it=ks_atPointPostMutation.begin(); 
                                     m_it != ks_atPointPostMutation.end();) {
-      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
-        ks_atPointPostMutation.erase(m_it);
-      else:
+      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+        ks_atPointPostMutation.erase(*m_it);
+      else
         ++m_it;
     }
     for (auto m_it=ks_ongoingExecutionAtWP.begin(); 
                                     m_it != ks_ongoingExecutionAtWP.end();) {
-      if (reached_max_tg.count(m_it->ks_mutantID) == 0)
-        ks_ongoingExecutionAtWP.erase(m_it);
-      else:
+      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+        ks_ongoingExecutionAtWP.erase(*m_it);
+      else
         ++m_it;
     }
   }

@@ -621,7 +621,7 @@ public:
   
   bool ks_outEnvCallDiff (const ExecutionState &a, const ExecutionState &b, std::vector<ref<Expr>> &inStateDiffExp, KScheckFeasible &feasibleChecker);
   
-  bool ks_isOutEnvCallInvoke (llvm::CallInst *ci);
+  bool ks_isOutEnvCallInvoke (llvm::Instruction *ci);
 
   // This take the path condition common to a mutant and original, together 
   // with the conditions of equality, for each state variable, between
@@ -650,12 +650,12 @@ public:
                                 std::vector<ExecutionState*> &toContinue,
                                 std::vector<ExecutionState*> &toStop);
 
-  unsigned ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
-                              std::map<llvm::Function*, unsigned> &visited_cgnodes);
+  void ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
+                              std::map<llvm::CallGraphNode*, unsigned> &visited_cgnodes);
 
   void ks_initialize_ks_instruction2closestout_distance(llvm::Module *mod);
 
-  unsigned ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh);
+  static bool ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh);
 
   void ks_applyMutantSearchStrategy();
 
