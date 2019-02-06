@@ -1821,7 +1821,9 @@ def main():
         assert int(semumaxtestsgenpermutants) >= 0, \
                                         'invalid semumaxtestsgenpermutants'+str(semumaxtestsgenpermutants)
         semuTuningList.append({
-                        'name': "_".join([str(semupreconditionlength, str(semumutantmaxfork), semugentestfordiscardedfrom, semupostcheckpointcontinueproba]),
+                        'name': "_".join([str(semupreconditionlength), str(semumutantmaxfork), semugentestfordiscardedfrom, \
+                                            semupostcheckpointcontinueproba, semumutantcontinuestrategy, \
+                                            semumaxtestsgenpermutants]),
                         'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
                         'SEMU':{"-semu-precondition-length":args_semupreconditionlength, 
                                 "-semu-mutant-max-fork":args_semumutantmaxfork, 
