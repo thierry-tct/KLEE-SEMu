@@ -144,14 +144,14 @@ cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork",
                                  cl::desc("Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
 
 cl::opt<bool> semuApplyMinDistToOutputForMutContinue(
-                                "semu-continue-mindist-heuristic",
+                                "semu-continue-mindist-out-heuristic",
                                  cl::init(false),
                                  cl::desc("Enable using the distance to the output to select which states to continue post mutant checkpoint"));
 cl::opt<bool> semuUseBBForDistance("semu-use-basicblock-for-distance",
                                  cl::init(false),
                                  cl::desc("Enable using number of Basic blocks instead of number of instructions for distance"));
 
-cl::opt<unsigned> semuGenTestDiscardedFromCheckNum(
+cl::opt<unsigned> semuGenTestForDiscardedFromCheckNum(
                                  "semu-checknum-before-testgen-for-discarded",
                                  cl::init(0),
                                  cl::desc("Number of checkpoints where mutants states that reach are discarded without test generated for them, before a test is generated. Help to generate test only for the states, for a mutant, that goes deep"));
@@ -5707,6 +5707,7 @@ void Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
 }
 
 void Executor::ks_initialize_ks_instruction2closestout_distance(llvm::Module* mod) {
+  ks_instruction2closestout_distance.clear();
   if (semuApplyMinDistToOutputForMutContinue) {
     // Compute Call graph
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
@@ -5723,6 +5724,8 @@ void Executor::ks_initialize_ks_instruction2closestout_distance(llvm::Module* mo
     } while (false);
   }
 }
+
+std::map<llvm::Instruction*, unsigned> Executor::ks_instruction2closestout_distance;
 
 bool Executor::ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh) {
   // We safely use pc not prevPC because 
@@ -5780,7 +5783,7 @@ void Executor::ks_applyMutantSearchStrategy() {
     for (auto *s: toStop) {
       if (ks_reachedWatchPoint.count(s)) {
         if (!toContinue.empty() && // make sure that not everything is removed
-                s->ks_numSeenCheckpoints < semuGenTestDiscardedFromCheckNum) {
+                s->ks_numSeenCheckpoints < semuGenTestForDiscardedFromCheckNum) {
           ks_reachedWatchPoint.erase(s);
           terminateState(*s);
         }

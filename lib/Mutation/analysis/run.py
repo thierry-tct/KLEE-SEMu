@@ -1180,6 +1180,9 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
     filter_mutestgen = "" if exemode == FilterHardToKill else " -semu-max-tests-gen-per-mutant="+str(tuning['EXTRA']['MaxTestsPerMutant']) # num of test per mutant
     if tuning['EXTRA']['-semu-testsgen-only-for-critical-diffs']:
         filter_mutestgen += " -semu-testsgen-only-for-critical-diffs"
+    if tuning['EXTRA']['-semu-continue-mindist-out-heuristic']:
+        filter_mutestgen += " -semu-continue-mindist-out-heuristic"
+
 
     # Copy the metaMutantBC file into semu semuSeedsDir (will be remove when semuSeedsDir is removed bellow)
     # Avoid case where klee modifies the BC file and don't have backup
@@ -1689,11 +1692,12 @@ def main():
     parser.add_argument("--semumaxmemory", type=int, default=9000, help="Specify the max memory for semu execution")
     parser.add_argument("--semupreconditionlength", type=str, default='2', help="Specify space separated list of precondition length semu execution (same number as 'semumutantmaxfork')")
     parser.add_argument("--semumutantmaxfork", type=str, default='2', help="Specify space separated list of hard checkpoint for mutants (or post condition checkpoint) as PC length, in semu execution")
-    parser.add_argument("--semugentestdiscardedfrom", type=str, default='0', help="Specify space separated list of positive integer values representing the number of checkpoint to see before generating tests for non continuing mutant states, in semu execution")
-    parser.add_argument("--semupostcheckpointcontinueproba", type=str, default='0.0', help="Specify space separated list of positive integer values representing the ratio of mutant states of ech mutant that is allowed to pass checkpoint to the next one, in semu execution")
-    parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
-    parser.add_argument("--semumaxtestsgenpermutants", type=int, default=5, help="Specify the maximum number of tests to generate for each mutant in test generation mode")
+    parser.add_argument("--semugentestfordiscardedfrom", type=str, default='0', help="Specify space separated list of positive integer values representing the number of checkpoint to see before generating tests for non continuing mutant states, in semu execution")
+    parser.add_argument("--semupostcheckpointcontinueproba", type=str, default='0.0', help="Specify space separated list of positive integer values representing the ratio of mutant states of each mutant that is allowed to pass checkpoint to the next one, in semu execution")
+    parser.add_argument("--semumutantcontinuestrategy", type=str, default='mdo', choices=['mdt', 'rnd'], help="Specify the space separated list of the trategies to use to continue mutants after watchpoint in test generation mode. Currently the strategies are min distance to output(mdt) and random(rnd).")
+    parser.add_argument("--semumaxtestsgenpermutants", type=str, default='5', help="Specify the space separated list of the  maximum number of tests to generate for each mutant in test generation mode")
     parser.add_argument("--semutestgenonlycriticaldiffs", action="store_true", help="Enable only critical diff when test generated")
+    parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
     parser.add_argument("--nummaxparallel", type=int, default=1, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
     parser.add_argument("--disable_pureklee", action="store_true", help="Disable doing computation for pureklee")
     parser.add_argument("--fixedmutantnumbertarget", type=str, default=ALIVE_ALL, help="Specify the how the mutants to terget are set (<mode>[:<#Mutants>]): "+str(FIXED_MUTANT_NUMBER_STRATEGIES))
@@ -1755,16 +1759,20 @@ def main():
 
     semupreconditionlength_list = args.semupreconditionlength.strip().split()
     semumutantmaxfork_list = args.semumutantmaxfork.strip().split()
-    semugentestdiscardedfrom_list = args.semugentestdiscardedfrom.strip().split()
+    semugentestfordiscardedfrom_list = args.semugentestfordiscardedfrom.strip().split()
     semupostcheckpointcontinueproba_list = semupostcheckpointcontinueproba.strip().split()
-    assert len(semupreconditionlength_list) == len(semumutantmaxfork_list), "inconsistency between number of pre and post conditions. They must match (pair wise space separated)" 
-    assert len(semugentestdiscardedfrom_list) == len(semupostcheckpointcontinueproba_list), "inconsistency between number of numdiscard from and continueproba. They must match (pair wise space separated)" 
-    assert len(semugentestdiscardedfrom_list) == len(semupreconditionlength_list), "inconsistency between number of numdiscard from and pre condition. They must match (pair wise space separated)" 
-    if len(set(zip(semupreconditionlength_list, semumutantmaxfork_list, semugentestdiscardedfrom_list, semupostcheckpointcontinueproba_list))) < \
-            len(semupreconditionlength_list):
+    semumutantcontinuestrategy_list = semumutantcontinuestrategy.strip.split()
+    semumaxtestsgenpermutants_list = semumaxtestsgenpermutants.strip().split()
+    all_lists = [semupreconditionlength_list, semumutantmaxfork_list , semugentestfordiscardedfrom_list, \
+                semupostcheckpointcontinueproba_list, semumutantcontinuestrategy_list, semumaxtestsgenpermutants_list]
+    for sl in range(len(all_lists)):
+        for ll in range(sl+1, len(all_lists)):
+            assert len(all_lists[sl]) == len(all_lists[ll]), \
+                "inconsistency between number of elements. "+str(sl)+"th list and "+\
+                str(ll)+"th list. They must match (pair wise space separated)" 
+    if len(set(zip(*all_lists))) < len(all_lists[0]):
         assert False, "The precondition, mutant maxfork,... tuple apperas more than once: "+ \
-                str(set([x for x in zip(semupreconditionlength_list, semumutantmaxfork_list, semugentestdiscardedfrom_list, semupostcheckpointcontinueproba_list) if \
-                        zip(semupreconditionlength_list, semumutantmaxfork_list, semugentestdiscardedfrom_list, semupostcheckpointcontinueproba_list).count(x) > 1]))
+                str(set([x for x in zip(*all_lists) if zip(*all_lists).count(x) > 1]))
 
     fmnt = args.fixedmutantnumbertarget.split(':')
     if len(fmnt) == 2:
@@ -1782,8 +1790,9 @@ def main():
     # Parameter tuning for Semu execution (timeout, to precondition depth)
     ## get precondition and mutantmaxfork from klee tests if specified as percentage
     semuTuningList = []
-    for semupreconditionlength, semumutantmaxfork, semugentestdiscardedfrom, semupostcheckpointcontinueproba in \
-                zip(semupreconditionlength_list, semumutantmaxfork_list, semugentestdiscardedfrom_list, semupostcheckpointcontinueproba_list):
+    for semupreconditionlength, semumutantmaxfork, semugentestfordiscardedfrom, \
+            semupostcheckpointcontinueproba , semumutantcontinuestrategy, \
+            semumaxtestsgenpermutants in zip(*all_lists):
         if semupreconditionlength[-1] == '%' or semumutantmaxfork[-1] == '%':
             minpath_len, max_pathlen = getPathLengthsMinMaxOfKLeeTests(klee_tests_topdir, "Expecting path file for longest ktest path extraction in klee-test-dir")
         
@@ -1796,20 +1805,32 @@ def main():
             args_semumutantmaxfork = int(float(semumutantmaxfork[:-1]) * max_pathlen / 100.0)
         else:
             args_semumutantmaxfork = int(semumutantmaxfork)
-        args_semumutantmaxfork = max(1, args_semumutantmaxfork)
-        print "#>> SEMU Symbex - Precondition Param:", args_semupreconditionlength, ", Checkpoint Param:", args_semumutantmaxfork
+        args_semumutantmaxfork = max(0, args_semumutantmaxfork)
+        print "#>> SEMU Symbex - Precondition Param:", args_semupreconditionlength, \
+                ", Checkpoint Param:", args_semumutantmaxfork, \
+                ", GenTestDiscardFrom:", semugentestfordiscardedfrom, \
+                ", Post checkpoint Continu proba:", semupostcheckpointcontinueproba, \
+                ", mutant continue strategy:", semumutantcontinuestrategy, \
+                ", max testgen per mutant:", semumaxtestsgenpermutants
             
-        assert int(semugentestdiscardedfrom) >= 0, 'invalid semugentestdiscardedfrom'+str(semugentestdiscardedfrom)
-        assert float(semupostcheckpointcontinueproba) >= 0.0 and float(semupostcheckpointcontinueproba) <= 1.0, 'invalid semupostcheckpointcontinueproba'+str(semupostcheckpointcontinueproba)
+        assert int(semugentestfordiscardedfrom) >= 0, \
+                                        'invalid semugentestfordiscardedfrom'+str(semugentestfordiscardedfrom)
+        assert float(semupostcheckpointcontinueproba) >= 0.0 and float(semupostcheckpointcontinueproba) <= 1.0, \
+                                        'invalid semupostcheckpointcontinueproba'+str(semupostcheckpointcontinueproba)
+        assert semumutantcontinuestrategy.lower() in ['mdo', 'rnd'], "invalid mutant continue strategy"
+        assert int(semumaxtestsgenpermutants) >= 0, \
+                                        'invalid semumaxtestsgenpermutants'+str(semumaxtestsgenpermutants)
         semuTuningList.append({
-                        'name': "_".join([str(semupreconditionlength, str(semumutantmaxfork), semugentestdiscardedfrom, semupostcheckpointcontinueproba]),
+                        'name': "_".join([str(semupreconditionlength, str(semumutantmaxfork), semugentestfordiscardedfrom, semupostcheckpointcontinueproba]),
                         'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
                         'SEMU':{"-semu-precondition-length":args_semupreconditionlength, 
                                 "-semu-mutant-max-fork":args_semumutantmaxfork, 
-                                "-semu-checknum-before-testgen-for-discarded": semugentestdiscardedfrom,
+                                "-semu-checknum-before-testgen-for-discarded": semugentestfordiscardedfrom,
                                 "-semu-mutant-state-continue-proba": semupostcheckpointcontinueproba,
                                 "-semu-loop-break-delay":args.semuloopbreaktimeout},
-                        'EXTRA':{'MaxTestsPerMutant': args.semumaxtestsgenpermutants, "-semu-testsgen-only-for-critical-diffs":args.semutestgenonlycriticaldiffs}
+                        'EXTRA':{'MaxTestsPerMutant': int(semumaxtestsgenpermutants), 
+                                 "-semu-testsgen-only-for-critical-diffs":args.semutestgenonlycriticaldiffs,
+                                 "-semu-continue-mindist-out-heuristic":(semumutantcontinuestrategy.lower()=="mdo")}
                      })
 
     # Create outdir if absent

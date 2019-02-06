@@ -574,7 +574,7 @@ private:
   std::map<ExecutionState::KS_MutantIDType, unsigned> mutants2gentestsNum;
 
   // Used by strategy that prioritize the mutants states closer to the output
-  std::map<llvm::Instruction*, unsigned> ks_instruction2closestout_distance;
+  static std::map<llvm::Instruction*, unsigned> ks_instruction2closestout_distance;
 
 #ifdef KS_Z3MAXSAT_SOLVER__H
   // Partial Max Sat Solver
