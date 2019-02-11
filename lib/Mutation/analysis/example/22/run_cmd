@@ -117,7 +117,7 @@ $klee_tests_topdir \
 --semumutantmaxfork "$SEMU_CFG_SEMU_MUTANT_MAX_FORK" \
 --semugentestfordiscardedfrom "$SEMU_CFG_SEMU_GENTEST_FOR_DISCARDED_FROM_NUMCHECK" \
 --semupostcheckpointcontinueproba "$SEMU_CFG_SEMU_POST_CHECKPOINT_CONTINUE_PROBA" \
---semumutantcontinuestrategy "$SEMU_CFG_SEMU_MUTANT_CONTINUE_STRATEGY"
+--semumutantcontinuestrategy "$SEMU_CFG_SEMU_MUTANT_CONTINUE_STRATEGY" \
 --semumaxtestsgenpermutants "$SEMU_CFG_SEMU_MAX_TESTS_PER_MUTANTS" \
 --nummaxparallel "$SEMU_RUN_CFG_MAX_PARALLELISM" \
 
