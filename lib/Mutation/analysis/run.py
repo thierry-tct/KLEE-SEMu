@@ -2216,7 +2216,7 @@ def main():
                             len(semuTuningList), \
                             max(1, args.nummaxparallel / len(list_candidateMutantsFiles)) \
                             )
-        if len(nparallel_for_tunings) > 1:
+        if nparallel_for_tunings) > 1:
             conf_threadpool = ThreadPool(nparallel_for_tunings)
             ctp_return = conf_threadpool.map(configParallel, semuTuningList)
             conf_threadpool.terminate()
