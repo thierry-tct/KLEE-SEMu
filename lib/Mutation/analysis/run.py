@@ -1729,7 +1729,7 @@ def main():
     parser.add_argument("--semumaxtestsgenpermutants", type=str, default='5', help="Specify the space separated list of the  maximum number of tests to generate for each mutant in test generation mode")
     parser.add_argument("--semutestgenonlycriticaldiffs", action="store_true", help="Enable only critical diff when test generated")
     parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
-    parser.add_argument("--nummaxparallel", type=int, default=1, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
+    parser.add_argument("--nummaxparallel", type=int, default=50, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
     parser.add_argument("--disable_pureklee", action="store_true", help="Disable doing computation for pureklee")
     parser.add_argument("--fixedmutantnumbertarget", type=str, default=ALIVE_ALL, help="Specify the how the mutants to terget are set (<mode>[:<#Mutants>]): "+str(FIXED_MUTANT_NUMBER_STRATEGIES))
     args = parser.parse_args()
@@ -2212,8 +2212,12 @@ def main():
             semuTuningList.append(purekleetune)
 
         # Actual Semu execution and compute
-        if len(semuTuningList) > 1:
-            conf_threadpool = ThreadPool(len(semuTuningList))
+        nparallel_for_tunings = min( \
+                            len(semuTuningList), \
+                            max(1, args.nummaxparallel / len(list_candidateMutantsFiles)) \
+                            )
+        if len(nparallel_for_tunings) > 1:
+            conf_threadpool = ThreadPool(nparallel_for_tunings)
             ctp_return = conf_threadpool.map(configParallel, semuTuningList)
             conf_threadpool.terminate()
             conf_threadpool.close()
