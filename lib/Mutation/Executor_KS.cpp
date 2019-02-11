@@ -5421,7 +5421,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         // Make sure that on test gen mode, the mutants that reached maximum
         // generated tests are removed
         if (ks_outputTestsCases) {
-          ks_eliminateMutanStatesWithMaxTests();
+          ks_eliminateMutantStatesWithMaxTests();
         }
 
         std::vector<ExecutionState *> remainWPStates;
@@ -5796,7 +5796,7 @@ void Executor::ks_applyMutantSearchStrategy() {
   }
 }
 
-void Executor::ks_eliminateMutanStatesWithMaxTests() {
+void Executor::ks_eliminateMutantStatesWithMaxTests() {
   std::set<ExecutionState::KS_MutantIDType> reached_max_tg;
   for (auto mp: mutants2gentestsNum)
     if (mp.second >= semuMaxNumTestGenPerMutant)
@@ -5804,38 +5804,48 @@ void Executor::ks_eliminateMutanStatesWithMaxTests() {
   if (reached_max_tg.size() > 0) {
     for (auto m_it=ks_reachedOutEnv.begin(); 
                                     m_it != ks_reachedOutEnv.end();) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         ks_reachedOutEnv.erase(*m_it);
-      else
+        terminateState(**m_it);
+      } else {
         ++m_it;
+      }
     }
     for (auto m_it=ks_reachedWatchPoint.begin(); 
                                     m_it != ks_reachedWatchPoint.end();) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         ks_reachedWatchPoint.erase(*m_it);
-      else
+        terminateState(**m_it);
+      } else {
         ++m_it;
+      }
     }
     for (auto m_it=ks_terminatedBeforeWP.begin(); 
                                     m_it != ks_terminatedBeforeWP.end();) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         ks_terminatedBeforeWP.erase(*m_it);
-      else
+        terminateState(**m_it);
+      } else {
         ++m_it;
+      }
     }
     for (auto m_it=ks_atPointPostMutation.begin(); 
                                     m_it != ks_atPointPostMutation.end();) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         ks_atPointPostMutation.erase(*m_it);
-      else
+        terminateState(**m_it);
+      } else {
         ++m_it;
+      }
     }
     for (auto m_it=ks_ongoingExecutionAtWP.begin(); 
                                     m_it != ks_ongoingExecutionAtWP.end();) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) == 0)
+      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         ks_ongoingExecutionAtWP.erase(*m_it);
-      else
+        terminateState(**m_it);
+      } else {
         ++m_it;
+      }
     }
   }
 }

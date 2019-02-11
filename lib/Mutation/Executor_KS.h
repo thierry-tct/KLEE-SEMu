@@ -659,7 +659,7 @@ public:
 
   void ks_applyMutantSearchStrategy();
 
-  void ks_eliminateMutanStatesWithMaxTests();
+  void ks_eliminateMutantStatesWithMaxTests();
 
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
   //~KS
