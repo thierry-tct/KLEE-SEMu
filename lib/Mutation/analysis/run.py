@@ -1792,7 +1792,7 @@ def main():
     semumutantmaxfork_list = args.semumutantmaxfork.strip().split()
     semugentestfordiscardedfrom_list = args.semugentestfordiscardedfrom.strip().split()
     semupostcheckpointcontinueproba_list = args.semupostcheckpointcontinueproba.strip().split()
-    semumutantcontinuestrategy_list = args.semumutantcontinuestrategy.strip.split()
+    semumutantcontinuestrategy_list = args.semumutantcontinuestrategy.strip().split()
     semumaxtestsgenpermutants_list = args.semumaxtestsgenpermutants.strip().split()
     all_lists = [semupreconditionlength_list, semumutantmaxfork_list , semugentestfordiscardedfrom_list, \
                 semupostcheckpointcontinueproba_list, semumutantcontinuestrategy_list, semumaxtestsgenpermutants_list]
