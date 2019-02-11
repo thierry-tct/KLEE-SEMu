@@ -1379,7 +1379,7 @@ def analysis_plot(thisOut, groundConsideredMutant_covtests):
     take the ktests in the folders of semuoutputs, then put then together removing duplicates
     The result is put in newly created dir mfi_ktests_dir. The .ktestlist files of each mutant are updated
 '''
-def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
+def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_dir=None):
     assert mfi_ktests_dir_top in mfi_ktests_dir, "mfi_ktests_dir_top not in mfi_ktests_dir"
     if os.path.isdir(mfi_ktests_dir_top):
         shutil.rmtree(mfi_ktests_dir_top)
@@ -1426,6 +1426,34 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
     for ktp in ktests:
         ktests[ktp].sort(key=lambda x:x[0]) # sort according to mutant ids
     
+    # remove thos duplicates with seeds (seeds where already executed)
+    kt_dirs = []
+    seed_dup_kts = []
+    for kfp in ktests:
+        ktp_dir = os.path.dirname(ktp)
+        if ktp not in kt_dirs
+            kt_dirs.append(ktp)
+    for ktp_dir in kt_dirs:
+        fdupcmd = " ".join(["fdupes -1", ktp_dir, seeds_dir, ">",fdupesout])
+        with open(fdupesout) as fp:
+            for line in fp:
+                la = line.strip().split()
+                equilibrium = 0
+                for ii in range(len(la)):
+                    if la[ii].endswith('.ktest'):
+                        dir_name = os.path.dirname(la[ii])
+                        if dir_name in kt_dirs:
+                            equilibrium += 1
+                            seed_dup_kts.append(la[ii])
+                        else:
+                            equilibrium -= 1
+                assert equilibrium == 0, "must be 2 here: one from each dir, since they where already applied fdupes. equilibrium: "+str(equilibrium)
+        os.remove(fdupesout)
+    # remove dups of seeds
+    for ktp in seed_dup_kts:
+        if ktp in ktests:
+            del ktests[ktp]
+
     # Copy non duplicates into mfi_ktests_dir
     finalObj = {}
     etimeObj = {'ellapsedTime(s)':[], 'ktest':[]}
@@ -1445,6 +1473,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs):
     etdf = pd.DataFrame(etimeObj)
     etdf.to_csv(os.path.join(mfi_ktests_dir, "tests_by_ellapsedtime.csv"), index=False)
     dumpJson(finalObj, os.path.join(mfi_ktests_dir, "mutant_ktests_mapping.json"))
+    dumpJson(seed_dup_kts, os.path.join(mfi_ktests_dir, "seed_dup_ktests.json"))
 #~ def fdupeGeneratedTest ()
 
 def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, names):
@@ -1502,6 +1531,7 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
     for i in range(len(inKtestDirs)):
         etdf = pd.read_csv(os.path.join(inKtestDirs[i], "tests_by_ellapsedtime.csv"))
         in_finalObj = loadJson(os.path.join(inKtestDirs[i], "mutant_ktests_mapping.json"))
+        in_seed_dup_kts = loadJson(os.path.join(inKtestDirs[i], "seed_dup_ktests.json"))
         finalObj = {}
 
         for index, row in etdf.iterrows():
@@ -1516,6 +1546,7 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
 
         etdf.to_csv(os.path.join(mfi_ktests_dir, names[i]+"-tests_by_ellapsedtime.csv"), index=False)
         dumpJson(finalObj, os.path.join(mfi_ktests_dir, names[i]+"-mutant_ktests_mapping.json"))
+        dumpJson({"Number of seed dupplicates removed": len(in_seed_dup_kts)}, os.path.join(mfi_ktests_dir, names[i]+"-seed_dup_ktests.json"))
 #~ def fdupesAggregateKtestDirs()
 
 def stripRootTest2Dir (rootdir, test2dir):
@@ -2141,7 +2172,7 @@ def main():
                                 for mid in groundConsideredMutant_covtests:
                                     fp.write(str(mid)+'\n')
                             #TODO consider removing seed tests (already executed). The merge of thread should be done in semuexec. (Not necessary, because only live mutant are executed)
-                            fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs) 
+                            fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, semuSeedsDir) 
                         # remove semuoutputs dirs
                         for semuoutput in semuoutputs:
                             if os.path.isdir(semuoutput):
