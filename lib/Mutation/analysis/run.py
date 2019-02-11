@@ -1431,7 +1431,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
     seed_dup_kts = []
     for kfp in ktests:
         ktp_dir = os.path.dirname(ktp)
-        if ktp not in kt_dirs
+        if ktp not in kt_dirs:
             kt_dirs.append(ktp)
     for ktp_dir in kt_dirs:
         fdupcmd = " ".join(["fdupes -1", ktp_dir, seeds_dir, ">",fdupesout])
