@@ -5616,7 +5616,7 @@ void Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
   llvm::Function * func = cgnode->getFunction();
 
   // visit
-  if (func->isDeclaration()) {
+  if (!func || func->isDeclaration()) {
     visited_cgnodes[cgnode] = 0; 
     return;
   }
@@ -5641,6 +5641,9 @@ void Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
       } else if (auto *ret = llvm::dyn_cast<llvm::ReturnInst>(&Inst)) {
         outInsts.push_back(&Inst);
         ks_instruction2closestout_distance[&Inst] = 0;
+      } else if (auto *unreach = llvm::dyn_cast<llvm::UnreachableInst>(&Inst)) {
+        outInsts.push_back(&Inst);
+        ks_instruction2closestout_distance[&Inst] = 0;
       }
     }
   }
@@ -5657,23 +5660,26 @@ void Executor::ks_process_closestout_recursive(llvm::CallGraphNode *cgnode,
     workQ.pop();
     unsigned inc = 0;
     unsigned this_i_dist;
-    for (llvm::Instruction *I = inst->getPrevNode(); I; I = I->getPrevNode()) {
-      //if (!llvm::isa<llvm::DbgInfoIntrinsic>(I))
-      if (useInstDist) {
-        inc++;
+    llvm::Instruction *bb_1st_inst = &(inst->getParent()->front());
+    if (inst != bb_1st_inst) {
+      for (llvm::Instruction *I = inst->getPrevNode(); I; I = ((I==bb_1st_inst)?0:I->getPrevNode())) {
+        //if (!llvm::isa<llvm::DbgInfoIntrinsic>(I))
+        if (useInstDist) {
+          inc++;
+        }
+        llvm::Function *tmpF = nullptr;
+        if (auto * ci = llvm::dyn_cast<llvm::CallInst>(I)) {
+          tmpF = ci->getCalledFunction();
+        } else if (auto * ii = llvm::dyn_cast<llvm::InvokeInst>(I)) {
+          tmpF = ii->getCalledFunction();
+        }
+        if (tmpF) {
+          inc += visited_cgnodes[func2cgnode[tmpF]];
+        }
+        this_i_dist = std::min(ks_instruction2closestout_distance[inst] + inc, MaxLens);
+        if (this_i_dist < ks_instruction2closestout_distance[I])
+          ks_instruction2closestout_distance[I] = this_i_dist;
       }
-      llvm::Function *tmpF = nullptr;
-      if (auto * ci = llvm::dyn_cast<llvm::CallInst>(I)) {
-        tmpF = ci->getCalledFunction();
-      } else if (auto * ii = llvm::dyn_cast<llvm::InvokeInst>(I)) {
-        tmpF = ii->getCalledFunction();
-      }
-      if (tmpF) {
-        inc += visited_cgnodes[func2cgnode[tmpF]];
-      }
-      this_i_dist = std::min(ks_instruction2closestout_distance[inst] + inc, MaxLens);
-      if (this_i_dist < ks_instruction2closestout_distance[I])
-        ks_instruction2closestout_distance[I] = this_i_dist;
     }
 
     // update values of previouus basic block terminators
