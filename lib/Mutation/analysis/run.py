@@ -1732,6 +1732,7 @@ def main():
     parser.add_argument("--nummaxparallel", type=int, default=50, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
     parser.add_argument("--disable_pureklee", action="store_true", help="Disable doing computation for pureklee")
     parser.add_argument("--fixedmutantnumbertarget", type=str, default=ALIVE_ALL, help="Specify the how the mutants to terget are set (<mode>[:<#Mutants>]): "+str(FIXED_MUTANT_NUMBER_STRATEGIES))
+    parser.add_argument("--semucontinueunfinishedtunings", action="store_true", help="enable reusing previous semu execution and computation result (if available). Useful when execution fail for some tunings and we do not want to reexecute other completed tunings")
     args = parser.parse_args()
 
     outDir = os.path.join(args.outTopDir, OutFolder)
@@ -2099,8 +2100,26 @@ def main():
             # No merge on Test Gen mode
             mergeSemuThreadsDir = se_output+".semumerged" if executionMode == FilterHardToKill else None
 
+            # XXX Help not to execute finished if some failed
+            semuWasNotExecuted = True
+            # Test gen mode
+            if executionMode != FilterHardToKill:
+                mfi_mutants_list = os.path.join(this_Out, "mfirun_mutants_list.txt")
+                mfi_ktests_dir_top = os.path.join(this_Out, "mfirun_ktests_dir")
+                mfi_ktests_dir = os.path.join(mfi_ktests_dir_top, KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0")
+                mfi_execution_output = os.path.join(this_Out, "mfirun_output")
+                if args.semucontinueunfinishedtunings:
+                    # check whether it was finished
+                    if os.path.isfile(mfi_mutants_list) and os.path.isdir(mfi_ktests_dir):
+                        for semuoutput in semuoutputs:
+                            if not os.path.isdir(semuoutput):
+                                semuWasNotExecuted = False
+                            else:
+                                semuWasNotExecuted = True
+                                break
+
             # Execute SEMU
-            if SEMU_EXECUTION in toExecute: 
+            if SEMU_EXECUTION in toExecute and semuWasNotExecuted: 
                 if martOut is not None:
                     ret = executeSemu (semuoutputs, semuSeedsDir, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, exemode=executionMode) 
                     if ret is not None:
@@ -2139,17 +2158,14 @@ def main():
                         if martOut is not None and matrix is not None:
                             analysis_plot(thisOutSe, None) #groundConsideredMutant_covtests.keys()) # None to not plot random
             else:
-                mfi_mutants_list = os.path.join(this_Out, "mfirun_mutants_list.txt")
-                mfi_ktests_dir_top = os.path.join(this_Out, "mfirun_ktests_dir")
-                mfi_ktests_dir = os.path.join(mfi_ktests_dir_top, KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0")
-                mfi_execution_output = os.path.join(this_Out, "mfirun_output")
+                # Test gen mode
                 if COMPUTE_TASK in toExecute: 
                     atMergeStage = False
                     for semuoutput in semuoutputs:
                         if not os.path.isdir(semuoutput):
                             atMergeStage = True
                         else:
-                            assert not atMergeStage, "some semuoutputs are deleted but not "+semuoutput
+                            assert not atMergeStage, "some semuoutputs are deleted but not "+semuoutput+". Must delete and rerun Semu Execution!"
 
                     if atMergeStage:
                         print "# -- Already ready for merge in Test Gen Compute. Do nothing (for "+this_Out+')'
