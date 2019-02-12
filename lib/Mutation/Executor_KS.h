@@ -608,6 +608,7 @@ public:
   inline void ks_fixTerminatedChildren(ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove); 
   void ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove); 
   void ks_terminateSubtreeMutants(ExecutionState *pes); 
+  void ks_getMutParentStates(std::vector<ExecutionState *> &mutParentStates);
   void ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly=false, bool postMutOnly=false);
   bool ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect, 
                           std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly, 

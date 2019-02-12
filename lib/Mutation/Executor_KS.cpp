@@ -4754,14 +4754,9 @@ void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
   }
 }
 
-void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly, bool postMutOnly) {
-  assert (!(outEnvOnly & postMutOnly) && 
-          "must not have both outEnvOnly and postMutOnly enabled simultaneously");
-
-  llvm::SmallPtrSet<ExecutionState *, 5> postMutOnly_hasdiff;
-
+void Executor::ks_getMutParentStates(std::vector<ExecutionState *> &mutParentStates) {
+  mutParentStates.clear();
   //TODO TODO: Make efficient
-  std::vector<ExecutionState *> mutParentStates;
   for(ExecutionState *es: ks_atPointPostMutation) {
     if (es->ks_originalMutSisterStates != nullptr)
       mutParentStates.push_back(es);
@@ -4782,6 +4777,17 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
     if (es->ks_originalMutSisterStates != nullptr)
       mutParentStates.push_back(es);
   }
+}
+
+void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly, bool postMutOnly) {
+  assert (!(outEnvOnly & postMutOnly) && 
+          "must not have both outEnvOnly and postMutOnly enabled simultaneously");
+
+  llvm::SmallPtrSet<ExecutionState *, 5> postMutOnly_hasdiff;
+
+  std::vector<ExecutionState *> mutParentStates;
+  ks_getMutParentStates(mutParentStates);
+
   std::sort(mutParentStates.begin(), mutParentStates.end(),
             [](const ExecutionState *a, const ExecutionState *b)
             {
@@ -5751,6 +5757,8 @@ bool Executor::ks_getMinDistToOutput(ExecutionState *lh, ExecutionState *rh) {
 
 void Executor::ks_applyMutantSearchStrategy() {
   // whether to apply the search also for the original (discard some states)
+  // XXX Keep this to False. if set to true, there is need to update the
+  // Original children state tree to have no problem on state comparison
   const bool original_too = false;
   // Whether to apply for a mutant ID regardless of whether 
   //ganerated from same original state
@@ -5779,6 +5787,7 @@ void Executor::ks_applyMutantSearchStrategy() {
   }
 
   std::vector<ExecutionState*> toContinue, toStop;
+  llvm::SmallPtrSet<ExecutionState *, 5> toTerminate;
   for (auto p: mutId2states) {
     toContinue.clear();
     toStop.clear();
@@ -5798,14 +5807,26 @@ void Executor::ks_applyMutantSearchStrategy() {
         if (!toContinue.empty() && // make sure that not everything is removed
                 s->ks_numSeenCheckpoints < semuGenTestForDiscardedFromCheckNum) {
           ks_reachedWatchPoint.erase(s);
-          terminateState(*s);
+          toTerminate.insert(s);
         }
       }
       if (ks_ongoingExecutionAtWP.count(s)) {
         ks_ongoingExecutionAtWP.erase(s);
-        terminateState(*s);
+        toTerminate.insert(s);
       }
     }
+  }
+
+  std::vector<ExecutionState *> parStates;
+  if (! toTerminate.empty())
+    ks_getMutParentStates(parStates);
+
+  // Terminate the muts in toTerminate
+  for (auto *es: parStates) {
+    ks_fixTerminatedChildren(es, toTerminate);
+  }
+  for (auto *es: toTerminate) {
+    terminateState(*es);
   }
 }
 
@@ -5814,14 +5835,16 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
   for (auto mp: mutants2gentestsNum)
     if (mp.second >= semuMaxNumTestGenPerMutant)
       reached_max_tg.insert(mp.first);
+
   if (reached_max_tg.size() > 0) {
+    llvm::SmallPtrSet<ExecutionState *, 5> toTerminate;
     auto tmp = ks_reachedOutEnv.begin();
     for (auto m_it=ks_reachedOutEnv.begin(); 
                                     m_it != ks_reachedOutEnv.end();) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         tmp = m_it;
         ++m_it;
-        terminateState(**tmp);
+        toTerminate.insert(*tmp);
         ks_reachedOutEnv.erase(*tmp);
       } else {
         ++m_it;
@@ -5832,7 +5855,7 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         tmp = m_it;
         ++m_it;
-        terminateState(**tmp);
+        toTerminate.insert(*tmp);
         ks_reachedWatchPoint.erase(*tmp);
       } else {
         ++m_it;
@@ -5843,7 +5866,7 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         tmp = m_it;
         ++m_it;
-        terminateState(**tmp);
+        toTerminate.insert(*tmp);
         ks_terminatedBeforeWP.erase(*tmp);
       } else {
         ++m_it;
@@ -5854,7 +5877,7 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         tmp = m_it;
         ++m_it;
-        terminateState(**tmp);
+        toTerminate.insert(*tmp);
         ks_atPointPostMutation.erase(*tmp);
       } else {
         ++m_it;
@@ -5865,11 +5888,23 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
         tmp = m_it;
         ++m_it;
-        terminateState(**tmp);
+        toTerminate.insert(*tmp);
         ks_ongoingExecutionAtWP.erase(*tmp);
       } else {
         ++m_it;
       }
+    }
+
+    std::vector<ExecutionState *> parStates;
+    if (! toTerminate.empty())
+      ks_getMutParentStates(parStates);
+
+    // Terminate the discarded
+    for (auto *es: parStates) {
+      ks_fixTerminatedChildren(es, toTerminate);
+    }
+    for (auto *es: toTerminate) {
+      terminateState(*es);
     }
   }
 }
