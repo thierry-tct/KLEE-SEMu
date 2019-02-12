@@ -5524,10 +5524,6 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
             ks_atPointPostMutation.clear();
           }
 
-          // add all terminated states to the searcher so that update won't assert that the states are not in searcher
-          // XXX The searcher is empty here. This is necessary because in updateStates, removedStates must be in searcher
-          if (searcher)
-            searcher->update(0, removedStates/*adding*/, std::vector<ExecutionState *>());
           llvm::errs() << "# SEMU@Status: After nextdepth point ID=" << (ks_nextDepthID-1) 
                         << " There are " << addedStates.size() 
                         <<" States remaining (seeding is "
@@ -5541,6 +5537,11 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           // Clear
           ks_reachedOutEnv.clear();
         }
+
+        // add all terminated states to the searcher so that update won't assert that the states are not in searcher
+        // XXX The searcher is empty here. This is necessary because in updateStates, removedStates must be in searcher
+        if (searcher)
+          searcher->update(0, removedStates/*adding*/, std::vector<ExecutionState *>());
 
         // in seeding mode, since seedMap is not augmented in updateState,
         // we update it with remaining states (in addesStates vector) before updateStates
@@ -5808,11 +5809,14 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
     if (mp.second >= semuMaxNumTestGenPerMutant)
       reached_max_tg.insert(mp.first);
   if (reached_max_tg.size() > 0) {
+    auto tmp = ks_reachedOutEnv.begin();
     for (auto m_it=ks_reachedOutEnv.begin(); 
                                     m_it != ks_reachedOutEnv.end();) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        ks_reachedOutEnv.erase(*m_it);
-        terminateState(**m_it);
+        tmp = m_it;
+        ++m_it;
+        terminateState(**tmp);
+        ks_reachedOutEnv.erase(*tmp);
       } else {
         ++m_it;
       }
@@ -5820,8 +5824,10 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
     for (auto m_it=ks_reachedWatchPoint.begin(); 
                                     m_it != ks_reachedWatchPoint.end();) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        ks_reachedWatchPoint.erase(*m_it);
-        terminateState(**m_it);
+        tmp = m_it;
+        ++m_it;
+        terminateState(**tmp);
+        ks_reachedWatchPoint.erase(*tmp);
       } else {
         ++m_it;
       }
@@ -5829,8 +5835,10 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
     for (auto m_it=ks_terminatedBeforeWP.begin(); 
                                     m_it != ks_terminatedBeforeWP.end();) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        ks_terminatedBeforeWP.erase(*m_it);
-        terminateState(**m_it);
+        tmp = m_it;
+        ++m_it;
+        terminateState(**tmp);
+        ks_terminatedBeforeWP.erase(*tmp);
       } else {
         ++m_it;
       }
@@ -5838,8 +5846,10 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
     for (auto m_it=ks_atPointPostMutation.begin(); 
                                     m_it != ks_atPointPostMutation.end();) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        ks_atPointPostMutation.erase(*m_it);
-        terminateState(**m_it);
+        tmp = m_it;
+        ++m_it;
+        terminateState(**tmp);
+        ks_atPointPostMutation.erase(*tmp);
       } else {
         ++m_it;
       }
@@ -5847,8 +5857,10 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
     for (auto m_it=ks_ongoingExecutionAtWP.begin(); 
                                     m_it != ks_ongoingExecutionAtWP.end();) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        ks_ongoingExecutionAtWP.erase(*m_it);
-        terminateState(**m_it);
+        tmp = m_it;
+        ++m_it;
+        terminateState(**tmp);
+        ks_ongoingExecutionAtWP.erase(*tmp);
       } else {
         ++m_it;
       }
