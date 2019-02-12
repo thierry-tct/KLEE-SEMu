@@ -1182,6 +1182,8 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
         filter_mutestgen += " -semu-testsgen-only-for-critical-diffs"
     if tuning['EXTRA']['-semu-continue-mindist-out-heuristic']:
         filter_mutestgen += " -semu-continue-mindist-out-heuristic"
+    if tuning['EXTRA']['-semu-disable-statediff-in-testgen']:
+        filter_mutestgen += " -semu-disable-statediff-in-testgen"
 
 
     # Copy the metaMutantBC file into semu semuSeedsDir (will be remove when semuSeedsDir is removed bellow)
@@ -1727,6 +1729,7 @@ def main():
     parser.add_argument("--semupostcheckpointcontinueproba", type=str, default='0.0', help="Specify space separated list of positive integer values representing the ratio of mutant states of each mutant that is allowed to pass checkpoint to the next one, in semu execution")
     parser.add_argument("--semumutantcontinuestrategy", type=str, default='mdo', help="Specify the space separated list of the trategies to use to continue mutants after watchpoint in test generation mode. Currently the strategies are min distance to output(mdt) and random(rnd).")
     parser.add_argument("--semumaxtestsgenpermutants", type=str, default='5', help="Specify the space separated list of the  maximum number of tests to generate for each mutant in test generation mode")
+    parser.add_argument("--semudisablestatediffintestgen", type=str, default='off', help="Disable the inclusion of state diff in the test generation of mutant(only use mutant PC)")
     parser.add_argument("--semutestgenonlycriticaldiffs", action="store_true", help="Enable only critical diff when test generated")
     parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
     parser.add_argument("--nummaxparallel", type=int, default=50, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
@@ -1795,8 +1798,10 @@ def main():
     semupostcheckpointcontinueproba_list = args.semupostcheckpointcontinueproba.strip().split()
     semumutantcontinuestrategy_list = args.semumutantcontinuestrategy.strip().split()
     semumaxtestsgenpermutants_list = args.semumaxtestsgenpermutants.strip().split()
+    semudisablestatediffintestgen_list = args.semudisablestatediffintestgen.strip().split()
     all_lists = [semupreconditionlength_list, semumutantmaxfork_list , semugentestfordiscardedfrom_list, \
-                semupostcheckpointcontinueproba_list, semumutantcontinuestrategy_list, semumaxtestsgenpermutants_list]
+                semupostcheckpointcontinueproba_list, semumutantcontinuestrategy_list, semumaxtestsgenpermutants_list, \
+                semudisablestatediffintestgen_list]
     for sl in range(len(all_lists)):
         for ll in range(sl+1, len(all_lists)):
             assert len(all_lists[sl]) == len(all_lists[ll]), \
@@ -1824,7 +1829,7 @@ def main():
     semuTuningList = []
     for semupreconditionlength, semumutantmaxfork, semugentestfordiscardedfrom, \
             semupostcheckpointcontinueproba , semumutantcontinuestrategy, \
-            semumaxtestsgenpermutants in zip(*all_lists):
+            semumaxtestsgenpermutants, semudisablestatediffintestgen in zip(*all_lists):
         if semupreconditionlength[-1] == '%' or semumutantmaxfork[-1] == '%':
             minpath_len, max_pathlen = getPathLengthsMinMaxOfKLeeTests(klee_tests_topdir, "Expecting path file for longest ktest path extraction in klee-test-dir")
         
@@ -1843,7 +1848,8 @@ def main():
                 ", GenTestDiscardFrom:", semugentestfordiscardedfrom, \
                 ", Post checkpoint Continu proba:", semupostcheckpointcontinueproba, \
                 ", mutant continue strategy:", semumutantcontinuestrategy, \
-                ", max testgen per mutant:", semumaxtestsgenpermutants
+                ", max testgen per mutant:", semumaxtestsgenpermutants, \
+                ", disable state dif in testgen:", semudisablestatediffintestgen
             
         assert int(semugentestfordiscardedfrom) >= 0, \
                                         'invalid semugentestfordiscardedfrom'+str(semugentestfordiscardedfrom)
@@ -1852,10 +1858,12 @@ def main():
         assert semumutantcontinuestrategy.lower() in ['mdo', 'rnd'], "invalid mutant continue strategy"
         assert int(semumaxtestsgenpermutants) >= 0, \
                                         'invalid semumaxtestsgenpermutants'+str(semumaxtestsgenpermutants)
+        assert semudisablestatediffintestgen.lower() in ['off', 'on'], "invalid mutant gentest no diff enable disable value"
         semuTuningList.append({
                         'name': "_".join([str(semupreconditionlength), str(semumutantmaxfork), semugentestfordiscardedfrom, \
                                             semupostcheckpointcontinueproba, semumutantcontinuestrategy, \
-                                            semumaxtestsgenpermutants]),
+                                            semumaxtestsgenpermutants, semudisablestatediffintestgen, \
+                                            ('nocrit' if args.semutestgenonlycriticaldiffs else 'crit')]),
                         'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
                         'SEMU':{"-semu-precondition-length":args_semupreconditionlength, 
                                 "-semu-mutant-max-fork":args_semumutantmaxfork, 
@@ -1864,7 +1872,8 @@ def main():
                                 "-semu-loop-break-delay":args.semuloopbreaktimeout},
                         'EXTRA':{'MaxTestsPerMutant': int(semumaxtestsgenpermutants), 
                                  "-semu-testsgen-only-for-critical-diffs":args.semutestgenonlycriticaldiffs,
-                                 "-semu-continue-mindist-out-heuristic":(semumutantcontinuestrategy.lower()=="mdo")}
+                                 "-semu-continue-mindist-out-heuristic":(semumutantcontinuestrategy.lower()=="mdo"),
+                                 "-semu-disable-statediff-in-testgen":(semudisablestatediffintestgen.lower()=='on')}
                      })
 
     # Create outdir if absent

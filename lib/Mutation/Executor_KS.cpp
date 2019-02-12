@@ -143,6 +143,9 @@ cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork",
                                  cl::init(0), 
                                  cl::desc("Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
 
+cl::opt<bool> semuDisableStateDiffInTestGen("semu-disable-statediff-in-testgen",
+                                 cl::init(false),
+                                 cl::desc("Disable the state comparison with original when generating test for mutant (only consider mutant PC)"));
 cl::opt<bool> semuApplyMinDistToOutputForMutContinue(
                                 "semu-continue-mindist-out-heuristic",
                                  cl::init(false),
@@ -5032,6 +5035,9 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             /*  */
             // XXX create a new mState just to output testcase and destroy after
             ExecutionState *tmp_mState = new ExecutionState(*mState);
+            if (! semuDisableStateDiffInTestGen)
+                tmp_mState->addConstraint (insdiff); 
+            // TODO FIXME: Handle cases where the processTestCase call fail and no test is gen (for the following code: mutants stats uptades)
             interpreterHandler->processTestCase(*tmp_mState, nullptr, nullptr); //std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
             delete tmp_mState;
             ////size_t clen = mState->constraints.size();

@@ -95,6 +95,11 @@ fi
 
 printf "\n>> CMD calling run.py\n\n"
 
+if [ "${SEMU_CFG_GEN_ONLY_CRITICAL_DIFF:-off}" = "on" ]
+then 
+    extraargs+=" --semutestgenonlycriticaldiffs"
+fi
+
 python $ScriptDir/run.py $outtopdir $skipargs $extraargs \
 $klee_tests_topdir \
 --exepath $(readlink -f $MFI_EXEDIR/$MFI_PROGRAM) \
@@ -120,4 +125,5 @@ $klee_tests_topdir \
 --semumutantcontinuestrategy "$SEMU_CFG_SEMU_MUTANT_CONTINUE_STRATEGY" \
 --semumaxtestsgenpermutants "$SEMU_CFG_SEMU_MAX_TESTS_PER_MUTANTS" \
 --nummaxparallel "$SEMU_RUN_CFG_MAX_PARALLELISM" \
+--semudisablestatediffintestgen "$SEMU_CFG_DISABLE_STATEDIFF_GEN_TEST" \
 
