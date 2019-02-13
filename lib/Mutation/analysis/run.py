@@ -1408,8 +1408,9 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
         error_exit("Some ktests are not present as belonging to mutant: "+str([kt for kt in ktests if len(ktests[kt]) == 0]))
                   
     # Use fdupes across the dirs in semuoutputs to remove duplicates and update test infos
+    seed_dup_kts = []
     fdupesout = mfi_ktests_dir+".tmp"
-    fdupcmd = " ".join(["fdupes -1"]+semuoutputs+[">",fdupesout])
+    fdupcmd = " ".join(["fdupes -1"]+semuoutputs+[seeds_dir]+[">",fdupesout])
     if os.system(fdupcmd) != 0:
         error_exit ("fdupes failed. cmd: "+fdupcmd)
     assert os.path.isfile(fdupesout), "Fdupes failed to produce output"
@@ -1417,46 +1418,31 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
         for line in fp:
             la = line.strip().split()
             #assert la[0] not in dupmap, "fdupe line: "+la[0]+", is not in dupmap: "+str(dupmap)
-            if la[0].endswith('.ktest'):
-                remain = la[0]
-                dups = la[1:]
-                assert remain in ktests, "remain not in ktests. remain is "+remain
-                for dpkt in dups:
-                    ktests[remain] += ktests[dpkt]
+            val_in_ktd = []
+            val_in_seed = []
+            for ii in range(len(la)):
+                if la[ii].endswith('.ktest'):
+                    if os.path.abspath(seeds_dir) == os.path.dirname(os.path.abspath(la[ii])):
+                        val_in_seed.append(la[ii])
+                    else:
+                        val_in_ktd.append(la[ii])
+            if len(val_in_seed) > 0:
+                seed_dup_kts += val_in_ktd
+                # discard tests dup of seeds
+                for dpkt in val_in_ktd:
                     del ktests[dpkt]
+            else:
+                if len(val_in_ktd) > 0:
+                    remain = val_in_ktd[0]
+                    dups = val_in_ktd[1:]
+                    assert remain in ktests, "remain not in ktests. remain is "+remain
+                    for dpkt in dups:
+                        ktests[remain] += ktests[dpkt]
+                        del ktests[dpkt]
     os.remove(fdupesout)
     for ktp in ktests:
         ktests[ktp].sort(key=lambda x:x[0]) # sort according to mutant ids
     
-    # remove thos duplicates with seeds (seeds where already executed)
-    kt_dirs = set()
-    seed_dup_kts = []
-    for kfp in ktests:
-        ktp_dir = os.path.dirname(ktp)
-        kt_dirs.add(ktp_dir)
-    for ktp_dir in kt_dirs:
-        fdupcmd = " ".join(["fdupes -1", ktp_dir, seeds_dir, ">",fdupesout])
-        if os.system(fdupcmd) != 0:
-            error_exit ("fdupes (with seeds) failed. cmd: "+fdupcmd)
-        assert os.path.isfile(fdupesout), "Fdupes failed to produce output"
-        with open(fdupesout) as fp:
-            for line in fp:
-                la = line.strip().split()
-                equilibrium = 0
-                for ii in range(len(la)):
-                    if la[ii].endswith('.ktest'):
-                        dir_name = os.path.dirname(la[ii])
-                        if dir_name in kt_dirs:
-                            equilibrium += 1
-                            seed_dup_kts.append(la[ii])
-                        else:
-                            equilibrium -= 1
-                assert equilibrium == 0, "must be 2 here: one from each dir, since they where already applied fdupes. equilibrium: "+str(equilibrium)
-        os.remove(fdupesout)
-    # remove dups of seeds
-    for ktp in seed_dup_kts:
-        if ktp in ktests:
-            del ktests[ktp]
 
     # Copy non duplicates into mfi_ktests_dir
     finalObj = {}
