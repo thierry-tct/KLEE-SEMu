@@ -1429,7 +1429,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
         ktests[ktp].sort(key=lambda x:x[0]) # sort according to mutant ids
     
     # remove thos duplicates with seeds (seeds where already executed)
-    kt_dirs = {}
+    kt_dirs = set()
     seed_dup_kts = []
     for kfp in ktests:
         ktp_dir = os.path.dirname(ktp)
