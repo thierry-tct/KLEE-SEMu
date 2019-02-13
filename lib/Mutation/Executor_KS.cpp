@@ -5838,61 +5838,64 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
 
   if (reached_max_tg.size() > 0) {
     llvm::SmallPtrSet<ExecutionState *, 5> toTerminate;
-    auto tmp = ks_reachedOutEnv.begin();
+    llvm::SmallPtrSet<ExecutionState *, 5> tmp_one_toTerminate;
     for (auto m_it=ks_reachedOutEnv.begin(); 
-                                    m_it != ks_reachedOutEnv.end();) {
+                                    m_it != ks_reachedOutEnv.end();++m_it) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        tmp = m_it;
-        ++m_it;
-        toTerminate.insert(*tmp);
-        ks_reachedOutEnv.erase(*tmp);
-      } else {
-        ++m_it;
-      }
+        tmp_one_toTerminate.insert(*m_it);
+      } 
     }
+    for (auto *s: tmp_one_toTerminate) {
+        ks_reachedOutEnv.erase(s);
+        toTerminate.insert(s);
+    }
+
+    tmp_one_toTerminate.clear();
     for (auto m_it=ks_reachedWatchPoint.begin(); 
-                                    m_it != ks_reachedWatchPoint.end();) {
+                                    m_it != ks_reachedWatchPoint.end();++m_it) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        tmp = m_it;
-        ++m_it;
-        toTerminate.insert(*tmp);
-        ks_reachedWatchPoint.erase(*tmp);
-      } else {
-        ++m_it;
-      }
+        tmp_one_toTerminate.insert(*m_it);
+      } 
     }
+    for (auto *s: tmp_one_toTerminate) {
+        ks_reachedWatchPoint.erase(s);
+        toTerminate.insert(s);
+    }
+
+    tmp_one_toTerminate.clear();
     for (auto m_it=ks_terminatedBeforeWP.begin(); 
-                                    m_it != ks_terminatedBeforeWP.end();) {
+                                    m_it != ks_terminatedBeforeWP.end();++m_it) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        tmp = m_it;
-        ++m_it;
-        toTerminate.insert(*tmp);
-        ks_terminatedBeforeWP.erase(*tmp);
-      } else {
-        ++m_it;
-      }
+        tmp_one_toTerminate.insert(*m_it);
+      } 
     }
+    for (auto *s: tmp_one_toTerminate) {
+        ks_terminatedBeforeWP.erase(s);
+        toTerminate.insert(s);
+    }
+
+    tmp_one_toTerminate.clear();
     for (auto m_it=ks_atPointPostMutation.begin(); 
-                                    m_it != ks_atPointPostMutation.end();) {
+                                    m_it != ks_atPointPostMutation.end();++m_it) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        tmp = m_it;
-        ++m_it;
-        toTerminate.insert(*tmp);
-        ks_atPointPostMutation.erase(*tmp);
-      } else {
-        ++m_it;
+        tmp_one_toTerminate.insert(*m_it);
       }
     }
+    for (auto *s: tmp_one_toTerminate) {
+        ks_atPointPostMutation.erase(s);
+        toTerminate.insert(s);
+    }
+
+    tmp_one_toTerminate.clear();
     for (auto m_it=ks_ongoingExecutionAtWP.begin(); 
-                                    m_it != ks_ongoingExecutionAtWP.end();) {
+                                    m_it != ks_ongoingExecutionAtWP.end();++m_it) {
       if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        tmp = m_it;
-        ++m_it;
-        toTerminate.insert(*tmp);
-        ks_ongoingExecutionAtWP.erase(*tmp);
-      } else {
-        ++m_it;
+        toTerminate.insert(*m_it);
       }
+    }
+    for (auto *s: tmp_one_toTerminate) {
+        ks_ongoingExecutionAtWP.erase(s);
+        toTerminate.insert(s);
     }
 
     std::vector<ExecutionState *> parStates;
