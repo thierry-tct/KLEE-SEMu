@@ -56,12 +56,14 @@ then
     cd - > /dev/null
 fi
 
+run_config=$(readlink -f ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd.cfg)
+
 # Run SEMU
 if true
 then
     echo "# RUNNING SEMU..."
     cd $semudir || error_exit "failed to enter semudir!"
-    SKIP_TASKS="" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd.cfg || error_exit "Semu Failed"
+    SKIP_TASKS="${SKIP_TASKS:-}" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_config || error_exit "Semu Failed"
     cd - > /dev/null
 fi
 
@@ -72,7 +74,19 @@ then
     echo "# RUNNING MFI additional..."
     cd $metadir || error_exit "cd $metadir 2"
     python ~/mytools/MFI-V2.0/utilities/navigator.py --setexecstate 5 . || error_exit "failed to set exec state to 5"
-    MFI_OVERRIDE_OUTPUT=$semudir/OUTPUT/TestGenFinalAggregatedPASS_100.0/mfirun_output MFI_OVERRIDE_MUTANTSLIST=$semudir/OUTPUT/TestGenFinalAggregatedPASS_100.0/mfirun_mutants_list.txt MFI_OVERRIDE_GENTESTSDIR=$semudir/OUTPUT/TestGenFinalAggregatedPASS_100.0/mfirun_ktests_dir ~/mytools/MFI-V2.0/MFI.sh "$projID"_conf-script.conf || error_exit "MFI Failed 2!"
+
+    sampl_mode=""
+    for tmp in 'PASS' 'KLEE' 'DEV' 'NUM'
+    do
+        if test -f $semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_mutants_list.txt
+        then
+            sampl_mode=$tmp
+            break
+        fi
+    done
+    [ "$sampl_mode" = "" ] && error_exit "maybe problem with gentest replaying: sampl_mode neither of PASS KLEE DEV NUM"
+
+    MFI_OVERRIDE_OUTPUT=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_output MFI_OVERRIDE_MUTANTSLIST=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_mutants_list.txt MFI_OVERRIDE_GENTESTSDIR=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_ktests_dir ~/mytools/MFI-V2.0/MFI.sh "$projID"_conf-script.conf || error_exit "MFI Failed 2!"
     cd - > /dev/null
 fi
 
@@ -81,7 +95,7 @@ if true
 then
     echo "# RUNNING Semu analyse..."
     cd $semudir || error_exit "failed to enter semudir 2!"
-    SKIP_TASKS="ZESTI_DEV_TASK TEST_GEN_TASK SEMU_EXECUTION COMPUTE_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd.cfg || error_exit "Semu Failed analyse"
+    SKIP_TASKS="ZESTI_DEV_TASK TEST_GEN_TASK SEMU_EXECUTION COMPUTE_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_config || error_exit "Semu Failed analyse"
     cd - > /dev/null
 fi
 
