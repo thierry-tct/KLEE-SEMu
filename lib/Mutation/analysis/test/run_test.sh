@@ -8,6 +8,8 @@
 # FROM_SEMU_EXECUTION=on   --> Execute this script from SEMU execution
 # MFIRUNSHADOW_VERBOSE=on  --> make klee test generation of MFI verbose
 # 
+#XXX INFO: In case there are some tests that fail with zesti and want to skip them,
+#XXX INFO: Just rerun passing the environment variable: SEMU_ZESTI_RUN_SKIP_FAILURE=on
 
 set -u
 

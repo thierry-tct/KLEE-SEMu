@@ -9,8 +9,8 @@
 # - The path to executable in project
 # - topDir for output (required)
 ########################
-#INFO: In case there are some tests that fail with zesti and want to skip them,
-#INFO: Just rerun passing the environment variable: SEMU_ZESTI_RUN_SKIP_FAILURE=on
+#XXX INFO: In case there are some tests that fail with zesti and want to skip them,
+#XXX INFO: Just rerun passing the environment variable: SEMU_ZESTI_RUN_SKIP_FAILURE=on
 
 import os, sys, stat
 import json, re
@@ -244,7 +244,7 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
         if nNew == nKleeOut:
             print ">> problem with command: "+ zestCmd
 
-            if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().ower == 'on' :
+            if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().lower() == 'on' :
                 # avoid failure by creating an invalid test that will be skipped
                 fix_dir = os.path.join(outpdir, "klee-out-"+str(nNew))
                 os.mkdir(fix_dir)
@@ -294,7 +294,7 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
                         shutil.copy2 (semuExecLog, os.path.join(kleeoutdir, 'test000001.ktest'))
 
             if len(glob.glob(kleeoutdir+'/*.ktest')) <= 0:
-                if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().ower == 'on' :
+                if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().lower() == 'on' :
                     with open(os.path.join(kleeoutdir, 'test000001.ktest'), 'w') as f:
                         f.write(">> There was a failure: "+"No ktest was generated for "+wrapTestName+". Folder is: "+kleeoutdir+". ZEST CMD: "+zestCmd+'\n')
                 else:
@@ -308,7 +308,7 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
             os.remove(semuExecLog)
     for wtc in devtests:
         if wtc not in test2outdirMap:
-            if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().ower == 'on' :
+            if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().lower() == 'on' :
                 # avoid failure by creating an invalid test that will be skipped
                 fix_dir = os.path.join(outpdir, "klee-out-"+str(nKleeOut))
                 os.mkdir(fix_dir)
@@ -1437,6 +1437,9 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
             kt_dirs.append(ktp)
     for ktp_dir in kt_dirs:
         fdupcmd = " ".join(["fdupes -1", ktp_dir, seeds_dir, ">",fdupesout])
+        if os.system(fdupcmd) != 0:
+            error_exit ("fdupes (with seeds) failed. cmd: "+fdupcmd)
+        assert os.path.isfile(fdupesout), "Fdupes failed to produce output"
         with open(fdupesout) as fp:
             for line in fp:
                 la = line.strip().split()
@@ -2126,14 +2129,24 @@ def main():
                             else:
                                 semuWasNotExecuted = True
                                 break
+                if semuWasNotExecuted:
+                    if os.path.isfile(mfi_mutants_list):
+                        os.remove(mfi_mutants_list)
+                    if os.path.isdir(mfi_ktests_dir_top):
+                        shutil.rmtree(mfi_ktests_dir_top)
+                    if os.path.isdir(mfi_execution_output):
+                        shutil.rmtree(mfi_execution_output)
 
             # Execute SEMU
-            if SEMU_EXECUTION in toExecute and semuWasNotExecuted: 
-                if martOut is not None:
-                    ret = executeSemu (semuoutputs, semuSeedsDir, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, exemode=executionMode) 
-                    if ret is not None:
-                        print '\n'+ret+'\n'
-                        return None
+            if SEMU_EXECUTION in toExecute:
+                if semuWasNotExecuted: 
+                    if martOut is not None:
+                        ret = executeSemu (semuoutputs, semuSeedsDir, kleeSemuInBCLink, list_candidateMutantsFiles, sym_args_param, semu_exe_dir, semuTuning, mergeThreadsDir=mergeSemuThreadsDir, exemode=executionMode) 
+                        if ret is not None:
+                            print '\n'+ret+'\n'
+                            return None
+                else:
+                    print '['+time.strftime("%c")+']', "# Semu was already executed (just reading) for ts_size:", ts_size, "; name: "+semuTuning['name'], "..."
 
             if executionMode == FilterHardToKill:
                 if len(thisOut_list) == 1 and os.path.isdir(mergeSemuThreadsDir): #only have one thread, only process that
@@ -2227,6 +2240,12 @@ def main():
             # Fdupes the seedDir.
             if os.system(" ".join(["fdupes -r -d -N", semuSeedsDir, '> /dev/null'])) != 0:
                 error_exit ("fdupes failed on semuSeedDir")
+
+            # In case of clean run, clean semuTuningList semuOutputsTop 
+            if not args.semucontinueunfinishedtunings:
+                for d in os.listdir(semuOutputsTop):
+                    if os.path.isdir(d):
+                        shutil.rmtree(d)
 
         # In the case of tests generation, add pure klee
         if executionMode == GenTestsToKill and not args.disable_pureklee:
