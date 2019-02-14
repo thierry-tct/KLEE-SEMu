@@ -2175,7 +2175,7 @@ def main():
                             assert not atMergeStage, "some semuoutputs are deleted but not "+semuoutput+". Must delete and rerun Semu Execution!"
 
                     if atMergeStage:
-                        print "# -- Already ready for merge in Test Gen Compute. Do nothing (for "+this_Out+')'
+                        print '['+time.strftime("%c")+']', "# -- Already ready for merge in Test Gen Compute. Do nothing (for "+this_Out+')'
                     else:
                         print '['+time.strftime("%c")+']', "# Compute task Procesing for test size", ts_size,  "; name: "+semuTuning['name'], "..."
                         if not os.path.isdir(this_Out):
@@ -2229,8 +2229,9 @@ def main():
             # In case of clean run, clean semuTuningList semuOutputsTop 
             if not args.semucontinueunfinishedtunings:
                 for d in os.listdir(semuOutputsTop):
-                    if os.path.isdir(d):
-                        shutil.rmtree(d)
+                    d_tmp = os.path.join(semuOutputsTop, d)
+                    if os.path.isdir(d_tmp):
+                        shutil.rmtree(d_tmp)
 
         # In the case of tests generation, add pure klee
         if executionMode == GenTestsToKill and not args.disable_pureklee:
