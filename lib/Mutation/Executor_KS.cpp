@@ -4740,6 +4740,9 @@ void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
     } else if (ks_atPointPostMutation.count(ces) > 0) {
       ks_terminatedBeforeWP.insert(ces);
       ks_atPointPostMutation.erase(ces);
+    } else if (ks_reachedOutEnv.count(ces) > 0) {
+      ks_terminatedBeforeWP.insert(ces);
+      ks_reachedOutEnv.erase(ces);
     }
   }
   if (ks_reachedWatchPoint.count(pes) > 0) {
@@ -4751,6 +4754,9 @@ void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
   } else if (ks_atPointPostMutation.count(pes) > 0) {
     ks_terminatedBeforeWP.insert(pes);
     ks_atPointPostMutation.erase(pes);
+  } else if (ks_reachedOutEnv.count(pes) > 0) {
+    ks_terminatedBeforeWP.insert(pes);
+    ks_reachedOutEnv.erase(pes);
   }
 }
 
