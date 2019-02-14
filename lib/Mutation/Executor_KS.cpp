@@ -4397,15 +4397,17 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
               }
             }
 
-            ks_max_mutant_id = std::max(ks_max_mutant_id, 
-                                    *std::max_element(tosCandIds.begin(), tosCandIds.end()));
-
             // modify the range and split by cloning and modifying
             // - Case when all mutants are not canditate: Delete the call instruction
             if (fromsCandIds.size() == 0) {
               calli->eraseFromParent();
             } else { 
               // - Case when at least one non candidate. make clones of call inst for other ranges
+
+              // update max mutant id              
+              ks_max_mutant_id = std::max(ks_max_mutant_id, 
+                                      *std::max_element(tosCandIds.begin(), tosCandIds.end()));
+
               for (auto i = 0u; i < fromsCandIds.size() - 1; ++i) {
                 auto *clonei = llvm::dyn_cast<llvm::CallInst>(calli->clone());
                 clonei->insertBefore(calli);
@@ -4713,17 +4715,23 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
     newParent->ks_childrenStates.insert(es->ks_childrenStates.begin(), es->ks_childrenStates.end());
     assert (newParent->ks_originalMutSisterStates == nullptr);
     newParent->ks_originalMutSisterStates = es->ks_originalMutSisterStates;
+
+    es->ks_originalMutSisterStates = nullptr;
+    es->ks_childrenStates.clear();
   }
 }
 
 void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
   // Verify
   if (pes->ks_mutantID > ks_max_mutant_id) {
-    llvm::errs() << "SEMU@error: Invalid mutant ID. Potential memory corruption (BUG)"
+    llvm::errs() << "\nSEMU@error: Invalid mutant ID. Potential memory corruption (BUG)"
                  << "The value must be no greater than " << ks_max_mutant_id
-                 << ", but got " << pes->ks_mutantID << "\n";
+                 << ", but got " << pes->ks_mutantID << "\n\n";
     assert(false);
   }
+
+  if (pes->ks_childrenStates.empty())
+    return;
 
   std::vector<ExecutionState *> children(pes->ks_childrenStates.begin(), pes->ks_childrenStates.end());
   for (ExecutionState *ces: children) {
@@ -4736,6 +4744,8 @@ void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::Sma
         
         ces->ks_childrenStates.erase(newparent);
         newparent->ks_childrenStates.insert(ces->ks_childrenStates.begin(), ces->ks_childrenStates.end());
+
+        ces->ks_childrenStates.clear();
       }
     }
   }
@@ -5619,6 +5629,9 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
 void Executor::ks_heuristicbasedContinueStates (std::vector<ExecutionState*> const &statelist,
                             std::vector<ExecutionState*> &toContinue,
                             std::vector<ExecutionState*> &toStop) {
+  if (statelist.empty())
+    return;
+
   // determine the number of mutants to continue
   assert(semuPostCheckpointMutantStateContinueProba >= 0.0 
         && semuPostCheckpointMutantStateContinueProba <= 1.0 
@@ -5926,7 +5939,9 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
       ks_fixTerminatedChildren(es, toTerminate);
     }
     for (auto *es: toTerminate) {
+      // FIXME: memory corruption the 
       terminateState(*es);
+      //ks_terminatedBeforeWP.insert(es);
     }
   }
 }
