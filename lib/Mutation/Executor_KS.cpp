@@ -4366,6 +4366,8 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
   if (cand_mut_ids.empty())
     return;
   
+  ks_max_mutant_id = 0;
+
   // XXX Fix both the mutant fork function for ID range and the switch
   for (auto &Func: *module) {
     for (auto &BB: Func) {
@@ -4394,6 +4396,9 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
                 lastIsCand = false;
               }
             }
+
+            ks_max_mutant_id = std::max(ks_max_mutant_id, 
+                                    *std::max_element(tosCandIds.begin(), tosCandIds.end()));
 
             // modify the range and split by cloning and modifying
             // - Case when all mutants are not canditate: Delete the call instruction
@@ -4712,6 +4717,14 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
 }
 
 void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
+  // Verify
+  if (pes->ks_mutantID > ks_max_mutant_id) {
+    llvm::errs() << "SEMU@error: Invalid mutant ID. Potential memory corruption (BUG)"
+                 << "The value must be no greater than " << ks_max_mutant_id
+                 << ", but got " << pes->ks_mutantID << "\n";
+    assert(false);
+  }
+
   std::vector<ExecutionState *> children(pes->ks_childrenStates.begin(), pes->ks_childrenStates.end());
   for (ExecutionState *ces: children) {
     ks_fixTerminatedChildrenRecursive(ces, toremove);
@@ -4884,7 +4897,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
     //remainStates.clear();
     //remainStates.insert(remainStates.begin(), ks_reachedOutEnv.begin(), ks_reachedOutEnv.end());
 
-      // We reached Checkpoint, terminate all mutant states so far and keep originals
+      // We reached Checkpoint, terminate all mutant states so far (originals are never in reached Checkpoint)
       for (auto *s: ks_reachedWatchPoint) {
         //if (s->ks_mutantID == 0)
           //remainStates.push_back(s);

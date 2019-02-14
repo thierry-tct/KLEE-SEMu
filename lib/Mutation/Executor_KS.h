@@ -576,6 +576,9 @@ private:
   // Used by strategy that prioritize the mutants states closer to the output
   static std::map<llvm::Instruction*, unsigned> ks_instruction2closestout_distance;
 
+  // will be set to the maximum mutant id when FilterMutants
+  ExecutionState::KS_MutantIDType ks_max_mutant_id=0;
+
 #ifdef KS_Z3MAXSAT_SOLVER__H
   // Partial Max Sat Solver
   // Make this with cache
