@@ -1721,6 +1721,7 @@ def main():
     parser.add_argument("--semutestgenonlycriticaldiffs", action="store_true", help="Enable only critical diff when test generated")
     parser.add_argument("--semuloopbreaktimeout", type=float, default=120.0, help="Specify the timeout delay for ech mutant execution on a test case (estimation), to avoid inifite loop")
     parser.add_argument("--nummaxparallel", type=int, default=50, help="Specify the number of parallel executions (the mutants will be shared accross at most this number of treads for SEMU)")
+    parser.add_argument("--by_function_parallelism", action="store_true", help="Enable parallelism by function. (mutants of different functions are explored in parallel)")
     parser.add_argument("--disable_pureklee", action="store_true", help="Disable doing computation for pureklee")
     parser.add_argument("--fixedmutantnumbertarget", type=str, default=ALIVE_ALL, help="Specify the how the mutants to terget are set (<mode>[:<#Mutants>]): "+str(FIXED_MUTANT_NUMBER_STRATEGIES))
     parser.add_argument("--semucontinueunfinishedtunings", action="store_true", help="enable reusing previous semu execution and computation result (if available). Useful when execution fail for some tunings and we do not want to reexecute other completed tunings")
@@ -2060,7 +2061,7 @@ def main():
         if len(groundConsideredMutant_covtests) < 1:
             error_exit ("error(done): No mutant Left to analyze")
 
-        paraAssign = assignSemuJobs(afterFuncFilter_byfunc, args.nummaxparallel)
+        paraAssign = assignSemuJobs(afterFuncFilter_byfunc, args.nummaxparallel if args.by_function_parallelism else 1)
         for pj in paraAssign:
             pjs = set(pj)
             list_groundConsideredMutant_covtests.append({mid: groundConsideredMutant_covtests[mid] for mid in groundConsideredMutant_covtests if mid in pjs})
