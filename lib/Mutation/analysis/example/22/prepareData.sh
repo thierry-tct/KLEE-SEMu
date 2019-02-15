@@ -10,11 +10,14 @@ error_exit()
     exit 1
 }
 
+enable_zesti=true
+
 if [ $# = 3 ]
 then
     semuconfigfile=$3
     test -f $semuconfigfile || error_exit "$semuconfigfile not found"
     source $semuconfigfile
+    [ "SEMU_CFG_TEST_SAMPLE_MODE" = "KLEE" ] && enable_zesti=false
     llvm_compiler_path=$SEMU_CFG_LLVM27_EXE_DIR
     llvm_gcc_path=$SEMU_CFG_LLVMGCC_EXE_DIR
 else
@@ -25,7 +28,8 @@ fi
 
 confscript=$(readlink -f $1)
 destTopDir=$(readlink -f $2)
-zest=1
+compile_zest=1
+[ $enable_zesti = false ]  && compile_zest=0
 
 # load conf
 cd $(dirname $confscript)
@@ -38,7 +42,7 @@ indatadir=$(dirname $confscript)/$MFI_ID-output/data
 projOut=$destTopDir/$MFI_ID
 test -d $projOut && error_exit "already processed $projOut. Delete manually for redo"
 
-if [ "$zest" = "1" ]
+if [ "$compile_zest" = "1" ]
 then
     # COMPILE Project with llvm-2.7 and save with Zesti
     echo "Building fo Zesti BC ..."

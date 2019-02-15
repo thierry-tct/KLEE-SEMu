@@ -30,6 +30,8 @@ semudir=$topdir/SEMU_EXECUTION/$projID
 
 export MART_BINARY_DIR=$(readlink -f ~/mytools/mart/build/tools)
 
+run_semu_config=$(readlink -f ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd.cfg)
+
 # run MFI
 if [ "${FROM_SEMU_EXECUTION:-}" != "on" ] #true 
 then
@@ -52,18 +54,16 @@ then
         echo "## Removing existing dir..."
         rm -rf $projID
     fi
-    bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/prepareData.sh $metadir/"$projID"_conf-script.conf . || error_exit "Prepare for semu failed!"
+    bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/prepareData.sh $metadir/"$projID"_conf-script.conf . $run_semu_config || error_exit "Prepare for semu failed!"
     cd - > /dev/null
 fi
-
-run_config=$(readlink -f ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd.cfg)
 
 # Run SEMU
 if true
 then
     echo "# RUNNING SEMU..."
     cd $semudir || error_exit "failed to enter semudir!"
-    SKIP_TASKS="${SKIP_TASKS:-}" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_config || error_exit "Semu Failed"
+    SKIP_TASKS="${SKIP_TASKS:-}" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config || error_exit "Semu Failed"
     cd - > /dev/null
 fi
 
@@ -95,7 +95,7 @@ if true
 then
     echo "# RUNNING Semu analyse..."
     cd $semudir || error_exit "failed to enter semudir 2!"
-    SKIP_TASKS="ZESTI_DEV_TASK TEST_GEN_TASK SEMU_EXECUTION COMPUTE_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_config || error_exit "Semu Failed analyse"
+    SKIP_TASKS="ZESTI_DEV_TASK TEST_GEN_TASK SEMU_EXECUTION COMPUTE_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config || error_exit "Semu Failed analyse"
     cd - > /dev/null
 fi
 
