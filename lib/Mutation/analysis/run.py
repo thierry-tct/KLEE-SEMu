@@ -1894,7 +1894,13 @@ def main():
             os.mkdir(zestioutdir)
 
             unused, alltestsObj, unwrapped_testlist = getTestSamples(testList, 0, matrix)   # 0 to not sample
-            test2zestidirMap = runZestiOrSemuTC (unwrapped_testlist, alltestsObj['DEVTESTS'], exePath, runtestScript, inBCFilePath, zestioutdir, zesti_exe_dir, llvmgcc_exe_dir, llvm27_exe_dir) #, mode=runMode) #mode can also be "semuTC"
+
+            if testSampleMode in ['DEV', 'NUM', 'PASS']:
+                test2zestidirMap = runZestiOrSemuTC (unwrapped_testlist, alltestsObj['DEVTESTS'], exePath, runtestScript, inBCFilePath, zestioutdir, zesti_exe_dir, llvmgcc_exe_dir, llvm27_exe_dir) #, mode=runMode) #mode can also be "semuTC"
+            else:
+                # No need to run zesti on KLEE only mode
+                test2zestidirMap = {}
+
             dumpJson(stripRootTest2Dir(outDir, test2zestidirMap), test2zestidirMapFile)
 
             # Compress zestioutdir and delete the directory, keeping only the tar.gz file
