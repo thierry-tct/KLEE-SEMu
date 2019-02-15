@@ -17,7 +17,7 @@ then
     semuconfigfile=$3
     test -f $semuconfigfile || error_exit "$semuconfigfile not found"
     source $semuconfigfile
-    [ "SEMU_CFG_TEST_SAMPLE_MODE" = "KLEE" ] && enable_zesti=false
+    [ "$SEMU_CFG_TEST_SAMPLE_MODE" = "KLEE" ] && enable_zesti=false
     llvm_compiler_path=$SEMU_CFG_LLVM27_EXE_DIR
     llvm_gcc_path=$SEMU_CFG_LLVMGCC_EXE_DIR
 else

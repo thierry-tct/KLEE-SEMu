@@ -168,6 +168,9 @@ def processMatrix (matrix, testSample, outname, candMutants_covTests, thisOutDir
 def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, kleeZestiSemuInBCLink, outpdir, zestiexedir, llvmgcc_exe_dir, llvm27_exe_dir): #, mode="zesti+symbex"):
     test2outdirMap = {}
 
+    if not os.path.isfile(kleeZestiSemuInBCLink):
+        error_exit("Error: Zesti .bc file is missing. maybe should rerun 'prepare'. missing file is: "+kleeZestiSemuInBCLink)
+
     # copy bc
     kleeZestiSemuInBC = os.path.basename(kleeZestiSemuInBCLink) 
     #if mode == "zesti+symbex":
