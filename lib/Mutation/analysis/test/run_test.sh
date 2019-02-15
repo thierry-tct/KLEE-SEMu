@@ -78,7 +78,7 @@ then
     sampl_mode=""
     for tmp in 'PASS' 'KLEE' 'DEV' 'NUM'
     do
-        if test -f $semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_mutants_list.txt
+        if test -f $semudir/OUTPUT/TestGenFinalAggregated"$tmp"_100.0/mfirun_mutants_list.txt
         then
             sampl_mode=$tmp
             break
