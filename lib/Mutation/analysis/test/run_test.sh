@@ -5,11 +5,14 @@
 #
 # Env vars:
 # DO_CLEANSTART=on         --> apply cleanstart on MFI to start everything over
-# FROM_SEMU_EXECUTION=on   --> Execute this script from SEMU execution
+# FROM_EXECUTION=SEMU   --> Execute this script from given execution: [PREPARE, SEMU, REPLAY, REPORT]
 # MFIRUNSHADOW_VERBOSE=on  --> make klee test generation of MFI verbose
 # 
 #XXX INFO: In case there are some tests that fail with zesti and want to skip them,
 #XXX INFO: Just rerun passing the environment variable: SEMU_ZESTI_RUN_SKIP_FAILURE=on
+
+# While debugging semu, if some fail and we do not want to rerun then but only run those that fail,
+# pass this Extra arg as env var:  EXTRA_ARGS="--semucontinueunfinishedtunings"
 
 set -u
 
@@ -32,8 +35,24 @@ export MART_BINARY_DIR=$(readlink -f ~/mytools/mart/build/tools)
 
 run_semu_config=$(readlink -f ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd.cfg)
 
+from_exec=0
+if [ "${FROM_EXECUTION:-}" != "" ]
+then
+    if [ "$FROM_EXECUTION" = "PREPARE" ]; then
+        from_exec=1
+    elif [ "$FROM_EXECUTION" = "SEMU" ]; then
+        from_exec=2
+    elif [ "$FROM_EXECUTION" = "REPLAY" ]; then
+        from_exec=3
+    elif [ "$FROM_EXECUTION" = "REPORT" ]; then
+        from_exec=4
+    else
+        error_exit "Invalid FROM_EXECUTION value: '$FROM_EXECUTION'"
+    fi
+fi
+
 # run MFI
-if [ "${FROM_SEMU_EXECUTION:-}" != "on" ] #true 
+if [ $from_exec -le 0 ] #true 
 then
     cleanstart=""
     [ "${DO_CLEANSTART:-}" = "on" ] && cleanstart=cleanstart
@@ -44,8 +63,7 @@ then
 fi
 
 # Prepare for SEMU
-if [ "${FROM_SEMU_EXECUTION:-}" != "on" ] #true 
-#if false
+if [ $from_exec -le 1 ] #true 
 then
     echo "# RUNNING prepareData..."
     cd $(dirname $semudir) || error_exit "failed entering semudir parent!"
@@ -59,7 +77,7 @@ then
 fi
 
 # Run SEMU
-if true
+if [ $from_exec -le 2 ] #true 
 then
     echo "# RUNNING SEMU..."
     cd $semudir || error_exit "failed to enter semudir!"
@@ -69,7 +87,7 @@ fi
 
 # ---------- RUN additional generated tests and analyse
 # run additional
-if true
+if [ $from_exec -le 3 ] #true 
 then
     echo "# RUNNING MFI additional..."
     cd $metadir || error_exit "cd $metadir 2"
@@ -91,7 +109,7 @@ then
 fi
 
 # Analyse
-if true
+if [ $from_exec -le 4 ] #true 
 then
     echo "# RUNNING Semu analyse..."
     cd $semudir || error_exit "failed to enter semudir 2!"
