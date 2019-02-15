@@ -2070,7 +2070,7 @@ def main():
 
         minMutNum = 10 if executionMode == FilterHardToKill else 1
 
-        assert sum([len(x) for x in list_groundConsideredMutant_covtests]) > minMutNum, " ".join(["We have only", str(sum([len(x) for x in list_groundConsideredMutant_covtests])), "mutants fullfiling testcover treshhold",str(covTestThresh),"(Expected >= "+str(minMutNum)+")"])
+        assert sum([len(x) for x in list_groundConsideredMutant_covtests]) >=  minMutNum, " ".join(["We have only", str(sum([len(x) for x in list_groundConsideredMutant_covtests])), "mutants fullfiling testcover treshhold",str(covTestThresh),"(Expected >= "+str(minMutNum)+")"])
         list_candidateMutantsFiles = []
         for th_id, mcd in enumerate(list_groundConsideredMutant_covtests):
             candidateMutantsFile = os.path.join(cacheDir, "candidateMutants_"+str(th_id)+".list")

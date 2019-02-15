@@ -4724,8 +4724,8 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
 void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
   // Verify
   if (pes->ks_mutantID > ks_max_mutant_id) {
-    llvm::errs() << "\nSEMU@error: Invalid mutant ID. Potential memory corruption (BUG)"
-                 << "The value must be no greater than " << ks_max_mutant_id
+    llvm::errs() << "\nSEMU@error: Invalid mutant ID. Potential memory corruption (BUG)."
+                 << " The value must be no greater than " << ks_max_mutant_id
                  << ", but got " << pes->ks_mutantID << "\n\n";
     assert(false);
   }
