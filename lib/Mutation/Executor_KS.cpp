@@ -4745,6 +4745,7 @@ void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::Sma
         ces->ks_childrenStates.erase(newparent);
         newparent->ks_childrenStates.insert(ces->ks_childrenStates.begin(), ces->ks_childrenStates.end());
 
+        ces->ks_originalMutSisterStates = nullptr;
         ces->ks_childrenStates.clear();
       }
     }
@@ -4786,6 +4787,11 @@ void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
 void Executor::ks_getMutParentStates(std::vector<ExecutionState *> &mutParentStates) {
   mutParentStates.clear();
   //TODO TODO: Make efficient
+  for(ExecutionState *es: states) {
+    if (es->ks_originalMutSisterStates != nullptr)
+      mutParentStates.push_back(es);
+  }
+  /*
   for(ExecutionState *es: ks_atPointPostMutation) {
     if (es->ks_originalMutSisterStates != nullptr)
       mutParentStates.push_back(es);
@@ -4806,6 +4812,14 @@ void Executor::ks_getMutParentStates(std::vector<ExecutionState *> &mutParentSta
     if (es->ks_originalMutSisterStates != nullptr)
       mutParentStates.push_back(es);
   }
+  for(ExecutionState *es: addedStates) {
+    if (es->ks_originalMutSisterStates != nullptr)
+      mutParentStates.push_back(es);
+  }
+  for(ExecutionState *es: removedStates) {
+    if (es->ks_originalMutSisterStates != nullptr)
+      mutParentStates.push_back(es);
+  }*/
 }
 
 void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly, bool postMutOnly) {
@@ -5872,8 +5886,10 @@ void Executor::ks_applyMutantSearchStrategy() {
 void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
   std::set<ExecutionState::KS_MutantIDType> reached_max_tg;
   for (auto mp: mutants2gentestsNum)
-    if (mp.second >= semuMaxNumTestGenPerMutant)
+    if (mp.second >= semuMaxNumTestGenPerMutant) {
+      assert (mp.first > 0 && "Original must not be found here (BUG)");
       reached_max_tg.insert(mp.first);
+    }
 
   if (reached_max_tg.size() > 0) {
     llvm::SmallPtrSet<ExecutionState *, 5> toTerminate;
