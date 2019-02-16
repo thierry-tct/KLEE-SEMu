@@ -5426,7 +5426,8 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       ks_justTerminatedStates.clear();
     }
 
-    // Put this here to make sure that any newly added state is considered (addesStates and removedStates are empty after)
+    // Put this here to make sure that any newly added state are considered 
+    // (addesStates and removedStates are empty after)
     updateStates(0);
 
     // Remove addedNdeleted form both searcher and seedMap
@@ -5461,9 +5462,9 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
 
         // Make sure that on test gen mode, the mutants that reached maximum
         // generated tests are removed
-        if (ks_outputTestsCases) {
-          ks_eliminateMutantStatesWithMaxTests();
-        }
+        /*if (ks_outputTestsCases) {
+          ks_eliminateMutantStatesWithMaxTests(true);
+        }*/
 
         std::vector<ExecutionState *> remainWPStates;
         ks_checkID++;
@@ -5577,6 +5578,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           }
           // Clear
           ks_reachedOutEnv.clear();
+        }
+
+        // Make sure that on test gen mode, the mutants that reached maximum
+        // generated tests are removed
+        if (ks_outputTestsCases) {
+          ks_eliminateMutantStatesWithMaxTests(false);
         }
 
         // add all terminated states to the searcher so that update won't assert that the states are not in searcher
@@ -5862,7 +5869,7 @@ void Executor::ks_applyMutantSearchStrategy() {
   }
 }
 
-void Executor::ks_eliminateMutantStatesWithMaxTests() {
+void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
   std::set<ExecutionState::KS_MutantIDType> reached_max_tg;
   for (auto mp: mutants2gentestsNum)
     if (mp.second >= semuMaxNumTestGenPerMutant)
@@ -5871,63 +5878,80 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
   if (reached_max_tg.size() > 0) {
     llvm::SmallPtrSet<ExecutionState *, 5> toTerminate;
     llvm::SmallPtrSet<ExecutionState *, 5> tmp_one_toTerminate;
-    for (auto m_it=ks_reachedOutEnv.begin(); 
-                                    m_it != ks_reachedOutEnv.end();++m_it) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        tmp_one_toTerminate.insert(*m_it);
-      } 
-    }
-    for (auto *s: tmp_one_toTerminate) {
+
+    if (pre_compare) {
+      for (auto m_it=ks_reachedOutEnv.begin(); 
+                                      m_it != ks_reachedOutEnv.end();++m_it) {
+        if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
+          tmp_one_toTerminate.insert(*m_it);
+        } 
+      }
+      for (auto *s: tmp_one_toTerminate) {
         ks_reachedOutEnv.erase(s);
         toTerminate.insert(s);
-    }
+      }
 
-    tmp_one_toTerminate.clear();
-    for (auto m_it=ks_reachedWatchPoint.begin(); 
-                                    m_it != ks_reachedWatchPoint.end();++m_it) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        tmp_one_toTerminate.insert(*m_it);
-      } 
-    }
-    for (auto *s: tmp_one_toTerminate) {
+      tmp_one_toTerminate.clear();
+      for (auto m_it=ks_reachedWatchPoint.begin(); 
+                                      m_it != ks_reachedWatchPoint.end();++m_it) {
+        if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
+          tmp_one_toTerminate.insert(*m_it);
+        } 
+      }
+      for (auto *s: tmp_one_toTerminate) {
         ks_reachedWatchPoint.erase(s);
         toTerminate.insert(s);
-    }
+      }
 
-    tmp_one_toTerminate.clear();
-    for (auto m_it=ks_terminatedBeforeWP.begin(); 
-                                    m_it != ks_terminatedBeforeWP.end();++m_it) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        tmp_one_toTerminate.insert(*m_it);
-      } 
-    }
-    for (auto *s: tmp_one_toTerminate) {
+      tmp_one_toTerminate.clear();
+      for (auto m_it=ks_terminatedBeforeWP.begin(); 
+                                      m_it != ks_terminatedBeforeWP.end();++m_it) {
+        if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
+          tmp_one_toTerminate.insert(*m_it);
+        } 
+      }
+      for (auto *s: tmp_one_toTerminate) {
         ks_terminatedBeforeWP.erase(s);
         toTerminate.insert(s);
-    }
-
-    tmp_one_toTerminate.clear();
-    for (auto m_it=ks_atPointPostMutation.begin(); 
-                                    m_it != ks_atPointPostMutation.end();++m_it) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        tmp_one_toTerminate.insert(*m_it);
       }
-    }
-    for (auto *s: tmp_one_toTerminate) {
+
+      tmp_one_toTerminate.clear();
+      for (auto m_it=ks_atPointPostMutation.begin(); 
+                                      m_it != ks_atPointPostMutation.end();++m_it) {
+        if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
+          tmp_one_toTerminate.insert(*m_it);
+        }
+      }
+      for (auto *s: tmp_one_toTerminate) {
         ks_atPointPostMutation.erase(s);
         toTerminate.insert(s);
-    }
-
-    tmp_one_toTerminate.clear();
-    for (auto m_it=ks_ongoingExecutionAtWP.begin(); 
-                                    m_it != ks_ongoingExecutionAtWP.end();++m_it) {
-      if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-        toTerminate.insert(*m_it);
       }
-    }
-    for (auto *s: tmp_one_toTerminate) {
+
+      tmp_one_toTerminate.clear();
+      for (auto m_it=ks_ongoingExecutionAtWP.begin(); 
+                                      m_it != ks_ongoingExecutionAtWP.end();++m_it) {
+        if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
+          toTerminate.insert(*m_it);
+        }
+      }
+      for (auto *s: tmp_one_toTerminate) {
         ks_ongoingExecutionAtWP.erase(s);
         toTerminate.insert(s);
+      }
+    } else {
+      tmp_one_toTerminate.clear();
+      for (auto m_it=addedStates.begin(); 
+                                      m_it != addedStates.end();++m_it) {
+        if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
+          toTerminate.insert(*m_it);
+        }
+      }
+      for (auto *s: tmp_one_toTerminate) {
+        std::vector<ExecutionState *>::iterator it =
+              std::find(addedStates.begin(), addedStates.end(), s);
+        addedStates.erase(it);
+        toTerminate.insert(s);
+      }
     }
 
     std::vector<ExecutionState *> parStates;
@@ -5949,8 +5973,7 @@ void Executor::ks_eliminateMutantStatesWithMaxTests() {
 /**/
 // This function is called when running Under Const
 bool Executor::ks_lazyInitialize (ExecutionState &state, KInstruction *ki) {
-
-return true;
+  return true;
 }
 
 //~KS
@@ -5959,5 +5982,5 @@ return true;
 
 Interpreter *Interpreter::create(const InterpreterOptions &opts,
                            InterpreterHandler *ih) {
-return new Executor(opts, ih);
+  return new Executor(opts, ih);
 }
