@@ -3056,7 +3056,8 @@ void Executor::run(ExecutionState &initialState) {
   //#endif
       }
       //~KS
-
+if (TMPTMPTMP_TCT.count(&state)){llvm::errs() << "\nHUMMMM-seed!!!!!!!\n\n"; assert(false);}
+    
       stepInstruction(state);
 
       executeInstruction(state, ki);
@@ -3159,6 +3160,7 @@ void Executor::run(ExecutionState &initialState) {
 //#endif
     //~KS
     
+if (TMPTMPTMP_TCT.count(&state)){llvm::errs() << "\nHUMMMM-post!!!!!!!\n\n"; assert(false);}
     stepInstruction(state);
 
     executeInstruction(state, ki);
@@ -5987,8 +5989,9 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
     for (auto *es: toTerminate) {
       // FIXME: memory corruption the 
       //es->pc = es->prevPC;
-      //terminateState(*es);
-      ks_terminatedBeforeWP.insert(es);
+      terminateState(*es);
+      TMPTMPTMP_TCT.insert(es);
+      //ks_terminatedBeforeWP.insert(es);
     }
   }
 }
