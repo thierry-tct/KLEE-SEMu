@@ -2896,8 +2896,10 @@ void Executor::doDumpStates() {
     std::vector<ExecutionState *> remainWPStates;
     ks_checkID++;
     ks_compareStates(remainWPStates); // TODO TODO: modify comparestates to take account of the fact that some states may not have reached the watchpoint
-    for (auto *s: remainWPStates)
+    for (auto *s: remainWPStates) {
+      s->pc = s->prevPC;
       terminateState (*s);
+    }
     return; // do not do the real dumpStates
   }
   //~KS
@@ -4957,8 +4959,10 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       ks_numberOfMutantStatesDiscardedAtMutationPoint += toremove.size();
 
       // terminate the state in toremove
-      for (auto *s: toremove)
+      for (auto *s: toremove) {
+        s->pc = s->prevPC;
         terminateState(*s);
+      }
 
       remainStates.clear();
       remainStates.insert(remainStates.begin(), originals.begin(), originals.end());
@@ -5562,6 +5566,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           if (!ks_isAtPostMut) {
             for (SmallPtrSet<ExecutionState *, 5>::iterator it = ks_terminatedBeforeWP.begin(), 
                   ie = ks_terminatedBeforeWP.end(); it != ie; ++it ) {
+              (*it)->pc = (*it)->prevPC;
               terminateState (**it);
             }
             // Clear
@@ -5879,6 +5884,7 @@ void Executor::ks_applyMutantSearchStrategy() {
     ks_fixTerminatedChildren(es, toTerminate);
   }
   for (auto *es: toTerminate) {
+    es->pc = es->prevPC;
     terminateState(*es);
   }
 }
@@ -5980,6 +5986,7 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
     }
     for (auto *es: toTerminate) {
       // FIXME: memory corruption the 
+      es->pc = es->prevPC;
       terminateState(*es);
       //ks_terminatedBeforeWP.insert(es);
     }
