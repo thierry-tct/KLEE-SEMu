@@ -550,8 +550,6 @@ private:
   llvm::SmallPtrSet<ExecutionState *, 5> ks_ongoingExecutionAtWP;
 
   llvm::SmallPtrSet<ExecutionState *, 5> ks_justTerminatedStates;
-  llvm::SmallPtrSet<ExecutionState *, 5> TMPTMPTMP_TCT;
-  
 
   llvm::Function * ks_entryFunction;
   

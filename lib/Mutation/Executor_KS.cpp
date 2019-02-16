@@ -3056,8 +3056,7 @@ void Executor::run(ExecutionState &initialState) {
   //#endif
       }
       //~KS
-if (TMPTMPTMP_TCT.count(&state)){llvm::errs() << "\nHUMMMM-seed!!!!!!!\n\n"; assert(false);}
-    
+
       stepInstruction(state);
 
       executeInstruction(state, ki);
@@ -3160,7 +3159,6 @@ if (TMPTMPTMP_TCT.count(&state)){llvm::errs() << "\nHUMMMM-seed!!!!!!!\n\n"; ass
 //#endif
     //~KS
     
-if (TMPTMPTMP_TCT.count(&state)){llvm::errs() << "\nHUMMMM-post!!!!!!!\n\n"; assert(false);}
     stepInstruction(state);
 
     executeInstruction(state, ki);
@@ -5901,9 +5899,9 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
 
   if (reached_max_tg.size() > 0) {
     llvm::SmallPtrSet<ExecutionState *, 5> toTerminate;
-    llvm::SmallPtrSet<ExecutionState *, 5> tmp_one_toTerminate;
-
     if (pre_compare) {
+      llvm::SmallPtrSet<ExecutionState *, 5> tmp_one_toTerminate;
+      tmp_one_toTerminate.clear();
       for (auto m_it=ks_reachedOutEnv.begin(); 
                                       m_it != ks_reachedOutEnv.end();++m_it) {
         if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
@@ -5955,7 +5953,7 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
       for (auto m_it=ks_ongoingExecutionAtWP.begin(); 
                                       m_it != ks_ongoingExecutionAtWP.end();++m_it) {
         if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-          toTerminate.insert(*m_it);
+          tmp_one_toTerminate.insert(*m_it);
         }
       }
       for (auto *s: tmp_one_toTerminate) {
@@ -5963,11 +5961,11 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
         toTerminate.insert(s);
       }
     } else {
-      tmp_one_toTerminate.clear();
+      llvm::SmallPtrSet<ExecutionState *, 5> tmp_one_toTerminate;
       for (auto m_it=addedStates.begin(); 
                                       m_it != addedStates.end();++m_it) {
         if (reached_max_tg.count((*m_it)->ks_mutantID) > 0) {
-          toTerminate.insert(*m_it);
+          tmp_one_toTerminate.insert(*m_it);
         }
       }
       for (auto *s: tmp_one_toTerminate) {
@@ -5990,7 +5988,6 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
       // FIXME: memory corruption the 
       //es->pc = es->prevPC;
       terminateState(*es);
-      TMPTMPTMP_TCT.insert(es);
       //ks_terminatedBeforeWP.insert(es);
     }
   }
