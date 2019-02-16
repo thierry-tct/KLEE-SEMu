@@ -103,7 +103,7 @@ then
     extraargs+=" --semutestgenonlycriticaldiffs"
 fi
 
-python $ScriptDir/run.py $outtopdir $skipargs $extraargs \
+python -u $ScriptDir/run.py $outtopdir $skipargs $extraargs \
 $klee_tests_topdir \
 --exepath $(readlink -f $MFI_EXEDIR/$MFI_PROGRAM) \
 --runtest $MFI_RUNTESTSCRIPT \

@@ -64,6 +64,71 @@ def dumpJson (data, filename):
     with open(filename, 'w') as f:
         json.dump(data, f)
 
+def ktest_fdupes(*args):
+    """
+    The function compute the fdupes of the klee ktest directories 
+    and ktest files given as arguments. 
+    It requires that the files and directories passed as arguments exist
+
+    :param *args: each argument is either a file or a directory that exists
+
+    :return: returns two values: 
+            - The first is a python list of tuples is returned. 
+                each tuple represent files duplicates with each 
+                other and rank by their age (modified time) the oldest 
+                first (earliest modified to latest modified).
+            - The second is the list of files that are not valid
+                ktest files.
+    """
+    ret_fdupes = []
+    invalid = []
+    file_set = set()
+    for file_dir in args:
+        if os.path.isfile(file_dir):
+            file_set.add(file_dir)
+        elif os.path.isdir(file_dir):
+            # get ktest files recursively
+            for root, directories, filenames in os.walk(file_dir):
+                for filename in filenames:
+                    file_set.add(os.path.join(root, filename))
+        else:
+            error_exit("Invalid file or dir passed (inexistant): "+file_dir)
+
+    # apply fdupes: load all ktests and strip the non uniform data 
+    # (.bc file used) then compare the remaining data
+    kt2used_dat = {}
+    for kf in file_set:
+        try:
+            b = ktest_tool.KTest.fromfile(kf)
+            kt2used_dat[kf] = (b.args[1:], b.objects)
+        except:
+            invalid.append(kf)
+        
+    # do fdupes
+    dup_dict = {} 
+    keys = kt2used_dat.keys()
+    for ktest_file in keys:
+        ktest_file_dat = kt2used_dat[ktest_file]
+        del kt2used_dat[ktest_file]
+        for other_file in kt2used_dat:
+            if kt2used_dat[other_file] == ktest_file_dat:
+                if ktest_file not in dup_dict:
+                    dup_dict[ktest_file] = []
+                dup_dict[ktest_file].append(other_file)
+        if ktest_file in dup_dict:
+            for dup_of_kt_file in dup_dict[ktest_file]:
+                del kt2used_dat[dup_of_kt_file]
+
+    # Finilize
+    for ktest_file in dup_dict:
+        tmp = [ktest_file] + dup_dict[ktest_file]
+        # sort by decreasing modified age
+        tmp.sort(key=lambda x: os.path.getmtime(x))
+        ret_fdupes.append(tuple(tmp))
+
+    return ret_fdupes, invalid
+#~ def ktest_fdupes()
+
 '''
 def compressDir (inDir, out_tar_filename=None, remove_inDir=False):
     if out_tar_filename is None:
@@ -1412,37 +1477,32 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
                   
     # Use fdupes across the dirs in semuoutputs to remove duplicates and update test infos
     seed_dup_kts = []
-    fdupesout = mfi_ktests_dir+".tmp"
-    fdupcmd = " ".join(["fdupes -1"]+semuoutputs+[seeds_dir]+[">",fdupesout])
-    if os.system(fdupcmd) != 0:
-        error_exit ("fdupes failed. cmd: "+fdupcmd)
-    assert os.path.isfile(fdupesout), "Fdupes failed to produce output"
-    with open(fdupesout) as fp:
-        for line in fp:
-            la = line.strip().split()
-            #assert la[0] not in dupmap, "fdupe line: "+la[0]+", is not in dupmap: "+str(dupmap)
-            val_in_ktd = []
-            val_in_seed = []
-            for ii in range(len(la)):
-                if la[ii].endswith('.ktest'):
-                    if os.path.abspath(seeds_dir) == os.path.dirname(os.path.abspath(la[ii])):
-                        val_in_seed.append(la[ii])
-                    else:
-                        val_in_ktd.append(la[ii])
-            if len(val_in_seed) > 0:
-                seed_dup_kts += val_in_ktd
-                # discard tests dup of seeds
-                for dpkt in val_in_ktd:
+    dup_result, non_kt_files = ktest_fdupes(seeds_dir, *semuoutputs)
+    for la in dup_result:
+        la = dline.strip().split()
+        #assert la[0] not in dupmap, "fdupe line: "+la[0]+", is not in dupmap: "+str(dupmap)
+        val_in_ktd = []
+        val_in_seed = []
+        for ii in range(len(la)):
+            if la[ii].endswith('.ktest'):
+                if os.path.abspath(seeds_dir) == os.path.dirname(os.path.abspath(la[ii])):
+                    val_in_seed.append(la[ii])
+                else:
+                    val_in_ktd.append(la[ii])
+        if len(val_in_seed) > 0:
+            seed_dup_kts += val_in_ktd
+            # discard tests dup of seeds
+            for dpkt in val_in_ktd:
+                del ktests[dpkt]
+        else:
+            if len(val_in_ktd) > 0:
+                remain = val_in_ktd[0]
+                dups = val_in_ktd[1:]
+                assert remain in ktests, "remain not in ktests. remain is "+remain
+                for dpkt in dups:
+                    ktests[remain] += ktests[dpkt]
                     del ktests[dpkt]
-            else:
-                if len(val_in_ktd) > 0:
-                    remain = val_in_ktd[0]
-                    dups = val_in_ktd[1:]
-                    assert remain in ktests, "remain not in ktests. remain is "+remain
-                    for dpkt in dups:
-                        ktests[remain] += ktests[dpkt]
-                        del ktests[dpkt]
-    os.remove(fdupesout)
+    
     for ktp in ktests:
         ktests[ktp].sort(key=lambda x:x[0]) # sort according to mutant ids
     
