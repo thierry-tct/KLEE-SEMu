@@ -108,16 +108,17 @@ def ktest_fdupes(*args):
     dup_dict = {} 
     keys = kt2used_dat.keys()
     for ktest_file in keys:
-        ktest_file_dat = kt2used_dat[ktest_file]
-        del kt2used_dat[ktest_file]
-        for other_file in kt2used_dat:
-            if kt2used_dat[other_file] == ktest_file_dat:
-                if ktest_file not in dup_dict:
-                    dup_dict[ktest_file] = []
-                dup_dict[ktest_file].append(other_file)
-        if ktest_file in dup_dict:
-            for dup_of_kt_file in dup_dict[ktest_file]:
-                del kt2used_dat[dup_of_kt_file]
+        if ktest_file in kt2used_dat:
+            ktest_file_dat = kt2used_dat[ktest_file]
+            del kt2used_dat[ktest_file]
+            for other_file in kt2used_dat:
+                if kt2used_dat[other_file] == ktest_file_dat:
+                    if ktest_file not in dup_dict:
+                        dup_dict[ktest_file] = []
+                    dup_dict[ktest_file].append(other_file)
+            if ktest_file in dup_dict:
+                for dup_of_kt_file in dup_dict[ktest_file]:
+                    del kt2used_dat[dup_of_kt_file]
 
     # Finilize
     for ktest_file in dup_dict:
