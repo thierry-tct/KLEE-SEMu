@@ -18,6 +18,7 @@ import shutil, glob
 import tarfile
 import argparse
 import random, time
+import math
 import pandas as pd
 import struct
 import itertools
@@ -1289,7 +1290,7 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
             if os.path.isdir(semuOutDir):
                 shutil.rmtree(semuOutDir)
 
-            kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp"
+            kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -search=nurs:covnew -solver-backend=stp"
             kleeArgs += ' ' + " ".join([par+'='+str(tuning['KLEE'][par]) for par in tuning['KLEE']])  #-max-time=50000 -max-memory=9000 --max-solver-time=300
             kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -use-cex-cache " # -watchdog"
             kleeArgs += " --output-dir="+semuOutDir
@@ -1469,7 +1470,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
                  et = row["ellapsedTime(s)"]
                  mid = row["MutantID"]
                  ktp = os.path.join(fold, row["ktest"])
-                 assert ktp in ktests, "test not in ktests: "+str(ktests)+",\n test: "+ktp+"; minf is: "+minf
+                 assert ktp in ktests, "test not in ktests: "+str(ktests)+",\n test (not in ktests): "+ktp+"; minf is: "+minf
                  ktests[ktp].append((mid, et))
 
     # Verify that each ktest in ktests has corresponding mutant
@@ -1788,6 +1789,9 @@ def main():
     parser.add_argument("--disable_pureklee", action="store_true", help="Disable doing computation for pureklee")
     parser.add_argument("--fixedmutantnumbertarget", type=str, default=ALIVE_ALL, help="Specify the how the mutants to terget are set (<mode>[:<#Mutants>]): "+str(FIXED_MUTANT_NUMBER_STRATEGIES))
     parser.add_argument("--semucontinueunfinishedtunings", action="store_true", help="enable reusing previous semu execution and computation result (if available). Useful when execution fail for some tunings and we do not want to reexecute other completed tunings")
+
+    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default='30 60 90 120 180 240', help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
+
     args = parser.parse_args()
 
     outDir = os.path.join(args.outTopDir, OutFolder)
@@ -2085,6 +2089,8 @@ def main():
     candidateMutantsFile = None
     groundConsideredMutant_covtests = None
     list_groundConsideredMutant_covtests = []
+    testgen_mode_initial_numtests = None
+    testgen_mode_initial_nummuts = None
     if matrix is not None:
         groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, os.path.join(martOut, mutantInfoFile), os.path.join(martOut, fdupesDuplicatesFile), testTresh_str = covTestThresh)
 
@@ -2095,6 +2101,9 @@ def main():
             assert len(testSamples.keys()) == 1, "TestSamples must have only one key (correspond to one experiment - one set of mutants and tests)"
             ground_KilledMutants = set(matrixHardness.getKillableMutants(matrix, testset=set(testSamples[testSamples.keys()[0]]))) 
             toremoveMuts = ground_KilledMutants
+
+            testgen_mode_initial_numtests = len(testSamples[testSamples.keys()[0]])
+            testgen_mode_initial_nummuts = len(groundConsideredMutant_covtests)
             
         # keep only covered by treshold at least, and killed
         for mid in toremoveMuts:
@@ -2373,9 +2382,30 @@ def main():
 
             # TODO: considere separate executions and Fault detection in Analysis
             if ANALYSE_TASK in toExecute:
-                outjsonfile = os.path.join(agg_Out, "MS-increase")
-                if os.path.isfile(outjsonfile):
-                    os.remove(outjsonfile)
+                time_snapshots_minutes_list = [int(math.ceil(float(v))) for v in args.semuanalysistimesnapshots_min.strip().split()]
+                max_time_minutes = int(math.ceil(float(args.semutimeout)/60.0))
+                time_snapshots_minutes_list.append(max_time_minutes) # semutimeout is in seconds
+                time_snapshots_minutes_list = sorted(list(set(time_snapshots_minutes_list)))
+                for v in time_snapshots_minutes_list:
+                    assert v >= 0, "invalid value for time snapshot: "+str(v)
+
+                # discard higher than specified max
+                maatimex_ind = 0
+                for stv in time_snapshots_minutes_list:
+                    if stv >= max_time_minutes:
+                        break
+                    maxtime_ind += 1
+                time_snapshots_minutes_list = time_snapshots_minutes_list[:maxtime_ind+1]
+
+                initial_dats_json = os.path.join(agg_Out, "Initial-dat.json")
+                outcsvfile = os.path.join(agg_Out, "Results.csv")
+                outjsonfile_common = os.path.join(agg_Out, "Techs-relation.json")
+                if os.path.isfile(outcsvfile):
+                    os.remove(outcsvfile)
+                for outjsonfile in glob.glob(outjsonfile_common+'*'):
+                    if os.path.isfile(outjsonfile):
+                        os.remove(outjsonfile)
+
                 nGenTests_ = len(glob.glob(mfi_ktests_dir+"/*.ktest"))
                 if nGenTests_ > 0 and not os.path.isdir(mfi_execution_output):
                     print "\n--------------------------------------------------"
@@ -2398,60 +2428,90 @@ def main():
                     sm_file = os.path.join(mfi_execution_output, "data", "matrices", "SM.dat")
                     mcov_file = os.path.join(mfi_execution_output, "data", "matrices", "MCOV.dat")
                     pf_file = os.path.join(mfi_execution_output, "data", "matrices", "ktestPassFail.txt")
-                    outobj_ = {}
-                    killedMutsPerTuning = {}
-                    for semuTuning in semuTuningList:
-                        nameprefix = semuTuning['name']
-                        testsOfThis = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-tests_by_ellapsedtime.csv"))['ktest']
-                        test2mutsDS = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-mutant_ktests_mapping.json"))
-                        targeted_mutants = set()
-                        for kt in test2mutsDS:
-                            for mutant_,elapsedtime in test2mutsDS[kt]:
-                                targeted_mutants.add(mutant_)
-                        if nameprefix != '_pureklee_':
-                            assert len(targeted_mutants - set(groundConsideredMutant_covtests)) == 0, "more mutants were used to gen tests: "+str(len(targeted_mutants - set(groundConsideredMutant_covtests)))
-                        testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
-                        testsKillingOfThis = []
-                        if len(testsOfThis) > 0:
-                            newKilled = matrixHardness.getKillableMutants(sm_file, testsOfThis, testkillinglist=testsKillingOfThis)
-                            newCovered = matrixHardness.getListCoveredMutants(mcov_file, testsOfThis)
-                            nnewFailing = len(matrixHardness.getFaultyTests(pf_file, testsOfThis))
-                        else:
-                            newKilled = []
-                            newCovered = []
-                            nnewFailing = 0
-                        nnewKilled = len(newKilled)
-                        nnewCovered = len(newCovered)
-                        outobj_[nameprefix] = {
-                                                "#Mutants": nMutants, 
-                                                "#Targeted": len(targeted_mutants), 
-                                                "#Covered": nnewCovered, 
-                                                "#Killed": nnewKilled, 
-                                                "#GenTests":len(testsOfThis), 
-                                                "#GenTestsKilling":len(testsKillingOfThis), 
-                                                "#FailingTests":nnewFailing, 
-                                                "MS-INC":(nnewKilled * 100.0 / nMutants), 
-                                                "#AggregatedTestGen": nGenTests_
-                                            }
-                        killedMutsPerTuning[nameprefix] = set(newKilled)
-                    
-                    extra_res = {}
-                    #venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=1, setsize_to=len(killedMutsPerTuning), name_delim='&')
-                    venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=2, setsize_to=2, name_delim='&', not_common=extra_res)
 
-                    extra_keys_outobj = []
-                    assert "OVERLAP_VENN" not in outobj_
-                    outobj_["OVERLAP_VENN"] = venn_killedMutsInCommon
-                    extra_keys_outobj.append('OVERLAP_VENN')
-                    assert "NON_OVERLAP_VENN" not in outobj_
-                    outobj_["NON_OVERLAP_VENN"] = extra_res
-                    extra_keys_outobj.append('NON_OVERLAP_VENN')
 
-                    dumpJson(outobj_, outjsonfile)
-                    print "Kill Mutant TestGen Analyse Result:"
-                    for k in sorted(outobj_.keys(), reverse=True, key=lambda x:x in extra_keys_outobj):
-                        print ">>> '"+k+"':", outobj_[k]
+                    out_df_parts = []
+                    for time_snapshot_minute in time_snapshots_minutes_list:
+                        outjsonfile = outjsonfile_common+"-"+str(time_snapshot_minute)+'min.json'
+                        outobj_ = {}
+                        killedMutsPerTuning = {}
+                        time_snap_dfs_dats = []
+                        for semuTuning in semuTuningList:
+                            nameprefix = semuTuning['name']
+                            cons_kt_df = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-tests_by_ellapsedtime.csv"))
+                            cons_kt_df = cons_kt_df[cons_kt_df['ellapsedTime(s)'] <= time_snapshot_minute * 60.0]
+                            testsOfThis = cons_kt_df['ktest']
+                            test2mutsDS = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-mutant_ktests_mapping.json"))
+                            test2mutsDS = {kt: test2mutsDS[kt] for kt in testsOfThis}
+                            targeted_mutants = set()
+                            for kt in test2mutsDS:
+                                for mutant_,elapsedtime in test2mutsDS[kt]:
+                                    targeted_mutants.add(mutant_)
+                            if nameprefix != '_pureklee_':
+                                assert len(targeted_mutants - set(groundConsideredMutant_covtests)) == 0, "more mutants were used to gen tests: "+str(len(targeted_mutants - set(groundConsideredMutant_covtests)))
+                            testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
+                            testsKillingOfThis = []
+                            if len(testsOfThis) > 0:
+                                newKilled = matrixHardness.getKillableMutants(sm_file, testsOfThis, testkillinglist=testsKillingOfThis)
+                                newCovered = matrixHardness.getListCoveredMutants(mcov_file, testsOfThis)
+                                nnewFailing = len(matrixHardness.getFaultyTests(pf_file, testsOfThis))
+                            else:
+                                newKilled = []
+                                newCovered = []
+                                nnewFailing = 0
+                            nnewKilled = len(newKilled)
+                            nnewCovered = len(newCovered)
+                            tmp_data = {
+                                            "TimeSnapshot(min)": time_snapshot_minute,
+                                            "Tech-Config": nameprefix,
+                                            "#Mutants": nMutants, 
+                                            "#Targeted": len(targeted_mutants), 
+                                            "#Covered": nnewCovered, 
+                                            "#Killed": nnewKilled, 
+                                            "#GenTests":len(testsOfThis), 
+                                            "#GenTestsKilling":len(testsKillingOfThis), 
+                                            "#FailingTests":nnewFailing, 
+                                            "MS-INC":(nnewKilled * 100.0 / nMutants), 
+                                            "#AggregatedTestGen": nGenTests_,
+                                        }
+                            time_snap_dfs_dats.append(tmp_data)
+                            killedMutsPerTuning[nameprefix] = set(newKilled)
 
+                        time_snap_agg_ntest = sum([v["#GenTests"] for v in time_snap_dfs_dats])
+                        for v in time_snap_dfs_dats:
+                            v["#AggregatedTestGen"] = time_snap_agg_ntest
+                        out_df_parts += time_snap_dfs_dats
+
+                        extra_res = {}
+                        #venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=1, setsize_to=len(killedMutsPerTuning), name_delim='&')
+                        venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=2, setsize_to=2, name_delim='&', not_common=extra_res)
+
+                        extra_keys_outobj = []
+                        assert "OVERLAP_VENN" not in outobj_
+                        outobj_["OVERLAP_VENN"] = venn_killedMutsInCommon
+                        extra_keys_outobj.append('OVERLAP_VENN')
+                        assert "NON_OVERLAP_VENN" not in outobj_
+                        outobj_["NON_OVERLAP_VENN"] = extra_res
+                        extra_keys_outobj.append('NON_OVERLAP_VENN')
+                        assert "MAX_SEMU_TIMEOUT" not in outobj_
+                        outobj_["MAX_SEMU_TIMEOUT"] = args.semutimeout
+                        extra_keys_outobj.append('MAX_SEMU_TIMEOUT')
+
+                        dumpJson(outobj_, outjsonfile)
+                        print "Kill Mutant TestGen Analyse Result:"
+                        for k in sorted(outobj_.keys(), reverse=True, key=lambda x:x in extra_keys_outobj):
+                            print ">>> '"+k+"':", outobj_[k]
+
+                    dumpJson({ \
+                                "Initial#Mutants": testgen_mode_initial_nummuts, \
+                                "Inintial#Tests": testgen_mode_initial_numtests, \
+                                "Initial-MS": ((testgen_mode_initial_nummuts - nMutants) * 100.0 / testgen_mode_initial_nummuts), \
+                                "TestSampleMode": args.testSampleMode \
+                                }, initial_dats_json)
+                    res_df = pd.DataFrame(out_df_parts)
+                    res_df.to_csv(outcsvfile)
+
+                    print res_df
     print "@ DONE!"
 
 #~ def main()
