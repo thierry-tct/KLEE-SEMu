@@ -5820,7 +5820,7 @@ void Executor::ks_applyMutantSearchStrategy() {
   const bool original_too = false;
   // Whether to apply for a mutant ID regardless of whether 
   //ganerated from same original state
-  const bool mutant_alltogether = false;
+  const bool mutant_alltogether = true;
   std::map<ExecutionState::KS_MutantIDType, std::vector<ExecutionState*>> 
                                                     mutId2states;
   for (auto *s: ks_reachedWatchPoint) {
