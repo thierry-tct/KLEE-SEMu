@@ -2390,7 +2390,7 @@ def main():
                     assert v >= 0, "invalid value for time snapshot: "+str(v)
 
                 # discard higher than specified max
-                maatimex_ind = 0
+                maxtime_ind = 0
                 for stv in time_snapshots_minutes_list:
                     if stv >= max_time_minutes:
                         break
