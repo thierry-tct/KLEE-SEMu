@@ -1480,7 +1480,6 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
     seed_dup_kts = []
     dup_result, non_kt_files = ktest_fdupes(seeds_dir, *semuoutputs)
     for la in dup_result:
-        la = dline.strip().split()
         #assert la[0] not in dupmap, "fdupe line: "+la[0]+", is not in dupmap: "+str(dupmap)
         val_in_ktd = []
         val_in_seed = []
