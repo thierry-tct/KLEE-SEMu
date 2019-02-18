@@ -1290,7 +1290,7 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
             if os.path.isdir(semuOutDir):
                 shutil.rmtree(semuOutDir)
 
-            kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -search=nurs:covnew -solver-backend=stp"
+            kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp"
             kleeArgs += ' ' + " ".join([par+'='+str(tuning['KLEE'][par]) for par in tuning['KLEE']])  #-max-time=50000 -max-memory=9000 --max-solver-time=300
             kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -use-cex-cache " # -watchdog"
             kleeArgs += " --output-dir="+semuOutDir
