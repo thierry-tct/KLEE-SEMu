@@ -40,12 +40,16 @@ if [ "${FROM_EXECUTION:-}" != "" ]
 then
     if [ "$FROM_EXECUTION" = "PREPARE" ]; then
         from_exec=1
-    elif [ "$FROM_EXECUTION" = "SEMU" ]; then
+    elif [ "$FROM_EXECUTION" = "GETSEEDS" ]; then
         from_exec=2
-    elif [ "$FROM_EXECUTION" = "REPLAY" ]; then
+    elif [ "$FROM_EXECUTION" = "SEMU" ]; then
         from_exec=3
-    elif [ "$FROM_EXECUTION" = "REPORT" ]; then
+    elif [ "$FROM_EXECUTION" = "RESETSTATE" ]; then
         from_exec=4
+    elif [ "$FROM_EXECUTION" = "REPLAY" ]; then
+        from_exec=5
+    elif [ "$FROM_EXECUTION" = "REPORT" ]; then
+        from_exec=6
     else
         error_exit "Invalid FROM_EXECUTION value: '$FROM_EXECUTION'"
     fi
@@ -76,23 +80,39 @@ then
     cd - > /dev/null
 fi
 
-# Run SEMU
+# GETSEEDS
 if [ $from_exec -le 2 ] #true 
+then
+    echo "# RUNNING GET SEEDS"
+    cd $semudir || error_exit "failed to enter semudir!"
+    SKIP_TASKS="SEMU_EXECUTION COMPUTE_TASK ANALYSE_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config || error_exit "Semu Failed"
+    cd - > /dev/null
+fi
+
+# Run SEMU
+if [ $from_exec -le 3 ] #true 
 then
     echo "# RUNNING SEMU..."
     cd $semudir || error_exit "failed to enter semudir!"
-    SKIP_TASKS="${SKIP_TASKS:-}" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config || error_exit "Semu Failed"
+    SKIP_TASKS="ZESTI_DEV_TASK TEST_GEN_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config || error_exit "Semu Failed"
     cd - > /dev/null
 fi
 
 # ---------- RUN additional generated tests and analyse
-# run additional
-if [ $from_exec -le 3 ] #true 
+# SET STATE
+if [ $from_exec -le 4 ] #true 
 then
-    echo "# RUNNING MFI additional..."
+    echo "# Setting back the State for Replay..."
     cd $metadir || error_exit "cd $metadir 2"
     python ~/mytools/MFI-V2.0/utilities/navigator.py --setexecstate 5 . || error_exit "failed to set exec state to 5"
+    cd - > /dev/null
+fi
 
+# run additional
+if [ $from_exec -le 5 ] #true 
+then
+    echo "# RUNNING MFI additional..."
+    cd $metadir || error_exit "cd $metadir 3"
     sampl_mode=""
     for tmp in 'PASS' 'KLEE' 'DEV' 'NUM'
     do
@@ -109,7 +129,7 @@ then
 fi
 
 # Analyse
-if [ $from_exec -le 4 ] #true 
+if [ $from_exec -le 6 ] #true 
 then
     echo "# RUNNING Semu analyse..."
     cd $semudir || error_exit "failed to enter semudir 2!"

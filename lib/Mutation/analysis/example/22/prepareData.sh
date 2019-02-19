@@ -1,6 +1,8 @@
 #! /bin/bash
 # USAGE example: 
 # bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/prepareData.sh ../workspace/metactrl/chroot/chroot_conf-script.conf . [~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd-HPC.cfg]
+#
+# if PREPARE_DO_NOT_COMPILE_ZESTI=on , the Zesti compilation is disabled
 
 set -u
 
@@ -29,6 +31,7 @@ fi
 confscript=$(readlink -f $1)
 destTopDir=$(readlink -f $2)
 compile_zest=1
+[ "${PREPARE_DO_NOT_COMPILE_ZESTI:-}" = "on" ] && compile_zest=0
 [ $enable_zesti = false ]  && compile_zest=0
 
 # load conf

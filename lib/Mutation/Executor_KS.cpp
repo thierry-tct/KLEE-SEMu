@@ -32,6 +32,7 @@
 #include "klee/ExprBuilder.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/CFG.h"
+#include "llvm/Support/FileSystem.h"
 #include <unistd.h>
 #include <sys/wait.h>
 //~KS
@@ -4983,6 +4984,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
   static const bool usethesolverfordiff = true;
 
   static unsigned gentestid = 0;
+  static unsigned num_failed_testgen = 0;
   bool outputTestCases = ks_outputTestsCases; //false;
   bool doMaxSat = ks_outputStateDiffs; //true;
 
@@ -5096,20 +5098,26 @@ bool Executor::ks_compareRecursive (ExecutionState *mState, std::vector<Executio
             ////size_t clen = mState->constraints.size();
             ////mState->addConstraint (insdiff); 
             ////interpreterHandler->processTestCase(*mState, nullptr, nullptr); //std::to_string(mState->ks_mutantID).insert(0,"Mut").c_str());
-            ks_writeMutantTestsInfos(mState->ks_mutantID, ++gentestid); //Write info needed to know which test for which mutant 
+            bool testgen_was_good = ks_writeMutantTestsInfos(mState->ks_mutantID, ++gentestid); //Write info needed to know which test for which mutant 
             ////if (mState->constraints.size() > clen) {
             ////  assert (mState->constraints.size() == clen + 1 && "Expect only one more contraint here, the just added one");
             ////  mState->constraints.back() = ConstantExpr::alloc(1, Expr::Bool);    //set just added constraint to true
             ////}
 
+            if (testgen_was_good) {
+              // increment mutant test count 
+              irp_m.first->second += 1;
+            } else { 
+              ++num_failed_testgen;
+            }
+
             // XXX: If reached maximum number ot tests, exit
-            if (gentestid >= semuMaxTotalNumTestGen) {
+            if (gentestid - num_failed_testgen >= semuMaxTotalNumTestGen) {
               llvm::errs() << "\nSEMU@COMPLETED: Maximum number of generated tests reached. Done!\n";
               exit(0);
             }
 
-            // increment mutant test count 
-            irp_m.first->second += 1;
+            // Stot mutant if reached its limit
             if (irp_m.first->second >= semuMaxNumTestGenPerMutant) {
               // We reache the test gen quota for the mutant, do nothing
               return diffFound;
@@ -5231,11 +5239,20 @@ void Executor::ks_writeMutantStateData(ExecutionState::KS_MutantIDType mutant_id
   }
 }
 
-void Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_id, unsigned testid) {
+bool Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_id, unsigned testid) {
   static const std::string fnPrefix("mutant-");
   static const std::string fnSuffix(".ktestlist");
+  static const std::string ktest_suffix(".ktest");
   static std::map<ExecutionState::KS_MutantIDType, std::string> mutantID2outfile;
   std::string header;
+
+  std::stringstream filename;
+  filename << "test" << std::setfill('0') << std::setw(6) << testid << '.' << ktest_suffix;
+  // In case the test case generation failed, do not add it
+  if (! llvm::sys::fs::exists(interpreterHandler->getOutputFilename(filename.str()))) {
+    return false;
+  }
+
   std::string out_file_name = mutantID2outfile[mutant_id];
   if (out_file_name.empty()) {
     mutantID2outfile[mutant_id] = out_file_name = 
@@ -5246,7 +5263,7 @@ void Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_i
   unsigned ellapsedtime = util::getWallTime() - ks_runStartTime;
   std::ofstream ofs(out_file_name, std::ofstream::out | std::ofstream::app); 
   if (ofs.is_open()) {
-    ofs << header << ellapsedtime << "," << mutant_id << "," << "test"<<std::setfill('0')<<std::setw(6)<<testid<<".ktest" << "\n";
+    ofs << header << ellapsedtime << "," << mutant_id << "," << filename.str() << "\n";
     ofs.close();
   } else {
     llvm::errs() << "Error: Unable to create test info file: " << out_file_name 
@@ -5254,6 +5271,8 @@ void Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_i
     assert(false);
     exit(1);
   }
+
+  return true;
 }
 
 void Executor::ks_loadKQueryConstraints(std::vector<ConstraintManager> &outConstraintsList) {

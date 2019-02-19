@@ -642,7 +642,7 @@ public:
                                 int sDiff,
                                 ExecutionState const *origState);  
 
-  void ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_id, unsigned testid); 
+  bool ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_id, unsigned testid); 
 
   void ks_loadKQueryConstraints(std::vector<ConstraintManager> &outConstraintsList);
 

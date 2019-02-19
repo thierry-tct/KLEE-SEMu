@@ -2442,11 +2442,12 @@ def main():
                             cons_kt_df = cons_kt_df[cons_kt_df['ellapsedTime(s)'] <= time_snapshot_minute * 60.0]
                             testsOfThis = cons_kt_df['ktest']
                             test2mutsDS = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-mutant_ktests_mapping.json"))
-                            test2mutsDS = {kt: test2mutsDS[kt] for kt in testsOfThis}
+                            #test2mutsDS = {kt: test2mutsDS[kt] for kt in test2mutsDS if kt in testsOfThis}
                             targeted_mutants = set()
                             for kt in test2mutsDS:
-                                for mutant_,elapsedtime in test2mutsDS[kt]:
-                                    targeted_mutants.add(mutant_)
+                                for mutant_,ellapsedtime in test2mutsDS[kt]:
+                                    if float(ellapsedtime) <= time_snapshot_minute * 60.0:
+                                        targeted_mutants.add(mutant_)
                             if nameprefix != '_pureklee_':
                                 assert len(targeted_mutants - set(groundConsideredMutant_covtests)) == 0, "more mutants were used to gen tests: "+str(len(targeted_mutants - set(groundConsideredMutant_covtests)))
                             testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
@@ -2478,8 +2479,8 @@ def main():
                             killedMutsPerTuning[nameprefix] = set(newKilled)
 
                         time_snap_agg_ntest = sum([v["#GenTests"] for v in time_snap_dfs_dats])
-                        for v in time_snap_dfs_dats:
-                            v["#AggregatedTestGen"] = time_snap_agg_ntest
+                        for v_ind in range(len(time_snap_dfs_dats)):
+                            time_snap_dfs_dats[v_ind]["#AggregatedTestGen"] = time_snap_agg_ntest
                         out_df_parts += time_snap_dfs_dats
 
                         extra_res = {}
@@ -2506,12 +2507,13 @@ def main():
                                 "Initial#Mutants": testgen_mode_initial_nummuts, \
                                 "Inintial#Tests": testgen_mode_initial_numtests, \
                                 "Initial-MS": ((testgen_mode_initial_nummuts - nMutants) * 100.0 / testgen_mode_initial_nummuts), \
-                                "TestSampleMode": args.testSampleMode \
+                                "TestSampleMode": args.testSampleMode, \
+                                "MaxTestGen-Time(min)": max_time_minutes  \ 
                                 }, initial_dats_json)
                     res_df = pd.DataFrame(out_df_parts)
-                    res_df.to_csv(outcsvfile)
+                    res_df.to_csv(outcsvfile, index=False)
 
-                    print res_df
+                    print res_df.to_string()
     print "@ DONE!"
 
 #~ def main()
