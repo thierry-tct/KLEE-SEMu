@@ -568,6 +568,7 @@ private:
   // Some stats
   unsigned long ks_numberOfMutantStatesDiscardedAtMutationPoint=0;
   unsigned long ks_numberOfMutantStatesCheckedAtMutationPoint=0;
+  double ks_totalStateComparisonTime=0.0;
 
   //unsigned maxNumTestsPerMutants = 0;
   // Set of mutants that reached the maximum number of generated tests per mutants

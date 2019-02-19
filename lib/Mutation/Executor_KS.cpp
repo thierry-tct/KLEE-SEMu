@@ -5244,8 +5244,30 @@ bool Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_i
   static const std::string fnSuffix(".ktestlist");
   static const std::string ktest_suffix(".ktest");
   static std::map<ExecutionState::KS_MutantIDType, std::string> mutantID2outfile;
-  std::string header;
+  static std::string semu_exec_info_file;
+  std::string mutant_data_header;
+  std::string info_header;
 
+  // put out the semu ececution info
+  if (semu_exec_info_file.empty()) {
+    semu_exec_info_file = interpreterHandler->getOutputFilename("semu_execution_info.csv");
+    info_header.assign("ellapsedTime(s),stateCompareTime(s),#MutStatesForkedFromOriginal,#MutStatesEqWithOrigAtMutPoint\n");
+  } 
+  unsigned ellapsedtime = util::getWallTime() - ks_runStartTime;
+  std::ofstream ofs(semu_exec_info_file, std::ofstream::out | std::ofstream::app); 
+  if (ofs.is_open()) {
+    ofs << info_header << ellapsedtime << "," << ks_totalStateComparisonTime
+                  << ks_numberOfMutantStatesCheckedAtMutationPoint 
+                  << ks_numberOfMutantStatesDiscardedAtMutationPoint << "\n";
+    ofs.close();
+  } else {
+    llvm::errs() << "Error: Unable to create/open semu info file: " << semu_exec_info_file << ".\n";
+    assert(false);
+    exit(1);
+  }
+
+
+  // Make sure that the test was correctly generated
   std::stringstream filename;
   filename << "test" << std::setfill('0') << std::setw(6) << testid << '.' << ktest_suffix;
   // In case the test case generation failed, do not add it
@@ -5253,17 +5275,18 @@ bool Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_i
     return false;
   }
 
+  // Test is generated okay, update mutant info file
   std::string out_file_name = mutantID2outfile[mutant_id];
   if (out_file_name.empty()) {
     mutantID2outfile[mutant_id] = out_file_name = 
            interpreterHandler->getOutputFilename(fnPrefix+std::to_string(mutant_id)+fnSuffix);
-    header.assign("ellapsedTime(s),MutantID,ktest\n");
+    mutant_data_header.assign("ellapsedTime(s),MutantID,ktest\n");
   }
 
-  unsigned ellapsedtime = util::getWallTime() - ks_runStartTime;
-  std::ofstream ofs(out_file_name, std::ofstream::out | std::ofstream::app); 
+  ellapsedtime = util::getWallTime() - ks_runStartTime;
+  ofs.open(out_file_name, std::ofstream::out | std::ofstream::app); 
   if (ofs.is_open()) {
-    ofs << header << ellapsedtime << "," << mutant_id << "," << filename.str() << "\n";
+    ofs << mutant_data_header << ellapsedtime << "," << mutant_id << "," << filename.str() << "\n";
     ofs.close();
   } else {
     llvm::errs() << "Error: Unable to create test info file: " << out_file_name 
@@ -5526,6 +5549,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           auto elapsInittime = util::getWallTime();
           ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/, ks_isAtPostMut/*postMutOnly*/);
           llvm::errs() << "# SEMU@Status: State Comparison Done! (" << (util::getWallTime() - elapsInittime) << " seconds)\n";
+          ks_totalStateComparisonTime += (util::getWallTime() - elapsInittime);
         }
         
         //continue the execution

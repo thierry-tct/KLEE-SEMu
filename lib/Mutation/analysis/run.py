@@ -1528,6 +1528,43 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
     etdf.to_csv(os.path.join(mfi_ktests_dir, "tests_by_ellapsedtime.csv"), index=False)
     dumpJson(finalObj, os.path.join(mfi_ktests_dir, "mutant_ktests_mapping.json"))
     dumpJson(seed_dup_kts, os.path.join(mfi_ktests_dir, "seed_dup_ktests.json"))
+
+    # Handle semu exec info files
+    info_dats = []
+    out_id = -1
+    for fold in semuoutputs:
+        out_id += 1
+        semu_exec_info_file = os.path.join(fold, 'semu_execution_info.csv') 
+        if os.path.isfile(semu_exec_info_file):
+            df = pd.read_csv(semu_exec_info_file)
+            for index, row in df.iterrows():
+                info_dats.append((out_id, row))
+
+    info_dats.sort(key=lambda x: float(x[1]['ellapsedTime(s)']))
+    
+    final_info_file = os.path.join(mfi_ktests_dir, 'semu_execution_info.csv')
+    if len(info_dats) == 0:
+        final_info_list = {
+                        "ellapsedTime(s)":[], "stateCompareTime(s)":[],
+                        "#MutStatesForkedFromOriginal":[],"#MutStatesEqWithOrigAtMutPoint":[]
+                    }
+    else:
+        final_info_list = []
+
+    pointers = {v: {
+                    "ellapsedTime(s)":None, "stateCompareTime(s)":0,
+                    "#MutStatesForkedFromOriginal":0,"#MutStatesEqWithOrigAtMutPoint":0
+                    } for v in range(out_id+1)
+                }
+    for out_id, row in info_dats:
+        pointers[out_id] = row
+        tmp_obj = {"ellapsedTime(s)": row["ellapsedTime(s)"]}
+        for metric in ["stateCompareTime(s)", "#MutStatesForkedFromOriginal", \
+                                                "#MutStatesEqWithOrigAtMutPoint"]:
+            tmp_obj[metric] = sum(pointer[v][metric] for v in pointer)
+
+    info_df = pd.DataFrame(final_info_list)
+    info_df.to_csv(final_info_file, index=False)
 #~ def fdupeGeneratedTest ()
 
 def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, names):
@@ -1586,6 +1623,7 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
         etdf = pd.read_csv(os.path.join(inKtestDirs[i], "tests_by_ellapsedtime.csv"))
         in_finalObj = loadJson(os.path.join(inKtestDirs[i], "mutant_ktests_mapping.json"))
         in_seed_dup_kts = loadJson(os.path.join(inKtestDirs[i], "seed_dup_ktests.json"))
+        semu_info_df = pd.read_csv(os.path.join(inKtestDirs[i], "semu_execution_info.csv"))
         finalObj = {}
 
         for index, row in etdf.iterrows():
@@ -1600,7 +1638,8 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
 
         etdf.to_csv(os.path.join(mfi_ktests_dir, names[i]+"-tests_by_ellapsedtime.csv"), index=False)
         dumpJson(finalObj, os.path.join(mfi_ktests_dir, names[i]+"-mutant_ktests_mapping.json"))
-        dumpJson({"Number of seed dupplicates removed": len(in_seed_dup_kts)}, os.path.join(mfi_ktests_dir, names[i]+"-seed_dup_ktests.json"))
+        dumpJson({"Number of seed duplicates removed": len(in_seed_dup_kts)}, os.path.join(mfi_ktests_dir, names[i]+"-seed_dup_ktests.json"))
+        semu_info_df.to_csv(os.path.join(mfi_ktests_dir, names[i]+"-semu_execution_info.csv"), index=False)
 #~ def fdupesAggregateKtestDirs()
 
 def stripRootTest2Dir (rootdir, test2dir):
@@ -2477,7 +2516,7 @@ def main():
                     mcov_file = os.path.join(mfi_execution_output, "data", "matrices", "MCOV.dat")
                     pf_file = os.path.join(mfi_execution_output, "data", "matrices", "ktestPassFail.txt")
 
-
+                    
                     out_df_parts = []
                     for time_snapshot_minute in time_snapshots_minutes_list:
                         outjsonfile = outjsonfile_common+"-"+str(time_snapshot_minute)+'min.json'
@@ -2510,6 +2549,23 @@ def main():
                                 nnewFailing = 0
                             nnewKilled = len(newKilled)
                             nnewCovered = len(newCovered)
+
+                            semu_info_df = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-semu_execution_info.csv"))
+                            semu_info_stateCmpTime = '-'
+                            semu_info_numMutstatesForkedFromOrig = '-'
+                            semu_info_numMutstatesEqWithOrigAtMutPoint = '-'
+                            for index, row in semu_info_df.iterrows():
+                                if float(row["ellapsedTime(s)"]) <= time_snapshot_minute * 60.0 :
+                                    semu_info_stateCmpTime = float(row["stateCompareTime(s)")
+                                    semu_info_numMutstatesForkedFromOrig = int(row["#MutStatesForkedFromOriginal"])
+                                    semu_info_numMutstatesEqWithOrigAtMutPoint = int(row["#MutStatesEqWithOrigAtMutPoint"])
+                                else:
+                                    break
+                            if time_snapshot_minute == max_time_minutes:
+                                seed_dup_kts_n = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-seed_dup_ktests.json"))["Number of seed duplicates removed"]
+                            else:
+                                seed_dup_kts_num = '-'
+
                             tmp_data = {
                                             "TimeSnapshot(min)": time_snapshot_minute,
                                             "Tech-Config": nameprefix,
@@ -2522,6 +2578,10 @@ def main():
                                             "#FailingTests":nnewFailing, 
                                             "MS-INC":(nnewKilled * 100.0 / nMutants), 
                                             "#AggregatedTestGen": nGenTests_,
+                                            "#SeedDuplicatedGenTests": seed_dup_kts_num,
+                                            "StateComparisonTime(s)": semu_info_stateCmpTime,
+                                            "#MutStatesForkedFromOriginal": semu_info_numMutstatesForkedFromOrig,
+                                            "#MutStatesEqWithOrigAtMutPoint": semu_info_numMutstatesEqWithOrigAtMutPoint,
                                         }
                             time_snap_dfs_dats.append(tmp_data)
                             killedMutsPerTuning[nameprefix] = set(newKilled)
@@ -2560,17 +2620,18 @@ def main():
                                 }, initial_dats_json)
                     res_df = pd.DataFrame(out_df_parts)
                     ordered_df_cols = ["TimeSnapshot(min)", "Tech-Config", "#Mutants", "#Targeted", "#Covered", "#Killed", \
-                                        "#GenTests", "#GenTestsKilling", "#FailingTests", "MS-INC", "#AggregatedTestGen"]
+                                        "#GenTests", "#GenTestsKilling", "#FailingTests", "MS-INC", "#AggregatedTestGen", \
+                                        "#SeedDuplicatedGenTests", "StateComparisonTime(s)", "#MutStatesForkedFromOriginal", "#MutStatesEqWithOrigAtMutPoint"]
                     if set(res_df) != set(ordered_df_cols):
                         error_exit ("(BUG), need to uspdate ordered_df_cols: inconsistent")
                     res_df = res_df[ordered_df_cols]
 
                     # Add decoded name fields
-                    nf_df = pd.DataFrame([decode_tech_conf_name(v) for v in res_df['Tesh-Config']])
+                    nf_df = pd.DataFrame([decode_tech_conf_name(v) for v in res_df['Tech-Config']])
                     
                     print res_df.to_string()
 
-                    res_df.join(nf_df)
+                    res_df = res_df.join(nf_df)
                     res_df.to_csv(outcsvfile, index=False)
 
     print "@ DONE!"
