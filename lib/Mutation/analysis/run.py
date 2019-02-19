@@ -1714,14 +1714,18 @@ ALIVE_COVERED_MOST = 'alivecoveredmost'  # Top N most covered mutants (by highes
 ALIVE_COVERED_LEAST = 'alivecoveredleast'  # Top N least covered mutants (by lowest number of tests)
 FIXED_MUTANT_NUMBER_STRATEGIES = [ALIVE_ALL, ALIVE_COVERED_RAND, ALIVE_COVERED_MOST, ALIVE_COVERED_LEAST]
 
-def applyFixedMutantFiltering(groundConsideredMutant_covtests, afterFuncFilter_byfunc, fixedmutanttarget, fixedmutantnumber):
+def applyFixedMutantFiltering(groundConsideredMutant_covtests, afterFuncFilter_byfunc, fixedmutanttarget, fixedmutantnumber, continuesemu=False):
     if fixedmutantnumber is None or fixedmutanttarget == ALIVE_ALL:
         return
     if len(groundConsideredMutant_covtests) <= fixedmutantnumber:
         return
     if fixedmutanttarget == ALIVE_RANDOM:
+        if continuesemu:
+            error_exit("cannot continue unfinished semu with alive random filtering (mutants may not be same as others that ran before)")
         selected = random.sample(list(groundConsideredMutant_covtests), fixedmutantnumber)
     elif fixedmutanttarget == ALIVE_COVERED_RAND:
+        if continuesemu:
+            error_exit("cannot continue unfinished semu with alive covered random filtering (mutants may not be same as others that ran before)")
         selected = random.sample([m for m in groundConsideredMutant_covtests if len(groundConsideredMutant_covtests[m]) > 0], fixedmutantnumber)
     elif fixedmutanttarget == ALIVE_COVERED_MOST:
         selected = sorted(groundConsideredMutant_covtests.keys(), reverse=True, key=lambda x: len(groundConsideredMutant_covtests[x]))[:fixedmutantnumber]
@@ -1740,6 +1744,48 @@ def applyFixedMutantFiltering(groundConsideredMutant_covtests, afterFuncFilter_b
         if len(afterFuncFilter_byfunc[func]) == 0:
             del afterFuncFilter_byfunc[func]
 #~ def applyFixedMutantFiltering()
+
+def encode_tech_conf_name(preconditionlength, mutantmaxfork, gentestfordiscardedfrom, \
+                          postcheckpointcontinueproba, mutantcontinuestrategy, maxtestsgenpermutants, \
+                          disablestatediffintestgen, testgenonlycriticaldiffs):
+    name = "_".join([str(preconditionlength), str(mutantmaxfork), str(gentestfordiscardedfrom), \
+                    str(postcheckpointcontinueproba), str(mutantcontinuestrategy), str(maxtestsgenpermutants), \
+                    str(disablestatediffintestgen), 'crit' if testgenonlycriticaldiffs else 'nocrit'])
+    return name
+#~ def encode_tech_conf_name()
+
+def decode_tech_conf_name(namestr):
+    ret_obj = {}
+    if namestr == '_pureklee_':
+        ret_obj['_precondLength'] = '-'
+        ret_obj['_mutantMaxFork'] = '-'
+        ret_obj['_genTestForDircardedFrom'] = '-'
+        ret_obj['_postCheckContProba'] = '-'
+        ret_obj['_mutantContStrategy'] = '-'
+        ret_obj['_maxTestsGenPerMut'] = '-'
+        ret_obj['_disableStateDiffInTestgen'] = '-'
+        ret_obj['_testGenOnlyCriticalDiffs'] = '-'
+    else:
+        vals = namestr.strip().split('_')
+        if len(vals) != 8:
+            error_exit("invalid name passed to decode_tech_conf_name. must have 8 fields")
+
+        ret_obj['_precondLength'] = int(vals[0])
+        ret_obj['_mutantMaxFork'] = int(vals[1])
+        ret_obj['_genTestForDircardedFrom'] = int(vals[2])
+        ret_obj['_postCheckContProba'] = float(vals[3])
+        ret_obj['_mutantContStrategy'] = vals[4]
+        ret_obj['_maxTestsGenPerMut'] = int(vals[5])
+
+        assert vals[6].lower() in ['on', 'off'], "invalid state diff in testgen"
+        ret_obj['_disableStateDiffInTestgen'] = (vals[6].lower() == 'on')
+
+        assert vals[7].lower() in ['crit', 'nocrit'], "invalid crit/nocrit"
+        ret_obj['_testGenOnlyCriticalDiffs'] = (vals[7].lower() == 'crit')
+
+    assert len(ret_obj) == 8, "BUG"
+    return ret_obj
+#~ def decode_tech_conf_name()
 
 # TODO: (1) PASS test sampling, (2) KLEE seeded test gen, (3) Merge generated tests and filter existing (keeping map), (4) Report MS and FD post test execution
 def main():
@@ -1916,10 +1962,10 @@ def main():
                                         'invalid semumaxtestsgenpermutants'+str(semumaxtestsgenpermutants)
         assert semudisablestatediffintestgen.lower() in ['off', 'on'], "invalid mutant gentest no diff enable disable value"
         semuTuningList.append({
-                        'name': "_".join([str(semupreconditionlength), str(semumutantmaxfork), semugentestfordiscardedfrom, \
+                        'name': encode_tech_conf_name(semupreconditionlength, semumutantmaxfork, semugentestfordiscardedfrom, \
                                             semupostcheckpointcontinueproba, semumutantcontinuestrategy, \
                                             semumaxtestsgenpermutants, semudisablestatediffintestgen, \
-                                            ('nocrit' if args.semutestgenonlycriticaldiffs else 'crit')]),
+                                            args.semutestgenonlycriticaldiffs),
                         'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
                         'SEMU':{"-semu-precondition-length":args_semupreconditionlength, 
                                 "-semu-mutant-max-fork":args_semumutantmaxfork, 
@@ -2091,6 +2137,7 @@ def main():
     list_groundConsideredMutant_covtests = []
     testgen_mode_initial_numtests = None
     testgen_mode_initial_nummuts = None
+    testgen_mode_initial_numkillmuts = None
     if matrix is not None:
         groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, os.path.join(martOut, mutantInfoFile), os.path.join(martOut, fdupesDuplicatesFile), testTresh_str = covTestThresh)
 
@@ -2104,6 +2151,7 @@ def main():
 
             testgen_mode_initial_numtests = len(testSamples[testSamples.keys()[0]])
             testgen_mode_initial_nummuts = len(groundConsideredMutant_covtests)
+            testgen_mode_initial_numkillmuts = len(toremoveMuts)
             
         # keep only covered by treshold at least, and killed
         for mid in toremoveMuts:
@@ -2128,7 +2176,7 @@ def main():
             del groundConsideredMutant_covtests[mid]
 
         # Apply filtering of mutants if specified (Which mutants to focus on)
-        applyFixedMutantFiltering(groundConsideredMutant_covtests, afterFuncFilter_byfunc, fixedmutanttarget, fixedmutantnumber)
+        applyFixedMutantFiltering(groundConsideredMutant_covtests, afterFuncFilter_byfunc, fixedmutanttarget, fixedmutantnumber, args.semucontinueunfinishedtunings)
         print "# Number of Mutants after filtering specified:", len(groundConsideredMutant_covtests)
         if len(groundConsideredMutant_covtests) < 1:
             error_exit ("error(done): No mutant Left to analyze")
@@ -2506,14 +2554,25 @@ def main():
                     dumpJson({ \
                                 "Initial#Mutants": testgen_mode_initial_nummuts, \
                                 "Inintial#Tests": testgen_mode_initial_numtests, \
-                                "Initial-MS": ((testgen_mode_initial_nummuts - nMutants) * 100.0 / testgen_mode_initial_nummuts), \
+                                "Initial-MS": ((testgen_mode_initial_numkillmuts) * 100.0 / testgen_mode_initial_nummuts), \
                                 "TestSampleMode": args.testSampleMode, \
                                 "MaxTestGen-Time(min)": max_time_minutes  \ 
                                 }, initial_dats_json)
                     res_df = pd.DataFrame(out_df_parts)
+                    ordered_df_cols = ["TimeSnapshot(min)", "Tech-Config", "#Mutants", "#Targeted", "#Covered", "#Killed", \
+                                        "#GenTests", "#GenTestsKilling", "#FailingTests", "MS-INC", "#AggregatedTestGen"]
+                    if set(res_df) != set(ordered_df_cols):
+                        error_exit ("(BUG), need to uspdate ordered_df_cols: inconsistent")
+                    res_df = res_df[ordered_df_cols]
+
+                    # Add decoded name fields
+                    nf_df = pd.DataFrame([decode_tech_conf_name(v) for v in res_df['Tesh-Config']])
+                    
+                    print res_df.to_string()
+
+                    res_df.join(nf_df)
                     res_df.to_csv(outcsvfile, index=False)
 
-                    print res_df.to_string()
     print "@ DONE!"
 
 #~ def main()
