@@ -2556,7 +2556,7 @@ def main():
                             semu_info_numMutstatesEqWithOrigAtMutPoint = '-'
                             for index, row in semu_info_df.iterrows():
                                 if float(row["ellapsedTime(s)"]) <= time_snapshot_minute * 60.0 :
-                                    semu_info_stateCmpTime = float(row["stateCompareTime(s)")
+                                    semu_info_stateCmpTime = float(row["stateCompareTime(s)"])
                                     semu_info_numMutstatesForkedFromOrig = int(row["#MutStatesForkedFromOriginal"])
                                     semu_info_numMutstatesEqWithOrigAtMutPoint = int(row["#MutStatesEqWithOrigAtMutPoint"])
                                 else:
@@ -2616,7 +2616,7 @@ def main():
                                 "Inintial#Tests": testgen_mode_initial_numtests, \
                                 "Initial-MS": ((testgen_mode_initial_numkillmuts) * 100.0 / testgen_mode_initial_nummuts), \
                                 "TestSampleMode": args.testSampleMode, \
-                                "MaxTestGen-Time(min)": max_time_minutes  \ 
+                                "MaxTestGen-Time(min)": max_time_minutes  \
                                 }, initial_dats_json)
                     res_df = pd.DataFrame(out_df_parts)
                     ordered_df_cols = ["TimeSnapshot(min)", "Tech-Config", "#Mutants", "#Targeted", "#Covered", "#Killed", \
