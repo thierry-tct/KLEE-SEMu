@@ -5253,11 +5253,11 @@ bool Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_i
     semu_exec_info_file = interpreterHandler->getOutputFilename("semu_execution_info.csv");
     info_header.assign("ellapsedTime(s),stateCompareTime(s),#MutStatesForkedFromOriginal,#MutStatesEqWithOrigAtMutPoint\n");
   } 
-  unsigned ellapsedtime = util::getWallTime() - ks_runStartTime;
+  double ellapsedtime = util::getWallTime() - ks_runStartTime;
   std::ofstream ofs(semu_exec_info_file, std::ofstream::out | std::ofstream::app); 
   if (ofs.is_open()) {
-    ofs << info_header << ellapsedtime << "," << ks_totalStateComparisonTime
-                  << ks_numberOfMutantStatesCheckedAtMutationPoint 
+    ofs << info_header << ellapsedtime << "," << ks_totalStateComparisonTime << ","
+                  << ks_numberOfMutantStatesCheckedAtMutationPoint << ","
                   << ks_numberOfMutantStatesDiscardedAtMutationPoint << "\n";
     ofs.close();
   } else {
@@ -5272,7 +5272,7 @@ bool Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_i
   filename << "test" << std::setfill('0') << std::setw(6) << testid << '.' << ktest_suffix;
   // In case the test case generation failed, do not add it
   if (! llvm::sys::fs::exists(interpreterHandler->getOutputFilename(filename.str()))) {
-    return false;
+    //return false;
   }
 
   // Test is generated okay, update mutant info file
