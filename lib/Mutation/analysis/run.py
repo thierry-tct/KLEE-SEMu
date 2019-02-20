@@ -422,7 +422,7 @@ def ktestToFile(ktestData, outfilename):
     where each argument is represented by a pair of argtype (argv or file or stdin and the corresponding sizes)
     IN KLEE, sym-files is taken into account only once (the last one)
 '''
-def parseZestiKtest(filename):
+def parseZestiKtest(filename, test2zestidirMap_arg=None):
 
     datalist = []
     b = ktest_tool.KTest.fromfile(filename)
@@ -479,7 +479,15 @@ def parseZestiKtest(filename):
             if len(indexes_ia) > 0 or name != "argv": # filename in args, the corresponding position in datalist is indexes_ia, or name is not argv but is containe. example "--file=in1" TODO
                 # in case the same name appears many times in args, let the user manually verify
                 if len(indexes_ia) > 1:
-                    print "\n>> CONFLICT: the file object at position ",ind,"with name","'"+name+"'","in ktest",filename,"appears several times in args (Check OUTPUT/caches/test2zestidirMap.json for actual test)."
+                    if test2zestidirMap_arg is not None:
+                        actual_test = None
+                        for at in test2zestidirMap_arg:
+                            if os.path.dirname(filename).endswith(test2zestidirMap_arg[at])
+                                actual_test = at
+                                break
+                        print "\n>> CONFLICT: the file object at position ",ind,"with name","'"+name+"'","in ktest",filename,"appears several times in args list (The actual test is:", actual_test,")."
+                    else:
+                        print "\n>> CONFLICT: the file object at position ",ind,"with name","'"+name+"'","in ktest",filename,"appears several times in args list (Check OUTPUT/caches/test2zestidirMap.json for actual test)."
                     print "    >> Please choose its space separated position(s), (",indexes_ia,"):"
                     raw = raw_input()
                     indinargs = [int(v) for v in raw.split()]
@@ -490,7 +498,15 @@ def parseZestiKtest(filename):
                     indexes_ia = [i for i,x in enumerate(b.args[1:]) if name in x]
                     assert len(indexes_ia) > 0, "Must have at least one argv containing filename in its data"
                     if len(indexes_ia) > 1:
-                        print "\n>> HINT NEEDED: the file object at position ",ind,"with name",name,"in ktest",filename,"has file with complex argv (Check OUTPUT/caches/test2zestidirMap.json for actual test)."
+                        if test2zestidirMap_arg is not None:
+                            actual_test = None
+                            for at in test2zestidirMap_arg:
+                                if os.path.dirname(filename).endswith(test2zestidirMap_arg[at])
+                                    actual_test = at
+                                    break
+                            print "\n>> HINT NEEDED: the file object at position ",ind,"with name",name,"in ktest",filename,"has file with complex argv (The actual test is:", actual_test,")."
+                        else:
+                            print "\n>> HINT NEEDED: the file object at position ",ind,"with name",name,"in ktest",filename,"has file with complex argv (Check OUTPUT/caches/test2zestidirMap.json for actual test)."
                         print "    >> Please choose its space separated position(s), (",indexes_ia,"):"
                         raw = raw_input()
                         indinargs = [int(v) for v in raw.split()]
@@ -596,7 +612,8 @@ def is_sym_args_having_nargs(sym_args, check_good=False):
     return False
 # def is_sym_args_having_nargs()
 
-def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i=False, add_sym_stdout=False):
+def getSymArgsFromZestiKtests (ktestFilesList, test2zestidirMap_arg, argv_becomes_arg_i=False, add_sym_stdout=False):
+    testNamesList = test2zestidirMap_arg.keys()
     assert len(ktestFilesList) == len(testNamesList), "Error: size mismatch btw ktest and names: "+str(len(ktestFilesList))+" VS "+str(len(testNamesList))
     # XXX implement this. For program with file as parameter, make sure that the filenames are renamed in the path conditions(TODO double check)
     listTestArgs = []
@@ -614,7 +631,7 @@ def getSymArgsFromZestiKtests (ktestFilesList, testNamesList, argv_becomes_arg_i
             continue
 
         # sed because Zesti give argv, argv_1... while sym args gives arg0, arg1,...
-        ktestdat, testArgs, fileNstatInd, maxFsize, fileargind, afterFnS = parseZestiKtest(ktestfile)
+        ktestdat, testArgs, fileNstatInd, maxFsize, fileargind, afterFnS = parseZestiKtest(ktestfile, test2zestidirMap_arg)
         listTestArgs.append(testArgs)
         ktestContains["CORRESP_TESTNAME"].append(testNamesList[ipos])
         ktestContains["KTEST-OBJ"].append(ktestdat)
@@ -2122,7 +2139,7 @@ def main():
                 for ktestfile in listKtestFiles:
                     zestKtests.append(ktestfile)
             # refactor the ktest fom zesti and put in semu workdir, together with the sym
-            zest_sym_args_param, zestKTContains = getSymArgsFromZestiKtests (zestKtests, test2zestidirMap.keys())
+            zest_sym_args_param, zestKTContains = getSymArgsFromZestiKtests (zestKtests, test2zestidirMap)
 
         if testSampleMode in ['KLEE', 'NUM', 'PASS']:
             unused, alltestsObj, unwrapped_testlist = getTestSamples(testList, 0, matrix)   # 0 to not sample
