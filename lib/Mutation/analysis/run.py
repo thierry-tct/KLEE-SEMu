@@ -482,7 +482,7 @@ def parseZestiKtest(filename, test2zestidirMap_arg=None):
                     if test2zestidirMap_arg is not None:
                         actual_test = None
                         for at in test2zestidirMap_arg:
-                            if os.path.dirname(filename).endswith(test2zestidirMap_arg[at])
+                            if os.path.dirname(filename).endswith(test2zestidirMap_arg[at]):
                                 actual_test = at
                                 break
                         print "\n>> CONFLICT: the file object at position ",ind,"with name","'"+name+"'","in ktest",filename,"appears several times in args list (The actual test is:", actual_test,")."
@@ -501,7 +501,7 @@ def parseZestiKtest(filename, test2zestidirMap_arg=None):
                         if test2zestidirMap_arg is not None:
                             actual_test = None
                             for at in test2zestidirMap_arg:
-                                if os.path.dirname(filename).endswith(test2zestidirMap_arg[at])
+                                if os.path.dirname(filename).endswith(test2zestidirMap_arg[at]):
                                     actual_test = at
                                     break
                             print "\n>> HINT NEEDED: the file object at position ",ind,"with name",name,"in ktest",filename,"has file with complex argv (The actual test is:", actual_test,")."
