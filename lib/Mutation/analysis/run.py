@@ -1574,7 +1574,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
         tmp_obj = {"ellapsedTime(s)": row["ellapsedTime(s)"]}
         for metric in ["stateCompareTime(s)", "#MutStatesForkedFromOriginal", \
                                                 "#MutStatesEqWithOrigAtMutPoint"]:
-            tmp_obj[metric] = sum(pointer[v][metric] for v in pointer)
+            tmp_obj[metric] = sum(pointers[v][metric] for v in pointers)
 
     info_df = pd.DataFrame(final_info_list)
     info_df.to_csv(final_info_file, index=False)
