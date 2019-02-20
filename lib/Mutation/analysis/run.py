@@ -1463,15 +1463,28 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
         for ktp in kt_fold:
             assert ktp not in ktests, "ktp not in ktests. fold is "+fold+" ktp is "+ktp
             ktests[ktp] = []
+
+        # XXX handle case where klee-semu could not output a test case
+        bad2good_ktest_map = {}
+        ktest_goodid_list = sorted([int(os.path.basename(kt).replace('.ktest', '').replace('test', ''))])
+        for bad_id_1, good_id in enumerate(ktest_goodid_list):
+            bad_id_str = bad_id_1 + 1
+            bad_kt = 'test%06d.ktest' % bad_id
+            good_kt = 'test%06d.ktest' % good_id
+            bad2good_ktest_map[bad_kt] = good_kt
+
+        # get data for mutants
         for minf in mut_fold:
             df = pd.read_csv(minf)
             for index, row in df.iterrows():
-                 assert row["ktest"].endswith(".ktest"), "Invalid minf file: "+minf
-                 et = row["ellapsedTime(s)"]
-                 mid = row["MutantID"]
-                 ktp = os.path.join(fold, row["ktest"])
-                 assert ktp in ktests, "test not in ktests: "+str(ktests)+",\n test (not in ktests): "+ktp+"; minf is: "+minf
-                 ktests[ktp].append((mid, et))
+                assert row["ktest"].endswith(".ktest"), "Invalid minf file: "+minf
+                et = row["ellapsedTime(s)"]
+                mid = row["MutantID"]
+                if row["ktest"] in bad2good_ktest_map:
+                    ktp = os.path.join(fold, bad2good_ktest_map[row["ktest"]])
+                    assert ktp in ktests, "test not in ktests: "+str(ktests)+",\n test (not in ktests): "+ktp+"; minf is: "+minf
+                    ktests[ktp].append((mid, et))
+                    
 
     # Verify that each ktest in ktests has corresponding mutant
     if len([kt for kt in ktests if len(ktests[kt]) == 0]) > 0:

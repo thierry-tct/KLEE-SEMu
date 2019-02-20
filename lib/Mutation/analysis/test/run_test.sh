@@ -7,12 +7,17 @@
 # DO_CLEANSTART=on         --> apply cleanstart on MFI to start everything over
 # FROM_EXECUTION=SEMU   --> Execute this script from given execution: [PREPARE, SEMU, REPLAY, REPORT]
 # MFIRUNSHADOW_VERBOSE=on  --> make klee test generation of MFI verbose
+# AUTO_REEXECUTE_FAILED_SEMU=3  --> re-execute Semu when failed up to 3 times (N times specified) 
+#                                    (Using EXTRA_ARGS="--semucontinueunfinishedtunings")
 # 
 #XXX INFO: In case there are some tests that fail with zesti and want to skip them,
 #XXX INFO: Just rerun passing the environment variable: SEMU_ZESTI_RUN_SKIP_FAILURE=on
 
 # While debugging semu, if some fail and we do not want to rerun then but only run those that fail,
 # pass this Extra arg as env var:  EXTRA_ARGS="--semucontinueunfinishedtunings"
+#
+#
+
 
 set -u
 
@@ -94,7 +99,30 @@ if [ $from_exec -le 3 ] #true
 then
     echo "# RUNNING SEMU..."
     cd $semudir || error_exit "failed to enter semudir!"
-    SKIP_TASKS="ZESTI_DEV_TASK TEST_GEN_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config || error_exit "Semu Failed"
+
+    contunfinished="--semucontinueunfinishedtunings"
+    if [ "${EXTRA_ARGS:-}" != "" ]
+    then
+        echo $EXTRA_ARGS | grep "\--semucontinueunfinishedtunings" > /dev/null && contunfinished=""
+    fi
+    
+    tot_n_runs=2
+    [ "${AUTO_REEXECUTE_FAILED_SEMU:-}" != "" ] && tot_n_runs=$AUTO_REEXECUTE_FAILED_SEMU
+    [ $tot_n_runs -gt 0 ] || error_exit "Invalid tot_n_runs: $tot_n_runs"
+
+    n_runs=$tot_n_runs
+    fail=1
+    while [ $fail -ne 0 ]
+    do
+        extra_args=""
+        [ $n_runs -lt $tot_n_runs ] && extra_args="$contunfinished"
+        SKIP_TASKS="ZESTI_DEV_TASK TEST_GEN_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf EXTRA_ARGS="${EXTRA_ARGS:-} $extra_args" \
+                                                                            bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config && fail=0
+        n_runs=$(($n_runs - 1))
+        [ $n_runs -le 0 ] && break
+    done
+    [ $fail -ne 0 ] && error_exit "Semu Failed. repeated $tot_n_runs times"
+
     cd - > /dev/null
 fi
 

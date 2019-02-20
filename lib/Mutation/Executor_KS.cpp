@@ -32,7 +32,7 @@
 #include "klee/ExprBuilder.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/CFG.h"
-#include "llvm/Support/FileSystem.h"
+//#include "llvm/Support/FileSystem.h"
 #include <unistd.h>
 #include <sys/wait.h>
 //~KS
@@ -5269,11 +5269,11 @@ bool Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_i
 
   // Make sure that the test was correctly generated
   std::stringstream filename;
-  filename << "test" << std::setfill('0') << std::setw(6) << testid << '.' << ktest_suffix;
+  filename << "test" << std::setfill('0') << std::setw(6) << testid << ktest_suffix;
   // In case the test case generation failed, do not add it
-  if (! llvm::sys::fs::exists(interpreterHandler->getOutputFilename(filename.str()))) {
+  //if (! llvm::sys::fs::exists(interpreterHandler->getOutputFilename(filename.str()))) {
     //return false;
-  }
+  //}
 
   // Test is generated okay, update mutant info file
   std::string out_file_name = mutantID2outfile[mutant_id];
