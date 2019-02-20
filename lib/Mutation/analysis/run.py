@@ -2582,7 +2582,7 @@ def main():
                                 else:
                                     break
                             if time_snapshot_minute == max_time_minutes:
-                                seed_dup_kts_n = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-seed_dup_ktests.json"))["Number of seed duplicates removed"]
+                                seed_dup_kts_num = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-seed_dup_ktests.json"))["Number of seed duplicates removed"]
                             else:
                                 seed_dup_kts_num = '-'
 
