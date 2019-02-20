@@ -1466,7 +1466,7 @@ def fdupeGeneratedTest (mfi_ktests_dir_top, mfi_ktests_dir, semuoutputs, seeds_d
 
         # XXX handle case where klee-semu could not output a test case
         bad2good_ktest_map = {}
-        ktest_goodid_list = sorted([int(os.path.basename(kt).replace('.ktest', '').replace('test', ''))])
+        ktest_goodid_list = sorted([int(os.path.basename(kt).replace('.ktest', '').replace('test', '')) for kt in ktests])
         for bad_id_1, good_id in enumerate(ktest_goodid_list):
             bad_id_str = bad_id_1 + 1
             bad_kt = 'test%06d.ktest' % bad_id
