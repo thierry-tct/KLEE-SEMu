@@ -184,7 +184,7 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
     linewidths = [1.75, 1.75, 2.5, 2.5, 3.25, 3.75, 2]
 
     # XXX process APFDs (max, min, med)
-    proj_agg_func = np.median
+    #proj_agg_func = np.median
     proj_agg_func = np.average
     for pc in techConfbyvalbyconf:
         min_vals = {}
