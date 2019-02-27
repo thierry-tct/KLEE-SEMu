@@ -310,7 +310,7 @@ def main():
         if os.path.isfile(os.path.join(direct, csv_file)):
             proj2dir[f_d] = os.path.join(intopdir, f_d)
     if len(proj2dir) > 0:
-        print ("# Calling libMain...")
+        print ("# Calling libMain on projects", list(proj2dir), "...")
         libMain(outdir, proj2dir)
         print("# DONE")
     else:
