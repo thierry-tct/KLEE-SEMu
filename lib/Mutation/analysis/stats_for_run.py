@@ -185,7 +185,7 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
 
     # XXX process APFDs (max, min, med)
     proj_agg_func = np.median
-    proj_agg_func = average
+    proj_agg_func = np.average
     for pc in techConfbyvalbyconf:
         min_vals = {}
         max_vals = {}
