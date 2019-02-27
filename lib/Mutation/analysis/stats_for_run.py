@@ -88,7 +88,7 @@ def getProjRelDir():
 
 PROJECT_ID_COL = "projectID"
 SpecialTechs = {'_pureklee_': 'klee', '50_50_0_0_rnd_5_on_nocrit':'concrete'}
-def libMain(outdir, proj2dir, projcommonreldir=None):
+def libMain(outdir, proj2dir, customMaxtime=None, projcommonreldir=None):
     merged_df = None
     all_initial = {}
     if projcommonreldir is None:
@@ -142,6 +142,14 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
     numGenTestsCol = "#GenTests"
     numForkedMutStatesCol = "#MutStatesForkedFromOriginal"
     mutPointNoDifCol = "#MutStatesEqWithOrigAtMutPoint"
+
+    if customMaxtime is not None:
+        # filter anything higher than maxtime (minutes)
+        assert customMaxtime > 0, "maxtime must be greater than 0"
+        merged_df = merged_df[merged_df[timeCol] <= customMaxtime]
+        if len(merged_df) == 0:
+            print("# The customMaxtime specified is too low. Terminating ...")
+            exit(1)
 
     tech_confs = set(merged_df[techConfCol])
     projects = set(merged_df[PROJECT_ID_COL])
@@ -288,6 +296,8 @@ def main():
     parser.add_argument("-i", "--intopdir", default=None, \
             help="Top directory where to all projects are"\
                                         +" (will search the finished ones)")
+    parser.add_argument("--maxtimes", default=None, \
+                help="space separated customMaxtime list to use (in minutes)")
     args = parser.parse_args()
 
     outdir = args.output
@@ -295,6 +305,10 @@ def main():
     assert outdir is not None
     assert intopdir is not None
     assert os.path.isdir(intopdir)
+
+    maxtime_list = None
+    if args.maxtimes is not None:
+        maxtime_list = list(set(args.maxtimes.strip().split()))
 
     if os.path.isdir(outdir):
         if raw_input("\nspecified output exists. Clear it? [y/n] ").lower() \
@@ -311,7 +325,14 @@ def main():
             proj2dir[f_d] = os.path.join(intopdir, f_d)
     if len(proj2dir) > 0:
         print ("# Calling libMain on projects", list(proj2dir), "...")
-        libMain(outdir, proj2dir)
+        if maxtime_list is None:
+            libMain(outdir, proj2dir)
+        else:
+            for maxtime in maxtime_list:
+                mt_outdir = os.path.join(outdir, "maxtime-"+maxtime)
+                os.mkdir(mt_outdir)
+                libMain(mt_outdir, proj2dir)
+
         print("# DONE")
     else:
         print("# !! No good project found")
