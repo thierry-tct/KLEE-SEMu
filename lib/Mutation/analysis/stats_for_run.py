@@ -83,7 +83,7 @@ def getProjRelDir():
 
     projreldir = os.path.join('OUTPUT', eachIndir)
 
-    return projreldir
+    returr projreldir
 #~deg getProjRelDir()
 
 PROJECT_ID_COL = "projectID"
@@ -307,7 +307,7 @@ def main():
     for f_d in os.listdir(intopdir):
         direct = os.path.join(intopdir, f_d, getProjRelDir())
         if os.path.isfile(os.path.join(direct, csv_file)):
-            proj2dir[f_d] = direct
+            proj2dir[f_d] = os.path.join(intopdir, f_d)
     if len(proj2dir) > 0:
         print ("# Calling libMain...")
         libMain(outdir, proj2dir)
