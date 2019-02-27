@@ -107,7 +107,7 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
             merged_df = tmp_df
         else:
             assert set(merged_df) == set(tmp_df), "Mismatch column for "+proj 
-            merged_df = merged_df.concat(tmp_df, ignore_index=True, sort=False)
+            merged_df = merged_df.append(tmp_df, ignore_index=True, sort=False)
 
         with open(full_initial_json) as fp:
             all_initial[proj] = json.load(fp)
@@ -296,7 +296,7 @@ def main():
     assert os.path.isdir(intopdir)
 
     if os.path.isdir(outdir):
-        if raw_input("\nspecified output exists. Clear it? y/n ").lower() \
+        if raw_input("\nspecified output exists. Clear it? [y/n] ").lower() \
                                                                         == 'y':
             shutil.rmtree(outdir)
         else:
