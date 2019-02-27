@@ -54,10 +54,11 @@ def compute_auc(in_x_list, in_y_list):
         assert v_y >= 0, "Only supports positive or null Y coordinate values"
 
     auc = 0.0
-    prev_x = 0.0
-    prev_y = 0.0
+    prev_x = None
+    prev_y = None
     for p_ind, (x_val, y_val) in enumerate(zip(x_list, y_list)):
-        auc += (x_val - prev_x) * \
+        if prev_x is not None:
+            auc += (x_val - prev_x) * \
                                 (min(y_val, prev_y) + abs(y_val - prev_y)/2.0)
         prev_x = x_val
         prev_y = y_val
