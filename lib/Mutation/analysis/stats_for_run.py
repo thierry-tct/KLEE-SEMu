@@ -298,6 +298,8 @@ def main():
                                         +" (will search the finished ones)")
     parser.add_argument("--maxtimes", default=None, \
                 help="space separated customMaxtime list to use (in minutes)")
+    parser.add_argument("--onlyprojects", default=None, \
+                help="space separated project list to use")
     args = parser.parse_args()
 
     outdir = args.output
@@ -309,6 +311,10 @@ def main():
     maxtime_list = None
     if args.maxtimes is not None:
         maxtime_list = list(set(args.maxtimes.strip().split()))
+    
+    onlyprojects_list = None
+    if args.onlyprojects is not None:
+        onlyprojects_list = list(set(args.onlyprojects.strip().split()))
 
     if os.path.isdir(outdir):
         if raw_input("\nspecified output exists. Clear it? [y/n] ").lower() \
@@ -323,6 +329,10 @@ def main():
         direct = os.path.join(intopdir, f_d, getProjRelDir())
         if os.path.isfile(os.path.join(direct, csv_file)):
             proj2dir[f_d] = os.path.join(intopdir, f_d)
+    if onlyprojects_list is not None:
+        for p in onlyprojects_list:
+            if p in proj2dir:
+                del proj2dir[p]
     if len(proj2dir) > 0:
         print ("# Calling libMain on projects", list(proj2dir), "...")
         if maxtime_list is None:
