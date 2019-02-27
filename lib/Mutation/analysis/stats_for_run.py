@@ -107,7 +107,7 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
             merged_df = tmp_df
         else:
             assert set(merged_df) == set(tmp_df), "Mismatch column for "+proj 
-            merged_df = merged_df.append(tmp_df, ignore_index=True, sort=False)
+            merged_df = merged_df.append(tmp_df, ignore_index=True)
 
         with open(full_initial_json) as fp:
             all_initial[proj] = json.load(fp)
