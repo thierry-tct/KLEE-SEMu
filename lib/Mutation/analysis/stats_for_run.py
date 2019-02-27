@@ -1,10 +1,13 @@
 
 # Library to compute the stats after run.py
 
+from __future__ import print_function
 import os
 import sys
 import shutil
 import json
+import argparse
+import shutil
 import scipy.stats
 import numpy as np
 
@@ -81,6 +84,7 @@ def getProjRelDir():
     projreldir = os.path.join('OUTPUT', eachIndir)
 
     return projreldir
+#~deg getProjRelDir()
 
 PROJECT_ID_COL = "projectID"
 SpecialTechs = {'_pureklee_': 'klee', '50_50_0_0_rnd_5_on_nocrit':'concrete'}
@@ -134,6 +138,10 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
     targetCol = "#Targeted"
     numMutsCol = "#Mutants"
     techConfCol = "Tech-Config"
+    stateCompTimeCol = "StateComparisonTime(s)"
+    numGenTestsCol = "#GenTests"
+    numForkedMutStatesCol = "#MutStatesForkedFromOriginal"
+    mutPointNoDifCol = "#MutStatesEqWithOrigAtMutPoint"
 
     tech_confs = set(merged_df[techConfCol])
     projects = set(merged_df[PROJECT_ID_COL])
@@ -168,6 +176,13 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
             v_list.append(ms_apfds[p][t_c])
         return v_list
 
+    colors_bw = ['white', 'whitesmoke', 'lightgray', 'silver', 'darkgrey', \
+                                                    'gray', 'dimgrey', "black"]
+    colors = ["green", 'blue', 'red', "black", "maroon", "magenta", "cyan"]
+    linestyles = ['solid', 'solid', 'dashed', 'dashed', 'dashdot', 'dotted', \
+                                                                    'solid']
+    linewidths = [1.75, 1.75, 2.5, 2.5, 3.25, 3.75, 2]
+
     # XXX process APFDs (max, min, med)
     #proj_agg_func = sum
     proj_agg_func = np.median
@@ -190,16 +205,44 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
         for sp in SpecialTechs:
             data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp) \
                                                 for em in ['min', 'med','max']}
-        # TODO Actual plot with data 
+        tmp_all_vals = []
+        for g in data:
+            for m in data[g]:
+                tmp_all_vals.append(data[g][m])
+        min_y = min(tmp_all_vals)
+        max_y = max(tmp_all_vals)
+        assert min_y >= 0 and min_y <= 100
+        assert max_y >= 0 and max_y <= 100
+        # Actual plot with data 
+        # TODO arange max_y, min_y and step_y
+        if max_y - min_y >= 10:
+            max_y = int(max_y) + 2 
+            min_y = int(min_y) - 1 
+            step_y = (max_y - min_y) / 10
+        else:
+            step_y = 1
+            rem_tmp = 10 - max_y - min_y + 1
+            if 100 - max_y < rem_tmp/2:
+                min_y = int(min_y - (rem_tmp - (100 - max_y)))
+                max_y = 100
+            elif min_y < rem_tmp/2:
+                max_y = int(max_y + (rem_tmp - min_y)) 
+                min_y = 0
+            else:
+                max_y = int(max_y + rem_tmp/2)
+                min_y = int(min_y - rem_tmp/2)
+        yticks_range = range(min_y, max_y+1, step_y)
+        plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
+                                "AVERAGE MS", yticks_range=yticks_range)
     
-    # XXX Find best confs
+    # XXX Find best and worse confs
     apfd_ordered_techconf_list = sorted(list(set(merged_df[techConfCol])), \
                     reverse=True, \
                     key=lambda x: proj_agg_func(getListAPFDSForTechConf(x)))
     best_val_tmp = proj_agg_func(getListAPFDSForTechConf(\
-                                                apfd_ordered_techconf_list[0]))
+                                            apfd_ordered_techconf_list[0]))
     worse_val_tmp = proj_agg_func(getListAPFDSForTechConf(\
-                                                apfd_ordered_techconf_list[-1]))
+                                            apfd_ordered_techconf_list[-1]))
     best_elems = []
     worse_elems = []
     for i, v in enumerate(apfd_ordered_techconf_list):
@@ -207,14 +250,69 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
             best_elems.append(v)
         if proj_agg_func(getListAPFDSForTechConf(v)) <= worse_val_tmp:
             worse_elems.append(v)
-    # TODO get corresponding param values and save as csv (best and worse)
+    # get corresponding param values and save as csv (best and worse)
+    best_df_obj = []
+    worse_df_obj = []
+    for elem_list, df_obj_list in [(best_elems, best_df_obj), \
+                                                (worse_elems, worse_df_obj)]:
+        for v in elem_list:
+            row = {}
+            for pc in techConfbyvalbyconf:
+                for val in techConfbyvalbyconf[pc]:
+                    if v in techConfbyvalbyconf[pc][val]:
+                        assert pc not in row, "BUG"
+                        row[pc] = val
+            row[techConfCol] = v
+            row['MS_INC_APFD'] = proj_agg_func(getListAPFDSForTechConf(v))
+            df_obj_list.append(row)
+    best_df = pd.DataFrame(best_df_obj)
+    worse_df = pd.DataFrame(worse_df_obj)
+    best_df_file = os.path.join(outdir, "best_tech_conf_apfd.csv")
+    worse_df_file = os.path.join(outdir, "worse_tech_conf_apfd.csv")
+    best_df.to_csv(best_df_file, index=False)
+    worse_df.to_csv(worse_df_file, index=False)
 
     # XXX compare MS with comState time, %targeted, #testgen, WM%
     selectedTimes_minutes = [15, 30, 60, 120]
     # TODO get data and plot
+    #for time_snap in selectedTimes_minutes:
+    #    time_snap_df = \
+    #            only_semu_cfg_df[int(only_semu_cfg_df[timeCol]) == time_snap]
+#~ def libMain()
 
 def main():
-    pass #libMain()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-o", "--output", default=None, \
+            help="Output directory, will be deleted and recreated if exists")
+    parser.add_argument("-i", "--intopdir", default=None, \
+            help="Top directory where to all projects are"\
+                                        +" (will search the finished ones)")
+    args = parser.parse_args()
+
+    outdir = args.output
+    intopdir = args.intopdir
+    assert outdir is not None
+    assert intopdir is not None
+    assert os.path.isdir(intopdir)
+
+    if os.path.isdir(outdir):
+        if raw_input("\nspecified output exists. Clear it? y/n ").lower() \
+                                                                        == 'y':
+            shutil.rmtree(outdir)
+        else:
+            print("# please specify another outdir")
+            return
+    os.mkdir(outdir)
+    proj2dir = {}
+    for f_d in os.listdir(intopdir):
+        direct = os.path.join(intopdir, f_d, getProjRelDir())
+        if os.path.isfile(os.path.join(direct, csv_file)):
+            proj2dir[f_d] = direct
+    if len(proj2dir) > 0:
+        libMain(outdir, proj2dir)
+        print("# DONE")
+    else:
+        print("# !! No good project found")
 
 if __name__ == '__main__':
     main()
