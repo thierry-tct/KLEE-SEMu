@@ -83,7 +83,7 @@ def getProjRelDir():
 
     projreldir = os.path.join('OUTPUT', eachIndir)
 
-    returr projreldir
+    return projreldir
 #~deg getProjRelDir()
 
 PROJECT_ID_COL = "projectID"
