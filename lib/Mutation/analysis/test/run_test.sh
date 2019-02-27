@@ -90,7 +90,9 @@ if [ $from_exec -le 2 ] #true
 then
     echo "# RUNNING GET SEEDS"
     cd $semudir || error_exit "failed to enter semudir!"
-    SKIP_TASKS="SEMU_EXECUTION COMPUTE_TASK ANALYSE_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config || error_exit "Semu Failed"
+    #SKIP_TASKS="SEMU_EXECUTION COMPUTE_TASK ANALYSE_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf \
+    SKIP_TASKS="" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf \
+                                            bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config || error_exit "Semu Failed"
     cd - > /dev/null
 fi
 
@@ -117,7 +119,7 @@ then
         extra_args=""
         [ $n_runs -lt $tot_n_runs ] && extra_args="$contunfinished"
         SKIP_TASKS="ZESTI_DEV_TASK TEST_GEN_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf EXTRA_ARGS="${EXTRA_ARGS:-} $extra_args" \
-                                                                            bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config && fail=0
+                                                                bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config && fail=0
         n_runs=$(($n_runs - 1))
         [ $n_runs -le 0 ] && break
     done

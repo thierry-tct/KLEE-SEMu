@@ -1912,7 +1912,7 @@ def main():
     parser.add_argument("--fixedmutantnumbertarget", type=str, default=ALIVE_ALL, help="Specify the how the mutants to terget are set (<mode>[:<#Mutants>]): "+str(FIXED_MUTANT_NUMBER_STRATEGIES))
     parser.add_argument("--semucontinueunfinishedtunings", action="store_true", help="enable reusing previous semu execution and computation result (if available). Useful when execution fail for some tunings and we do not want to reexecute other completed tunings")
 
-    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default='30 60 90 120 180 240', help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
+    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(1, 240, 1)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
 
     args = parser.parse_args()
 
@@ -2650,6 +2650,7 @@ def main():
 
                     dumpJson({ \
                                 "Initial#Mutants": testgen_mode_initial_nummuts, \
+                                "Initial#KilledMutants": testgen_mode_initial_numkillmuts, \
                                 "Inintial#Tests": testgen_mode_initial_numtests, \
                                 "Initial-MS": ((testgen_mode_initial_numkillmuts) * 100.0 / testgen_mode_initial_nummuts), \
                                 "TestSampleMode": args.testSampleMode, \
