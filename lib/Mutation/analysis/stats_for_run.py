@@ -56,7 +56,7 @@ def compute_auc(in_x_list, in_y_list):
     auc = 0.0
     prev_x = 0.0
     prev_y = 0.0
-    for p_ind, x_val, y_val in enumerate(zip(x_list, y_list)):
+    for p_ind, (x_val, y_val) in enumerate(zip(x_list, y_list)):
         auc += (x_val - prev_x) * \
                                 (min(y_val, prev_y) + abs(y_val - prev_y)/2.0)
         prev_x = x_val
@@ -184,8 +184,8 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
     linewidths = [1.75, 1.75, 2.5, 2.5, 3.25, 3.75, 2]
 
     # XXX process APFDs (max, min, med)
-    #proj_agg_func = sum
     proj_agg_func = np.median
+    proj_agg_func = average
     for pc in techConfbyvalbyconf:
         min_vals = {}
         max_vals = {}
@@ -201,18 +201,18 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
         data = {val: {"min": getListAPFDSForTechConf(min_vals[val]), \
                         "med": getListAPFDSForTechConf(med_vals[val]), \
                         "max": getListAPFDSForTechConf(max_vals[val])} \
-                                                for val in techConfbyvalbyconf}
+                                            for val in techConfbyvalbyconf[pc]}
         for sp in SpecialTechs:
             data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp) \
                                                 for em in ['min', 'med','max']}
         tmp_all_vals = []
         for g in data:
             for m in data[g]:
-                tmp_all_vals.append(data[g][m])
+                tmp_all_vals += data[g][m]
         min_y = min(tmp_all_vals)
         max_y = max(tmp_all_vals)
-        assert min_y >= 0 and min_y <= 100
-        assert max_y >= 0 and max_y <= 100
+        assert min_y >= 0 and min_y <= 100, "invalid min_y: "+str(min_y)
+        assert max_y >= 0 and max_y <= 100, "invalid max_y: "+str(max_y)
         # Actual plot with data 
         # TODO arange max_y, min_y and step_y
         if max_y - min_y >= 10:
@@ -233,7 +233,8 @@ def libMain(outdir, proj2dir, projcommonreldir=None):
                 min_y = int(min_y - rem_tmp/2)
         yticks_range = range(min_y, max_y+1, step_y)
         plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
-                                "AVERAGE MS", yticks_range=yticks_range)
+                                "AVERAGE MS", yticks_range=yticks_range, \
+                                    selectData=['min', 'med', 'max'])
     
     # XXX Find best and worse confs
     apfd_ordered_techconf_list = sorted(list(set(merged_df[techConfCol])), \
