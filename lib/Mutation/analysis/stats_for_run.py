@@ -330,7 +330,7 @@ def main():
         if os.path.isfile(os.path.join(direct, csv_file)):
             proj2dir[f_d] = os.path.join(intopdir, f_d)
     if onlyprojects_list is not None:
-        for p in onlyprojects_list:
+        for p in set(proj2dir) - set(onlyprojects_list):
             if p in proj2dir:
                 del proj2dir[p]
     if len(proj2dir) > 0:
