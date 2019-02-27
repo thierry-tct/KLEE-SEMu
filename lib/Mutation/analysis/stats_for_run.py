@@ -341,7 +341,7 @@ def main():
             for maxtime in maxtime_list:
                 mt_outdir = os.path.join(outdir, "maxtime-"+maxtime)
                 os.mkdir(mt_outdir)
-                libMain(mt_outdir, proj2dir)
+                libMain(mt_outdir, proj2dir, customMaxtime=float(maxtime))
 
         print("# DONE")
     else:
