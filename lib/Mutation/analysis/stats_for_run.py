@@ -79,7 +79,7 @@ def getProjRelDir():
     eachIndirPrefix = 'TestGenFinalAggregated'
 
     assert curMode in Modes, "curMode not in Modes: "+curMode
-    eachIndir = eachIndirPrefix + curMode + testSamplePercent
+    eachIndir = eachIndirPrefix + curMode + '_' + testSamplePercent
 
     projreldir = os.path.join('OUTPUT', eachIndir)
 
@@ -309,6 +309,7 @@ def main():
         if os.path.isfile(os.path.join(direct, csv_file)):
             proj2dir[f_d] = direct
     if len(proj2dir) > 0:
+        print ("# Calling libMain...")
         libMain(outdir, proj2dir)
         print("# DONE")
     else:
