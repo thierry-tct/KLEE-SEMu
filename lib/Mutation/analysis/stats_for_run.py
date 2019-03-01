@@ -63,11 +63,13 @@ def compute_auc(in_x_list, in_y_list):
         prev_x = x_val
         prev_y = y_val
     return auc
-
+#~ def compute_auc()
+  
 def compute_apfd(in_x_list, in_y_list):
     auc = compute_auc(in_x_list, in_y_list)
     apfd = auc / abs(max(in_x_list) - min(in_x_list))
     return apfd
+#~ def compute_apfd()
 ########################
 
 csv_file="Results.csv"
@@ -282,7 +284,7 @@ def libMain(outdir, proj2dir, customMaxtime=None, projcommonreldir=None):
     best_df.to_csv(best_df_file, index=False)
     worse_df.to_csv(worse_df_file, index=False)
 
-    # XXX compare MS with comState time, %targeted, #testgen, WM%
+    # XXX compare MS with compareState time, %targeted, #testgen, WM%
     selectedTimes_minutes = [15, 30, 60, 120]
     # TODO get data and plot
     #for time_snap in selectedTimes_minutes:

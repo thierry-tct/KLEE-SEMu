@@ -2212,8 +2212,8 @@ def main():
     groundConsideredMutant_covtests = None
     list_groundConsideredMutant_covtests = []
     testgen_mode_initial_numtests = None
-    testgen_mode_initial_nummuts = None
-    testgen_mode_initial_numkillmuts = None
+    testgen_mode_initial_muts = None
+    testgen_mode_initial_killmuts = None
     if matrix is not None:
         groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, os.path.join(martOut, mutantInfoFile), os.path.join(martOut, fdupesDuplicatesFile), testTresh_str = covTestThresh)
 
@@ -2226,8 +2226,8 @@ def main():
             toremoveMuts = ground_KilledMutants
 
             testgen_mode_initial_numtests = len(testSamples[testSamples.keys()[0]])
-            testgen_mode_initial_nummuts = len(groundConsideredMutant_covtests)
-            testgen_mode_initial_numkillmuts = len(toremoveMuts)
+            testgen_mode_initial_muts = list(groundConsideredMutant_covtests)
+            testgen_mode_initial_killmuts = list(toremoveMuts)
             
         # keep only covered by treshold at least, and killed
         for mid in toremoveMuts:
@@ -2523,12 +2523,21 @@ def main():
 
                 initial_dats_json = os.path.join(agg_Out, "Initial-dat.json")
                 outcsvfile = os.path.join(agg_Out, "Results.csv")
+                funcscsvfile = os.path.join(agg_Out, "Results-byfunctions.csv")
                 outjsonfile_common = os.path.join(agg_Out, "Techs-relation.json")
                 if os.path.isfile(outcsvfile):
                     os.remove(outcsvfile)
                 for outjsonfile in glob.glob(outjsonfile_common+'*'):
                     if os.path.isfile(outjsonfile):
                         os.remove(outjsonfile)
+
+                mutant_info_obj = loadJson(os.path.join(martOut, mutantInfoFile))
+                considered_mutants_by_functions = {}
+                for m in groundConsideredMutant_covtests:
+                    funcname = mutant_info_obj[m]['FuncName']
+                    if funcname not in considered_mutants_by_functions:
+                        considered_mutants_by_functions[funcname] = []
+                    considered_mutants_by_functions[funcname].append(m) 
 
                 nGenTests_ = len(glob.glob(mfi_ktests_dir+"/*.ktest"))
                 if nGenTests_ > 0 and not os.path.isdir(mfi_execution_output):
@@ -2553,13 +2562,14 @@ def main():
                     mcov_file = os.path.join(mfi_execution_output, "data", "matrices", "MCOV.dat")
                     pf_file = os.path.join(mfi_execution_output, "data", "matrices", "ktestPassFail.txt")
 
-                    
                     out_df_parts = []
+                    funcs_out_df_parts = []
                     for time_snapshot_minute in time_snapshots_minutes_list:
                         outjsonfile = outjsonfile_common+"-"+str(time_snapshot_minute)+'min.json'
                         outobj_ = {}
                         killedMutsPerTuning = {}
                         time_snap_dfs_dats = []
+                        funcs_time_snap_dfs_dats = []
                         for semuTuning in semuTuningList:
                             nameprefix = semuTuning['name']
                             cons_kt_df = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-tests_by_ellapsedtime.csv"))
@@ -2567,66 +2577,97 @@ def main():
                             testsOfThis = cons_kt_df['ktest']
                             test2mutsDS = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-mutant_ktests_mapping.json"))
                             #test2mutsDS = {kt: test2mutsDS[kt] for kt in test2mutsDS if kt in testsOfThis}
+                            mutants2ktests = {}
                             targeted_mutants = set()
                             for kt in test2mutsDS:
                                 for mutant_,ellapsedtime in test2mutsDS[kt]:
                                     if float(ellapsedtime) <= time_snapshot_minute * 60.0:
                                         targeted_mutants.add(mutant_)
+                                        if mutant_ not in mutants2ktests:
+                                            mutants2ktests[mutant_] = []
+                                        mutants2ktests[mutant_].append(kt)
+                            assert set([mutants2ktests[m] for m in mutants2ktests]) == set(testsOfThis), \
+                                    "Error (BUG?): Missmatch betweem values in tests_by_ellapsedtime and mutant_ktest_map" + \
+                                        " for "+nameprefix
+
                             if nameprefix != '_pureklee_':
                                 assert len(targeted_mutants - set(groundConsideredMutant_covtests)) == 0, "more mutants were used to gen tests: "+str(len(targeted_mutants - set(groundConsideredMutant_covtests)))
-                            testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in testsOfThis])
-                            testsKillingOfThis = []
-                            if len(testsOfThis) > 0:
-                                newKilled = matrixHardness.getKillableMutants(sm_file, testsOfThis, testkillinglist=testsKillingOfThis)
-                                newCovered = matrixHardness.getListCoveredMutants(mcov_file, testsOfThis)
-                                nnewFailing = len(matrixHardness.getFaultyTests(pf_file, testsOfThis))
-                            else:
-                                newKilled = []
-                                newCovered = []
-                                nnewFailing = 0
-                            nnewKilled = len(newKilled)
-                            nnewCovered = len(newCovered)
 
-                            semu_info_df = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-semu_execution_info.csv"))
-                            semu_info_stateCmpTime = '-'
-                            semu_info_numMutstatesForkedFromOrig = '-'
-                            semu_info_numMutstatesEqWithOrigAtMutPoint = '-'
-                            for index, row in semu_info_df.iterrows():
-                                if float(row["ellapsedTime(s)"]) <= time_snapshot_minute * 60.0 :
-                                    semu_info_stateCmpTime = float(row["stateCompareTime(s)"])
-                                    semu_info_numMutstatesForkedFromOrig = int(row["#MutStatesForkedFromOriginal"])
-                                    semu_info_numMutstatesEqWithOrigAtMutPoint = int(row["#MutStatesEqWithOrigAtMutPoint"])
+                            # TODO loop over here for whole proj and by each function
+                            for filtering_func in [None] + list(considered_mutants_by_functions):
+                                # Compute testsOfThis
+                                if filtering_func is None:
+                                    filt_nMutants = nMutants
+                                    filt_targeted_mutants = targeted_mutants
+                                    filt_testsOfThis = testsOfThis
                                 else:
-                                    break
-                            if time_snapshot_minute == max_time_minutes:
-                                seed_dup_kts_num = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-seed_dup_ktests.json"))["Number of seed duplicates removed"]
-                            else:
-                                seed_dup_kts_num = '-'
+                                    assert filtering_func in considered_mutants_by_functions, "BUG: invalid func:"+filtering_func
+                                    filt_nMutants = len(considered_mutants_by_functions[filtering_func])
+                                    filt_targeted_mutants = list(set(targeted_mutants) & set(considered_mutants_by_functions[filtering_func]))
+                                    filt_testsOfThis = []
+                                    for m in filt_targeted_mutants:
+                                        filt_testsOfThis += mutants2ktests[m]
+                                    filt_testsOfThis = list(set(filt_testsOfThis) & set(testsOfThis))
 
-                            tmp_data = {
-                                            "TimeSnapshot(min)": time_snapshot_minute,
-                                            "Tech-Config": nameprefix,
-                                            "#Mutants": nMutants, 
-                                            "#Targeted": len(targeted_mutants), 
-                                            "#Covered": nnewCovered, 
-                                            "#Killed": nnewKilled, 
-                                            "#GenTests":len(testsOfThis), 
-                                            "#GenTestsKilling":len(testsKillingOfThis), 
-                                            "#FailingTests":nnewFailing, 
-                                            "MS-INC":(nnewKilled * 100.0 / nMutants), 
-                                            "#AggregatedTestGen": nGenTests_,
-                                            "#SeedDuplicatedGenTests": seed_dup_kts_num,
-                                            "StateComparisonTime(s)": semu_info_stateCmpTime,
-                                            "#MutStatesForkedFromOriginal": semu_info_numMutstatesForkedFromOrig,
-                                            "#MutStatesEqWithOrigAtMutPoint": semu_info_numMutstatesEqWithOrigAtMutPoint,
-                                        }
-                            time_snap_dfs_dats.append(tmp_data)
-                            killedMutsPerTuning[nameprefix] = set(newKilled)
+                                filt_testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in filt_testsOfThis])
+                                testsKillingOfThis = []
+                                if len(filt_testsOfThis) > 0:
+                                    newKilled = matrixHardness.getKillableMutants(sm_file, filt_testsOfThis, testkillinglist=testsKillingOfThis)
+                                    newCovered = matrixHardness.getListCoveredMutants(mcov_file, filt_testsOfThis)
+                                    nnewFailing = len(matrixHardness.getFaultyTests(pf_file, filt_testsOfThis))
+                                else:
+                                    newKilled = []
+                                    newCovered = []
+                                    nnewFailing = 0
+                                nnewKilled = len(newKilled)
+                                nnewCovered = len(newCovered)
 
-                        time_snap_agg_ntest = sum([v["#GenTests"] for v in time_snap_dfs_dats])
-                        for v_ind in range(len(time_snap_dfs_dats)):
-                            time_snap_dfs_dats[v_ind]["#AggregatedTestGen"] = time_snap_agg_ntest
+                                semu_info_df = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-semu_execution_info.csv"))
+                                semu_info_stateCmpTime = '-'
+                                semu_info_numMutstatesForkedFromOrig = '-'
+                                semu_info_numMutstatesEqWithOrigAtMutPoint = '-'
+                                for index, row in semu_info_df.iterrows():
+                                    if float(row["ellapsedTime(s)"]) <= time_snapshot_minute * 60.0 :
+                                        semu_info_stateCmpTime = float(row["stateCompareTime(s)"])
+                                        semu_info_numMutstatesForkedFromOrig = int(row["#MutStatesForkedFromOriginal"])
+                                        semu_info_numMutstatesEqWithOrigAtMutPoint = int(row["#MutStatesEqWithOrigAtMutPoint"])
+                                    else:
+                                        break
+                                if time_snapshot_minute == max_time_minutes:
+                                    seed_dup_kts_num = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-seed_dup_ktests.json"))["Number of seed duplicates removed"]
+                                else:
+                                    seed_dup_kts_num = '-'
+
+                                tmp_data = {
+                                                "TimeSnapshot(min)": time_snapshot_minute,
+                                                "Tech-Config": nameprefix,
+                                                "#Mutants": filt_nMutants, 
+                                                "#Targeted": len(filt_targeted_mutants), 
+                                                "#Covered": nnewCovered, 
+                                                "#Killed": nnewKilled, 
+                                                "#GenTests":len(filt_testsOfThis), 
+                                                "#GenTestsKilling":len(testsKillingOfThis), 
+                                                "#FailingTests":nnewFailing, 
+                                                "MS-INC":(nnewKilled * 100.0 / filt_nMutants), 
+                                                "#AggregatedTestGen": nGenTests_,
+                                                "#SeedDuplicatedGenTests": seed_dup_kts_num,
+                                                "StateComparisonTime(s)": semu_info_stateCmpTime,
+                                                "#MutStatesForkedFromOriginal": semu_info_numMutstatesForkedFromOrig,
+                                                "#MutStatesEqWithOrigAtMutPoint": semu_info_numMutstatesEqWithOrigAtMutPoint,
+                                            }
+                                if filtering_func is None:
+                                    time_snap_dfs_dats.append(tmp_data)
+                                    killedMutsPerTuning[nameprefix] = set(newKilled)
+                                else:
+                                    tmp_data["FunctionName"] = filtering_func
+                                    funcs_time_snap_dfs_dats.append(tmp_data) 
+
+                        for _snap_dfs_dats in (time_snap_dfs_dats, funcs_time_snap_dfs_dats):
+                            _snap_agg_ntest = sum([v["#GenTests"] for v in _snap_dfs_dats])
+                            for v_ind in range(len(_snap_dfs_dats)):
+                                _snap_dfs_dats[v_ind]["#AggregatedTestGen"] = _snap_agg_ntest
                         out_df_parts += time_snap_dfs_dats
+                        funcs_out_df_parts += funcs_time_snap_dfs_dats
 
                         extra_res = {}
                         #venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=1, setsize_to=len(killedMutsPerTuning), name_delim='&')
@@ -2645,34 +2686,58 @@ def main():
 
                         dumpJson(outobj_, outjsonfile)
                         print "Kill Mutant TestGen Analyse Result:"
-                        for k in sorted(outobj_.keys(), reverse=True, key=lambda x:x in extra_keys_outobj):
-                            print ">>> '"+k+"':", outobj_[k]
+                        #for k in sorted(outobj_.keys(), reverse=True, key=lambda x:x in extra_keys_outobj):
+                        #    print ">>> '"+k+"':", outobj_[k]
 
-                    dumpJson({ \
-                                "Initial#Mutants": testgen_mode_initial_nummuts, \
-                                "Initial#KilledMutants": testgen_mode_initial_numkillmuts, \
+                    initial_json_obj = { \
+                                "Initial#Mutants": len(testgen_mode_initial_muts), \
+                                "Initial#KilledMutants": len(testgen_mode_initial_killmuts), \
                                 "Inintial#Tests": testgen_mode_initial_numtests, \
-                                "Initial-MS": ((testgen_mode_initial_numkillmuts) * 100.0 / testgen_mode_initial_nummuts), \
+                                "Initial-MS": ((len(testgen_mode_initial_killmuts)) * 100.0 / len(testgen_mode_initial_muts)), \
                                 "TestSampleMode": args.testSampleMode, \
-                                "MaxTestGen-Time(min)": max_time_minutes  \
-                                }, initial_dats_json)
+                                "MaxTestGen-Time(min)": max_time_minutes, \
+                                "By-Functions": {} \
+                                } 
+                    for mlist_list, mlist_key in zip((testgen_mode_initial_muts, "Initial#Mutants"), \
+                                                (testgen_mode_initial_killmuts, "Initial#KilledMutants"))
+                        for m in mlist_list:
+                            funcname = mutant_info_obj[m]['FuncName']
+                            if funcname in considered_mutants_by_functions:
+                                if funcname not in initial_json_obj["By-Functions"]:
+                                    initial_json_obj["By-Functions"][funcname]["Initial#Mutants"] = 0 
+                                    initial_json_obj["By-Functions"][funcname]["Initial#KilledMutants"] = 0 
+                                initial_json_obj["By-Functions"][funcname][mlist_key] += 1
+                    for funcname in initial_json_obj["By-Functions"]:
+                        initial_json_obj["By-Functions"][funcname]["Initial-MS"] = 100.0 \
+                                                * initial_json_obj["By-Functions"][funcname]["Initial#KilledMutants"] \
+                                                / initial_json_obj["By-Functions"][funcname]["Initial#Mutants"] 
+                    dumpJson(initial_json_obj, initial_dats_json)
+
                     res_df = pd.DataFrame(out_df_parts)
+                    funcs_res_df = pd.DataFrame(funcs_out_df_parts)
                     ordered_df_cols = ["TimeSnapshot(min)", "Tech-Config", "#Mutants", "#Targeted", "#Covered", "#Killed", \
                                         "#GenTests", "#GenTestsKilling", "#FailingTests", "MS-INC", "#AggregatedTestGen", \
                                         "#SeedDuplicatedGenTests", "StateComparisonTime(s)", "#MutStatesForkedFromOriginal", "#MutStatesEqWithOrigAtMutPoint"]
+                    funcs_ordered_df_cols = ["FunctionName"]+ordered_df_cols
                     if set(res_df) != set(ordered_df_cols):
-                        error_exit ("(BUG), need to uspdate ordered_df_cols: inconsistent")
+                        error_exit ("(BUG), need to update ordered_df_cols: inconsistent")
+                    if set(funcs_res_df) != set(funcs_ordered_df_cols):
+                        error_exit ("(BUG), need to update funcs_ordered_df_cols: inconsistent")
                     res_df = res_df[ordered_df_cols]
+                    funcs_res_df = funcs_res_df[funcs_ordered_df_cols]
 
                     # Add decoded name fields
                     nf_df = pd.DataFrame([decode_tech_conf_name(v) for v in res_df['Tech-Config']])
+                    funcs_nf_df = pd.DataFrame([decode_tech_conf_name(v) for v in funcs_res_df['Tech-Config']])
                     
-                    print res_df.to_string()
+                    #print res_df.to_string()
 
                     res_df = res_df.join(nf_df)
+                    funcs_res_df = funcs_res_df.join(nf_df)
                     res_df.to_csv(outcsvfile, index=False)
+                    funcs_res_df.to_csv(funcscsvfile, index=False)
 
-    print "@ DONE!"
+    print "\n@ DONE!"
 
 #~ def main()
 
