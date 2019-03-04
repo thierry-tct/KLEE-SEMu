@@ -1669,6 +1669,9 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
             assert ktestsPre2Post[inKtestDirs[i]][kt] not in finalObj
             finalObj[ktestsPre2Post[inKtestDirs[i]][kt]] = in_finalObj[kt]
 
+        assert set(finalObj) == set(etdf['ktest']), "BUG: mismatch between test and by muts: "+\
+                                str(set(finalObj))+" VS "+str(set(etdf['ktest']))
+
         # copy 'info' file
         if os.path.isfile(os.path.join(inKtestDirs[i], 'info')):
             shutil.copy2(os.path.join(inKtestDirs[i], "info"), os.path.join(mfi_ktests_dir, names[i]+'-info'))
@@ -2586,7 +2589,7 @@ def main():
                                         if mutant_ not in mutants2ktests:
                                             mutants2ktests[mutant_] = []
                                         mutants2ktests[mutant_].append(kt)
-                            assert set([mutants2ktests[m] for m in mutants2ktests]) == set(testsOfThis), \
+                            assert set([tuple(mutants2ktests[m]) for m in mutants2ktests]) == set(testsOfThis), \
                                     "Error (BUG?): Missmatch betweem values in tests_by_ellapsedtime and mutant_ktest_map" + \
                                         " for "+nameprefix
 
