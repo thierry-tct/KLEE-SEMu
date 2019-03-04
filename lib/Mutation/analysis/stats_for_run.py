@@ -12,7 +12,11 @@ import scipy.stats
 import numpy as np
 
 import pandas as pd
+
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 sys.path.insert(0, os.path.expanduser("~/mytools/MFI-V2.0/Analysis"))
 import plotMerge
@@ -72,7 +76,37 @@ def compute_apfd(in_x_list, in_y_list):
 #~ def compute_apfd()
 ########################
 
+
+def make_twoside_plot(left_y_vals, right_y_vals, img_out_file, \
+                                        x_label="X", y_left_label="Y_LEFT", \
+                                                    y_right_label="Y_RIGHT"):
+
+    fig, ax1 = plt.subplots()
+
+    color = 'tab:red'
+    ax1.set_xlabel(x_label)
+
+    ax1.set_ylabel(y_left_label, color=color)
+    ax1.boxplot(left_y_vals, color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
+
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+
+    color = 'tab:blue'
+    ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
+    ax2.boxplot(right_y_vals, color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    plt.xticks([])
+
+    plt.tight_layout()
+    plt.savefig(img_out_file+".pdf", format="pdf")
+    plt.close('all')
+#~ def make_twoside_plot()
+
+
 csv_file="Results.csv"
+funcs_csv_file="Results-byfunctions.csv"
 initial_json="Initial-dat.json"
 
 def getProjRelDir():
@@ -91,21 +125,32 @@ def getProjRelDir():
 
 PROJECT_ID_COL = "projectID"
 SpecialTechs = {'_pureklee_': 'klee', '50_50_0_0_rnd_5_on_nocrit':'concrete'}
-def libMain(outdir, proj2dir, customMaxtime=None, projcommonreldir=None):
+def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
+                                                        projcommonreldir=None):
     merged_df = None
     all_initial = {}
     if projcommonreldir is None:
         projcommonreldir = getProjRelDir()
 
+    input_csv = funcs_csv_file if use_func else csv_file
+
     # Load data
     for proj in proj2dir:
         fulldir = os.path.join(proj2dir[proj], projcommonreldir)
-        full_csv_file = os.path.join(fulldir, csv_file)
+        full_csv_file = os.path.join(fulldir, input_csv)
         full_initial_json = os.path.join(fulldir, initial_json)
 
         tmp_df = pd.read_csv(full_csv_file, index_col=False)
         assert PROJECT_ID_COL not in tmp_df, PROJECT_ID_COL+" is in df"
-        tmp_df[PROJECT_ID_COL] = [proj] * len(tmp_df.index)
+        if use_func:
+            funcNameCol = "FunctionName"
+            assert funcNameCol in tmp_df, \
+                                        "invalid func csv file: "+full_csv_file
+            tmp_df[PROJECT_ID_COL] = list(\
+                    map(lambda x: os.path.join(proj, x), tmp_df[funcNameCol]))
+        else:
+            tmp_df[PROJECT_ID_COL] = [proj] * len(tmp_df.index)
+
         if merged_df is None:
             merged_df = tmp_df
         else:
@@ -117,12 +162,27 @@ def libMain(outdir, proj2dir, customMaxtime=None, projcommonreldir=None):
 
     # Compute the merged json
     merged_json_obj = {}
-    merged_json_obj["Initial#Mutants"] = sum([int(all_initial[v]["Initial#Mutants"]) for v in all_initial])
-    merged_json_obj["Initial#KilledMutants"] = sum([int(all_initial[v]["Initial#KilledMutants"]) for v in all_initial])
-    merged_json_obj["Inintial#Tests"] = sum([int(all_initial[v]["Inintial#Tests"]) for v in all_initial])
-    merged_json_obj["Initial-MS"] = sum([float(all_initial[v]["Initial-MS"]) for v in all_initial]) / len(all_initial)
-    merged_json_obj["TestSampleMode"] = all_initial[all_initial.keys()[0]]["TestSampleMode"]
-    merged_json_obj["MaxTestGen-Time(min)"] = all_initial[all_initial.keys()[0]]["MaxTestGen-Time(min)"]
+    merged_json_obj["Initial#Mutants"] = \
+            sum([int(all_initial[v]["Initial#Mutants"]) for v in all_initial])
+    merged_json_obj["Initial#KilledMutants"] = \
+            sum([int(all_initial[v]["Initial#KilledMutants"]) \
+                                                        for v in all_initial])
+    merged_json_obj["Inintial#Tests"] = \
+            sum([int(all_initial[v]["Inintial#Tests"]) for v in all_initial])
+    merged_json_obj["Initial-MS"] = \
+            sum([float(all_initial[v]["Initial-MS"]) \
+                                    for v in all_initial]) / len(all_initial)
+    merged_json_obj["TestSampleMode"] = \
+                        all_initial[all_initial.keys()[0]]["TestSampleMode"]
+    merged_json_obj["MaxTestGen-Time(min)"] = \
+                    all_initial[all_initial.keys()[0]]["MaxTestGen-Time(min)"]
+    if use_func:
+        merged_json_obj['By-Functions'] = {}
+        for proj in all_initial:
+            for func in all_initial[proj]:
+                func_name_merged = os.path.join(proj, func)
+                merged_json_obj['By-Functions'][func_name_merged] = \
+                                                        all_initial[proj][func]
 
     # save merged json
     with open(os.path.join(outdir, initial_json), 'w') as fp:
@@ -285,11 +345,46 @@ def libMain(outdir, proj2dir, customMaxtime=None, projcommonreldir=None):
     worse_df.to_csv(worse_df_file, index=False)
 
     # XXX compare MS with compareState time, %targeted, #testgen, WM%
-    selectedTimes_minutes = [15, 30, 60, 120]
-    # TODO get data and plot
-    #for time_snap in selectedTimes_minutes:
-    #    time_snap_df = \
-    #            only_semu_cfg_df[int(only_semu_cfg_df[timeCol]) == time_snap]
+    if customMaxtime is None:
+        selectedTimes_minutes = [15, 30, 60, 120]
+    else:
+        selectedTimes_minutes = [customMaxtime]
+
+    fixed_y = msCol
+    changing_ys = [targetCol, stateCompTimeCol, numGenTestsCol, \
+                                    numForkedMutStatesCol, mutPointNoDifCol]
+    # get data and plot
+    for time_snap in selectedTimes_minutes:
+        time_snap_df = \
+                    only_semu_cfg_df[only_semu_cfg_df[timeCol] == time_snap]
+        tmp_tech_confs = set(time_snap_df[techConfCol])
+        metric2techconf2values = {}
+        # for each metric, get per techConf list on values
+        # techConfCol
+        for tech_conf in tmp_tech_confs:
+            t_c_tmp_df = time_snap_df[time_snap_df[techConfCol] == tech_conf]
+            for metric_col in [fixed_y] + changing_ys:
+                if metric_col not in metric2techconf2values:
+                    metric2techconf2values[metric_col] = {}
+                metric2techconf2values[metric_col][tech_conf] = \
+                                                        t_c_tmp_df[metric_col]
+        
+        sorted_techconf_by_ms = metric2techconf2values[fixed_y].keys()
+        sorted_techconf_by_ms.sort(reverse=True, \
+                                    key=lambda x: (np.median(x), np.average(x)))
+        # Make plots of ms and the others
+        for chang_y in changing_ys:
+            plot_img_out_file = os.path.join(outdir, "otherVSms-"+ \
+                                str(time_snap) + "-"+chang_y.replace('#','n'))
+            fix_vals = []
+            chang_vals = []
+            for tech_conf in sorted_techconf_by_ms:
+                fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
+                chang_vals.append(metric2techconf2values[chang_y][tech_conf])
+            make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
+                            x_label="Configuations", y_left_label=fixed_y, \
+                                                        y_right_label=chang_y)
+            
 #~ def libMain()
 
 def main():
@@ -299,6 +394,8 @@ def main():
     parser.add_argument("-i", "--intopdir", default=None, \
             help="Top directory where to all projects are"\
                                         +" (will search the finished ones)")
+    parser.add_argument("--usefunctions", action='store_true', \
+                help="Enable using by function instead of just by project")
     parser.add_argument("--maxtimes", default=None, \
                 help="space separated customMaxtime list to use (in minutes)")
     parser.add_argument("--onlyprojects", default=None, \
@@ -330,7 +427,8 @@ def main():
     proj2dir = {}
     for f_d in os.listdir(intopdir):
         direct = os.path.join(intopdir, f_d, getProjRelDir())
-        if os.path.isfile(os.path.join(direct, csv_file)):
+        if os.path.isfile(os.path.join(direct, csv_file)) and \
+                        os.path.isfile(os.path.join(direct, funcs_csv_file)):
             proj2dir[f_d] = os.path.join(intopdir, f_d)
     if onlyprojects_list is not None:
         for p in set(proj2dir) - set(onlyprojects_list):
@@ -339,12 +437,13 @@ def main():
     if len(proj2dir) > 0:
         print ("# Calling libMain on projects", list(proj2dir), "...")
         if maxtime_list is None:
-            libMain(outdir, proj2dir)
+            libMain(outdir, proj2dir, use_func=args.usefunctions)
         else:
             for maxtime in maxtime_list:
                 mt_outdir = os.path.join(outdir, "maxtime-"+maxtime)
                 os.mkdir(mt_outdir)
-                libMain(mt_outdir, proj2dir, customMaxtime=float(maxtime))
+                libMain(mt_outdir, proj2dir, use_func=args.usefunctions, \
+                                                customMaxtime=float(maxtime))
 
         print("# DONE")
     else:
