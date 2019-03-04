@@ -2534,7 +2534,7 @@ def main():
                 mutant_info_obj = loadJson(os.path.join(martOut, mutantInfoFile))
                 considered_mutants_by_functions = {}
                 for m in groundConsideredMutant_covtests:
-                    funcname = mutant_info_obj[m]['FuncName']
+                    funcname = mutant_info_obj[str(m)]['FuncName']
                     if funcname not in considered_mutants_by_functions:
                         considered_mutants_by_functions[funcname] = []
                     considered_mutants_by_functions[funcname].append(m) 
