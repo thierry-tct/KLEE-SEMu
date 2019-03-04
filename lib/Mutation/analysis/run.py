@@ -2699,7 +2699,7 @@ def main():
                                 "By-Functions": {} \
                                 } 
                     for mlist_list, mlist_key in zip((testgen_mode_initial_muts, "Initial#Mutants"), \
-                                                (testgen_mode_initial_killmuts, "Initial#KilledMutants"))
+                                                (testgen_mode_initial_killmuts, "Initial#KilledMutants")):
                         for m in mlist_list:
                             funcname = mutant_info_obj[m]['FuncName']
                             if funcname in considered_mutants_by_functions:
