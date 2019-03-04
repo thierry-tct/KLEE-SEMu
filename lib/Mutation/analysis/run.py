@@ -1663,8 +1663,10 @@ def fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, inKtestDirs, n
         semu_info_df = pd.read_csv(os.path.join(inKtestDirs[i], "semu_execution_info.csv"))
         finalObj = {}
 
+        tmp_ktest_col = []
         for index, row in etdf.iterrows():
-            row['ktest'] = ktestsPre2Post[inKtestDirs[i]][row['ktest']]
+            tmp_ktest_col.append(ktestsPre2Post[inKtestDirs[i]][row['ktest']])
+        etdf['ktest'] = tmp_ktest_col
         for kt in in_finalObj:
             assert ktestsPre2Post[inKtestDirs[i]][kt] not in finalObj
             finalObj[ktestsPre2Post[inKtestDirs[i]][kt]] = in_finalObj[kt]
@@ -2590,7 +2592,7 @@ def main():
                                             mutants2ktests[mutant_] = []
                                         mutants2ktests[mutant_].append(kt)
                             assert set([tuple(mutants2ktests[m]) for m in mutants2ktests]) == set(testsOfThis), \
-                                    "Error (BUG?): Missmatch betweem values in tests_by_ellapsedtime and mutant_ktest_map" + \
+                                    "Error (BUG?): Mismatch betweem values in tests_by_ellapsedtime and mutant_ktest_map" + \
                                         " for "+nameprefix
 
                             if nameprefix != '_pureklee_':
