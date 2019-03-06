@@ -2706,7 +2706,7 @@ def main():
                     for mlist_list, mlist_key in zip((testgen_mode_initial_muts, "Initial#Mutants"), \
                                                 (testgen_mode_initial_killmuts, "Initial#KilledMutants")):
                         for m in mlist_list:
-                            funcname = mutant_info_obj[m]['FuncName']
+                            funcname = mutant_info_obj[str(m)]['FuncName']
                             if funcname in considered_mutants_by_functions:
                                 if funcname not in initial_json_obj["By-Functions"]:
                                     initial_json_obj["By-Functions"][funcname]["Initial#Mutants"] = 0 
