@@ -49,17 +49,19 @@ def compute_auc(in_x_list, in_y_list):
     # make sure both inlist are sorted by x
     assert len(set(in_x_list)) == len(in_x_list), "duplicate in in_x_list"
     assert len(in_x_list) == len(in_y_list), "X and Y have diffrent lengths"
-    if len(in_x_list) == 1:
-        print ("# WARNING: only one element for compute_auc")
-        return in_y_list[0]
-    elif len(in_x_list) == 0:
-        assert "Empty linst passed to compute_auc. Pass 2 or more elements"
+    if len(in_x_list) == 0:
+        assert "Empty list passed to compute_auc. Pass 2 or more elements"
+
     x_list = []
     y_list = []
     for v_x, v_y in sorted(zip(in_x_list, in_y_list), key=lambda p: p[0]):
         x_list.append(v_x)
         y_list.append(v_y)
         assert v_y >= 0, "Only supports positive or null Y coordinate values"
+
+    if len(x_list) == 1:
+        print ("# WARNING: only one element for compute_auc")
+        return y_list[0]
 
     auc = 0.0
     prev_x = None
