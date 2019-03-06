@@ -366,7 +366,6 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         tmp_tech_confs = set(time_snap_df[techConfCol])
         metric2techconf2values = {}
         # for each metric, get per techConf list on values
-        # techConfCol
         for tech_conf in tmp_tech_confs:
             t_c_tmp_df = time_snap_df[time_snap_df[techConfCol] == tech_conf]
             for metric_col in [fixed_y] + changing_ys:
@@ -375,19 +374,23 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 metric2techconf2values[metric_col][tech_conf] = \
                                                         t_c_tmp_df[metric_col]
         
-        sorted_techconf_by_ms = metric2techconf2values[fixed_y].keys()
-        sorted_techconf_by_ms.sort(reverse=True, \
-                                    key=lambda x: (np.median(x), np.average(x)))
-        # Make plots of ms and the others
-        for chang_y in changing_ys:
-            plot_img_out_file = os.path.join(outdir, "otherVSms-"+ \
+        if len(metric2techconf2values) == 0:
+            print ("#WARNING: metric2techconf2values is empty!")
+        else:
+            sorted_techconf_by_ms = metric2techconf2values[fixed_y].keys()
+            sorted_techconf_by_ms.sort(reverse=True, \
+                                key=lambda x: (np.median(x), np.average(x)))
+            # Make plots of ms and the others
+            for chang_y in changing_ys:
+                plot_img_out_file = os.path.join(outdir, "otherVSms-"+ \
                                 str(time_snap) + "-"+chang_y.replace('#','n'))
-            fix_vals = []
-            chang_vals = []
-            for tech_conf in sorted_techconf_by_ms:
-                fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
-                chang_vals.append(metric2techconf2values[chang_y][tech_conf])
-            make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
+                fix_vals = []
+                chang_vals = []
+                for tech_conf in sorted_techconf_by_ms:
+                    fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
+                    chang_vals.append(\
+                                    metric2techconf2values[chang_y][tech_conf])
+                make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
                             x_label="Configuations", y_left_label=fixed_y, \
                                                         y_right_label=chang_y)
             
