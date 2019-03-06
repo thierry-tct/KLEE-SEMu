@@ -2591,7 +2591,7 @@ def main():
                                         if mutant_ not in mutants2ktests:
                                             mutants2ktests[mutant_] = []
                                         mutants2ktests[mutant_].append(kt)
-                            assert set([tuple(mutants2ktests[m]) for m in mutants2ktests]) == set(testsOfThis), \
+                            assert set([kt for m in mutants2ktests for kt in mutants2ktests[m]]) == set(testsOfThis), \
                                     "Error (BUG?): Mismatch betweem values in tests_by_ellapsedtime and mutant_ktest_map" + \
                                         " for "+nameprefix
 
