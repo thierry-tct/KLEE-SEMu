@@ -77,7 +77,10 @@ def compute_auc(in_x_list, in_y_list):
   
 def compute_apfd(in_x_list, in_y_list):
     auc = compute_auc(in_x_list, in_y_list)
-    apfd = auc / abs(max(in_x_list) - min(in_x_list))
+    if len(in_x_list) > 1:
+        apfd = auc / abs(max(in_x_list) - min(in_x_list))
+    else:
+        apfd = auc
     return apfd
 #~ def compute_apfd()
 ########################
