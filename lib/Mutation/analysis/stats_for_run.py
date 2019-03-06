@@ -188,10 +188,10 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     if use_func:
         merged_json_obj['By-Functions'] = {}
         for proj in all_initial:
-            for func in all_initial[proj]:
+            for func in all_initial[proj]['By-Functions']:
                 func_name_merged = os.path.join(proj, func)
                 merged_json_obj['By-Functions'][func_name_merged] = \
-                                                        all_initial[proj][func]
+                                        all_initial[proj]['By-Functions'][func]
 
     # save merged json
     with open(os.path.join(outdir, initial_json), 'w') as fp:
