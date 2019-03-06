@@ -195,7 +195,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
     # save merged json
     with open(os.path.join(outdir, initial_json), 'w') as fp:
-        json.dump(merged_json_obj, fp)
+        json.dump(merged_json_obj, fp, indent=2, sort_keys=True)
     
     # COMPUTATIONS ON DF
     timeCol = "TimeSnapshot(min)"

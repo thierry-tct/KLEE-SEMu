@@ -2709,7 +2709,7 @@ def main():
                             funcname = mutant_info_obj[str(m)]['FuncName']
                             if funcname in considered_mutants_by_functions:
                                 if funcname not in initial_json_obj["By-Functions"]:
-                                    initial_json_obj["By-Functions"][funcname] {}
+                                    initial_json_obj["By-Functions"][funcname] = {}
                                     initial_json_obj["By-Functions"][funcname]["Initial#Mutants"] = 0 
                                     initial_json_obj["By-Functions"][funcname]["Initial#KilledMutants"] = 0 
                                 initial_json_obj["By-Functions"][funcname][mlist_key] += 1
