@@ -49,7 +49,11 @@ def compute_auc(in_x_list, in_y_list):
     # make sure both inlist are sorted by x
     assert len(set(in_x_list)) == len(in_x_list), "duplicate in in_x_list"
     assert len(in_x_list) == len(in_y_list), "X and Y have diffrent lengths"
-    assert len(in_x_list) > 1, "At leats 2 elements required"
+    if len(in_x_list) == 1:
+        print ("# WARNING: only one element for compute_auc")
+        return in_y_list[0]
+    elif len(in_x_list) == 0:
+        assert "Empty linst passed to compute_auc. Pass 2 or more elements"
     x_list = []
     y_list = []
     for v_x, v_y in sorted(zip(in_x_list, in_y_list), key=lambda p: p[0]):
