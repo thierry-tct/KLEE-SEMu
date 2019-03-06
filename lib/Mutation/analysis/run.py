@@ -2703,8 +2703,8 @@ def main():
                                 "MaxTestGen-Time(min)": max_time_minutes, \
                                 "By-Functions": {} \
                                 } 
-                    for mlist_list, mlist_key in zip((testgen_mode_initial_muts, "Initial#Mutants"), \
-                                                (testgen_mode_initial_killmuts, "Initial#KilledMutants")):
+                    for mlist_list, mlist_key in [(testgen_mode_initial_muts, "Initial#Mutants"), \
+                                                (testgen_mode_initial_killmuts, "Initial#KilledMutants")]:
                         for m in mlist_list:
                             funcname = mutant_info_obj[str(m)]['FuncName']
                             if funcname in considered_mutants_by_functions:
