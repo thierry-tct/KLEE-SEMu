@@ -296,12 +296,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         # Actual plot with data 
         # TODO arange max_y, min_y and step_y
         if max_y - min_y >= 10:
-            max_y = int(max_y) + 2 
-            min_y = int(min_y) - 1 
+            max_y = min(100, int(max_y) + 2) 
+            min_y = max(0, int(min_y) - 1)
             step_y = (max_y - min_y) / 10
         else:
             step_y = 1
-            rem_tmp = 10 - max_y - min_y + 1
+            rem_tmp = 10 - (max_y - min_y) + 1
             if 100 - max_y < rem_tmp/2:
                 min_y = int(min_y - (rem_tmp - (100 - max_y)))
                 max_y = 100
@@ -311,9 +311,11 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             else:
                 max_y = int(max_y + rem_tmp/2)
                 min_y = int(min_y - rem_tmp/2)
+            min_y = max(0, min_y)
+            max_y = min(100, max_y)
         yticks_range = range(min_y, max_y+1, step_y)
         plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
-                                "AVERAGE MS", yticks_range=yticks_range, \
+                                "AVERAGE MS (%)", yticks_range=yticks_range, \
                                     selectData=['min', 'med', 'max'])
     
     # XXX Find best and worse confs
