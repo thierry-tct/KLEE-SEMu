@@ -376,8 +376,16 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             for metric_col in [fixed_y] + changing_ys:
                 if metric_col not in metric2techconf2values:
                     metric2techconf2values[metric_col] = {}
-                metric2techconf2values[metric_col][tech_conf] = \
-                                                        t_c_tmp_df[metric_col]
+                # make sure that every value is a number (to be used in median)
+                tmp_vals_list = []
+                for v in t_c_tmp_df[metric_col]:
+                    try:
+                        tmp_vals_list.append(float(v))
+                    except ValueError:
+                        print ("Error: Invalid number for metric_col", \
+                            metric_col, ". value is:", v)
+                        assert False
+                metric2techconf2values[metric_col][tech_conf] = tmp_vals_list
         
         if len(metric2techconf2values) == 0:
             print ("#WARNING: metric2techconf2values is empty!")
