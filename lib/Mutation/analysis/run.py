@@ -389,7 +389,7 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
             else:
                 print "Error:", "test not in Test2SemuoutdirMap: \nMap: "+str(test2outdirMap)+"\nTest: "+wtc
                 print "\n Could run with SEMU_ZESTI_RUN_SKIP_FAILURE=on env var to neglect the error."
-                assert False, 
+                assert False 
     return test2outdirMap
 #~ def runZestiOrSemuTC()
 
