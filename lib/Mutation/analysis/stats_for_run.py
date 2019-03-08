@@ -382,8 +382,9 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                     try:
                         tmp_vals_list.append(float(v))
                     except ValueError:
-                        print ("Error: Invalid number for metric_col", \
+                        print ("\n# Error: Invalid number for metric_col", \
                             metric_col, ". value is:", v)
+                        print ("# ... Tech_conf is:", tech_conf, '\n')
                         assert False
                 metric2techconf2values[metric_col][tech_conf] = tmp_vals_list
         
