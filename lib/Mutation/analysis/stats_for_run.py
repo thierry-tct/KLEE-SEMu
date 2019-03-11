@@ -96,7 +96,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file, \
     ax1.set_xlabel(x_label)
 
     ax1.set_ylabel(y_left_label, color=color)
-    bp1 = ax1.boxplot(left_y_vals, color=color)
+    bp1 = ax1.boxplot(left_y_vals)
     for element in ['boxes', 'whiskers', 'fliers', 'means', 'medians', 'caps']:
         plt.setp(bp1[element], color=color)
     ax1.tick_params(axis='y', labelcolor=color)
@@ -105,7 +105,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file, \
 
     color = 'tab:blue'
     ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
-    bp2 = ax2.boxplot(right_y_vals, color=color)
+    bp2 = ax2.boxplot(right_y_vals)
     for element in ['boxes', 'whiskers', 'fliers', 'means', 'medians', 'caps']:
         plt.setp(bp2[element], color=color)
     ax2.tick_params(axis='y', labelcolor=color)
