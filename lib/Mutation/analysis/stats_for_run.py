@@ -396,8 +396,9 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             print ("#WARNING: metric2techconf2values is empty!")
         else:
             sorted_techconf_by_ms = metric2techconf2values[fixed_y].keys()
-            sorted_techconf_by_ms.sort(reverse=True, \
-                                key=lambda x: (np.median(x), np.average(x)))
+            sorted_techconf_by_ms.sort(reverse=True, key=lambda x: ( \
+                            np.median(metric2techconf2values[fixed_y][x]), \
+                            np.average(metric2techconf2values[fixed_y][x])))
             # Make plots of ms and the others
             for chang_y in changing_ys:
                 plot_img_out_file = os.path.join(outdir, "otherVSms-"+ \
