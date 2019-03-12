@@ -213,6 +213,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     msCol = "MS-INC"
     targetCol = "#Targeted"
     numMutsCol = "#Mutants"
+    covMutsCol = "#Covered"
     techConfCol = "Tech-Config"
     stateCompTimeCol = "StateComparisonTime(s)"
     numGenTestsCol = "#GenTests"
@@ -366,7 +367,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         selectedTimes_minutes = [customMaxtime]
 
     fixed_y = msCol
-    changing_ys = [targetCol, stateCompTimeCol, numGenTestsCol, \
+    changing_ys = [targetCol, covMutsCol, stateCompTimeCol, numGenTestsCol, \
                                     numForkedMutStatesCol, mutPointNoDifCol]
     # get data and plot
     for time_snap in selectedTimes_minutes:

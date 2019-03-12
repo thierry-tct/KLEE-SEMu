@@ -2741,7 +2741,7 @@ def main():
                     #print res_df.to_string()
 
                     res_df = res_df.join(nf_df)
-                    funcs_res_df = funcs_res_df.join(nf_df)
+                    funcs_res_df = funcs_res_df.join(funcs_nf_df)
                     res_df.to_csv(outcsvfile, index=False)
                     funcs_res_df.to_csv(funcscsvfile, index=False)
 
