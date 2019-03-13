@@ -86,26 +86,35 @@ def compute_apfd(in_x_list, in_y_list):
 ########################
 
 
-def make_twoside_plot(left_y_vals, right_y_vals, img_out_file, \
-                                        x_label="X", y_left_label="Y_LEFT", \
-                                                    y_right_label="Y_RIGHT"):
+def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
+                                    x_label="X", y_left_label="Y_LEFT", \
+                                    y_right_label="Y_RIGHT", separate=True):
 
-    fig, ax1 = plt.subplots()
+    if separate:
+        fig=plt.figure()
+        ax1 = plt.subplot(211)
+        ax2 = plt.subplot(212, sharex = ax1)
+    else:
+        fig, ax1 = plt.subplots()
 
     color = 'tab:red'
     ax1.set_xlabel(x_label)
 
+    flierprops = dict(marker='o', markersize=2, linestyle='none')
+
     ax1.set_ylabel(y_left_label, color=color)
-    bp1 = ax1.boxplot(left_y_vals)
+    bp1 = ax1.boxplot(left_y_vals, flierprops=flierprops)
     for element in ['boxes', 'whiskers', 'fliers', 'means', 'medians', 'caps']:
         plt.setp(bp1[element], color=color)
     ax1.tick_params(axis='y', labelcolor=color)
 
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    if not separate:
+        # instantiate a second axes that shares the same x-axis
+        ax2 = ax1.twinx()  
 
     color = 'tab:blue'
     ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
-    bp2 = ax2.boxplot(right_y_vals)
+    bp2 = ax2.boxplot(right_y_vals, flierprops=flierprops)
     for element in ['boxes', 'whiskers', 'fliers', 'means', 'medians', 'caps']:
         plt.setp(bp2[element], color=color)
     ax2.tick_params(axis='y', labelcolor=color)
@@ -113,7 +122,10 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file, \
     plt.xticks([])
 
     plt.tight_layout()
-    plt.savefig(img_out_file+".pdf", format="pdf")
+    if img_out_file is None:
+        plt.show()
+    else:
+        plt.savefig(img_out_file+".pdf", format="pdf")
     plt.close('all')
 #~ def make_twoside_plot()
 
@@ -371,8 +383,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                     numForkedMutStatesCol, mutPointNoDifCol]
     # get data and plot
     for time_snap in selectedTimes_minutes:
-        time_snap_df = \
-                    only_semu_cfg_df[only_semu_cfg_df[timeCol] == time_snap]
+        time_snap_df = merged_df[merged_df[timeCol] == time_snap]
         tmp_tech_confs = set(time_snap_df[techConfCol])
         metric2techconf2values = {}
         # for each metric, get per techConf list on values
@@ -411,6 +422,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 fix_vals = []
                 chang_vals = []
                 for tech_conf in sorted_techconf_by_ms:
+                    if tech_conf in SpecialTechs:
+                        continue
                     fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
                     chang_vals.append(\
                                     metric2techconf2values[chang_y][tech_conf])
@@ -418,6 +431,69 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                             x_label="Configuations", y_left_label=fixed_y, \
                                                         y_right_label=chang_y)
             
+
+        # XXX Killed mutants overlap
+        overlap_obj = {}
+        for proj in proj2dir:
+            fulldir = os.path.join(proj2dir[proj], projcommonreldir)
+            full_overlap_file = os.path.join(fulldir, \
+                            "Techs-relation.json-"+str(time_snap)+"min.json")
+            assert os.path.isfile(full_overlap_file), "file not existing: "+\
+                                full_overlap_file
+            with open(full_overlap_file) as f:
+                fobj = json.load(f)
+                for pair in fobj["NON_OVERLAP_VENN"]:
+                    a_tmp = pair.split('&')
+                    if len(a_tmp) != 2:
+                        print("@WARNING: non pair overlap found:", pair)
+                        continue
+                    left_right = tuple(sorted(a_tmp))
+                    if left_right not in overlap_obj:
+                        overlap_obj[left_right] = {v:0 for v in left_right}
+                    for win in fobj["NON_OVERLAP_VENN"][pair]:
+                        overlap_obj[left_right][win] += \
+                                    len(fobj["NON_OVERLAP_VENN"][pair][win])
+        all_tech_confs = {v for p in overlap_obj for v in p}
+        assert all_tech_confs == set(sorted_techconf_by_ms), \
+                            "Inconsistemcy between dataframe and overlap json"
+        tech_conf2position = {}
+        for pos, tech_conf in enumerate(sorted_techconf_by_ms):
+            tech_conf2position[tech_conf] = pos
+
+        df_obj = []
+        x_label = "Winning Technique Configuration"
+        y_label = "Other Technique Configuration"
+        hue = "special"
+        num_x_wins = "# Mutants Killed more by X"
+        for left_right in overlap_obj:
+            for left, right in [left_right, reversed(left_right)]:
+                hue_val = "SEMu"
+                if left in SpecialTechs and right in SpecialTechs:
+                    hue_val = SpecialTechs[left]+"_wins-"\
+                                                +SpecialTechs[right]+"_loses"
+                else:
+                    if right in SpecialTechs:
+                        hue_val = SpecialTechs[right]+"_loses"
+                    if left in SpecialTechs:
+                        hue_val = SpecialTechs[left]+"_wins"
+                df_obj.append({
+                        x_label:tech_conf2position[left], 
+                        y_label: tech_conf2position[right], 
+                        hue: hue_val,
+                        num_x_wins: overlap_obj[left_right][left], 
+                        })
+        killed_muts_overlap = pd.DataFrame(df_obj)
+        image_out = os.path.join(outdir, "overlap-"+str(time_snap)+"min")
+        # plot
+        sns.set(style="white")
+        sns.relplot(x=x_label, y=y_label, hue=hue, size=num_x_wins,
+                sizes=(40, 400), alpha=.5, palette="muted",
+                height=6, data=killed_muts_overlap)
+        plt.xticks([])
+        plt.yticks([])
+        plt.tight_layout()
+        plt.savefig(image_out+".pdf", format="pdf")
+        plt.close('all')
 #~ def libMain()
 
 def main():
