@@ -223,6 +223,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     other_cols = ["_testGenOnlyCriticalDiffs" ]
 
     msCol = "MS-INC"
+    numFailTestsCol = "#FailingTests"
     targetCol = "#Targeted"
     numMutsCol = "#Mutants"
     covMutsCol = "#Covered"
@@ -231,6 +232,35 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     numGenTestsCol = "#GenTests"
     numForkedMutStatesCol = "#MutStatesForkedFromOriginal"
     mutPointNoDifCol = "#MutStatesEqWithOrigAtMutPoint"
+
+    propNoDiffOnForkedMutsStatesCol = "percentageNodiffFoundAtMutPoint"
+    assert propNoDiffOnForkedMutsStatesCol not in merged_df, \
+                                                    "Use different key (BUG)" 
+    propNDOFMS = []
+    for ind, row in merged_df.iterrows():
+        num_denom = []
+        for v in [row[mutPointNoDifCol], row[numForkedMutStatesCol]]:
+            try:
+                num_denom.append(float(v))
+            except ValueError:
+                if v == '-':
+                    num_denom = v
+                    break
+                else:
+                    print ("\n# Error: Invalid number(", v, ") for column:",\
+                                    mutPointNoDifCol if len(num_denom) == 0 \
+                                                else numForkedMutStatesCol)
+                    print ("# ... Tech_conf is:", row[techConfCol], '\n')
+                    assert False
+        if type(num_denom) == list:
+            try:
+                num_denom = 100.0 * num_denom[0] / num_denom[1]
+            except ZeroDivisionError:
+                assert num_denom[0] == 0, \
+                            "total is 0 by equivalent not zero(BUG in run.py)"
+                num_denom = 0
+        propNDOFMS.append(num_denom)
+    merged_df[propNoDiffOnForkedMutsStatesCol] = propNDOFMS
 
     if customMaxtime is not None:
         # filter anything higher than maxtime (minutes)
@@ -380,7 +410,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
     fixed_y = msCol
     changing_ys = [targetCol, covMutsCol, stateCompTimeCol, numGenTestsCol, \
-                                    numForkedMutStatesCol, mutPointNoDifCol]
+                        propNoDiffOnForkedMutsStatesCol, \
+                        numFailTestsCol] # Fail is used for verification purpose
     # get data and plot
     for time_snap in selectedTimes_minutes:
         time_snap_df = merged_df[merged_df[timeCol] == time_snap]
