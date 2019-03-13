@@ -518,7 +518,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         # plot
         sns.set(style="white")
         sns.relplot(x=x_label, y=y_label, hue=hue, size=num_x_wins,
-                sizes=(40, 400), alpha=.5, palette="muted",
+                sizes=(0, 400), alpha=.5, palette="muted",
                 height=6, data=killed_muts_overlap)
         plt.xticks([])
         plt.yticks([])
