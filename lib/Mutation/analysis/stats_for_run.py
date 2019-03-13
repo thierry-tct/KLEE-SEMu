@@ -468,7 +468,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         for proj in proj2dir:
             fulldir = os.path.join(proj2dir[proj], projcommonreldir)
             full_overlap_file = os.path.join(fulldir, \
-                            "Techs-relation.json-"+str(time_snap)+"min.json")
+                        "Techs-relation.json-"+str(int(time_snap))+"min.json")
             assert os.path.isfile(full_overlap_file), "file not existing: "+\
                                 full_overlap_file
             with open(full_overlap_file) as f:
