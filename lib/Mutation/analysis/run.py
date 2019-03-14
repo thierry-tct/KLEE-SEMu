@@ -1902,7 +1902,7 @@ def main():
     parser.add_argument("--skip_completed", action='append', default=[], choices=tasksList, help="Specify the tasks that have already been executed")
     parser.add_argument("--testSampleMode", type=str, default="DEV", choices=["DEV", "KLEE", "NUM", "PASS"], help="choose how to sample subset for evaluation. DEV means use Developer test, NUM, mean a percentage of all tests, PASS mean all passing tests")
     parser.add_argument("--testSamplePercent", type=float, default=10, help="Specify the percentage of test suite to use for analysis") #, (require setting testSampleMode to NUM)")
-    parser.add_argument("--semusolver", type=int, default='stp', choices=['stp', 'z3'], help="Specify the solver to use for klee/semu")
+    parser.add_argument("--semusolver", type=str, default='stp', choices=['stp', 'z3'], help="Specify the solver to use for klee/semu")
     parser.add_argument("--semutimeout", type=int, default=86400, help="Specify the timeout for semu execution")
     parser.add_argument("--semumaxmemory", type=int, default=9000, help="Specify the max memory for semu execution")
     parser.add_argument("--semupreconditionlength", type=str, default='2', help="Specify space separated list of precondition length semu execution (same number as 'semumutantmaxfork')")
