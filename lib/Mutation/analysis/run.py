@@ -1309,7 +1309,7 @@ def executeSemu (semuOutDirs, semuSeedsDir, metaMutantBC, candidateMutantsFiles,
             if os.path.isdir(semuOutDir):
                 shutil.rmtree(semuOutDir)
 
-            kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs -solver-backend=stp"
+            kleeArgs = "-allow-external-sym-calls -libc=uclibc -posix-runtime -search=bfs"
             kleeArgs += ' ' + " ".join([par+'='+str(tuning['KLEE'][par]) for par in tuning['KLEE']])  #-max-time=50000 -max-memory=9000 --max-solver-time=300
             kleeArgs += " -max-sym-array-size=4096 --max-instruction-time=10. -use-cex-cache " # -watchdog"
             kleeArgs += " --output-dir="+semuOutDir
@@ -1902,6 +1902,7 @@ def main():
     parser.add_argument("--skip_completed", action='append', default=[], choices=tasksList, help="Specify the tasks that have already been executed")
     parser.add_argument("--testSampleMode", type=str, default="DEV", choices=["DEV", "KLEE", "NUM", "PASS"], help="choose how to sample subset for evaluation. DEV means use Developer test, NUM, mean a percentage of all tests, PASS mean all passing tests")
     parser.add_argument("--testSamplePercent", type=float, default=10, help="Specify the percentage of test suite to use for analysis") #, (require setting testSampleMode to NUM)")
+    parser.add_argument("--semusolver", type=int, default='stp', choices=['stp', 'z3'], help="Specify the solver to use for klee/semu")
     parser.add_argument("--semutimeout", type=int, default=86400, help="Specify the timeout for semu execution")
     parser.add_argument("--semumaxmemory", type=int, default=9000, help="Specify the max memory for semu execution")
     parser.add_argument("--semupreconditionlength", type=str, default='2', help="Specify space separated list of precondition length semu execution (same number as 'semumutantmaxfork')")
@@ -2049,7 +2050,8 @@ def main():
                                             semupostcheckpointcontinueproba, semumutantcontinuestrategy, \
                                             semumaxtestsgenpermutants, semudisablestatediffintestgen, \
                                             args.semutestgenonlycriticaldiffs),
-                        'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, '--max-solver-time':300}, 
+                        'KLEE':{'-max-time':args.semutimeout, '-max-memory':args.semumaxmemory, 
+                                '-solver-backend': args.semusolver, '-max-solver-time':300}, 
                         'SEMU':{"-semu-precondition-length":args_semupreconditionlength, 
                                 "-semu-mutant-max-fork":args_semumutantmaxfork, 
                                 "-semu-checknum-before-testgen-for-discarded": semugentestfordiscardedfrom,

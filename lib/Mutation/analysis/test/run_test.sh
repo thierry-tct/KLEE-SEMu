@@ -16,7 +16,9 @@
 # While debugging semu, if some fail and we do not want to rerun then but only run those that fail,
 # pass this Extra arg as env var:  EXTRA_ARGS="--semucontinueunfinishedtunings"
 #
-#
+# XXX For execution that give solver related memory problem (not enough), use z3 solver as following:
+# pass this Extra arg as env var:  EXTRA_ARGS="--semusolver z3"
+# 
 
 
 set -u
