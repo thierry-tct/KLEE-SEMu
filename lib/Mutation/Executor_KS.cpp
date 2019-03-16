@@ -5263,6 +5263,7 @@ bool Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_i
   } else {
     llvm::errs() << "Error: Unable to create/open semu info file: " << semu_exec_info_file << ".\n";
     llvm::errs() << ">>> Failbit: " << ofs.fail() << ", Badbit: " << ofs.bad() << ", Eofbit: " << ofs.eof() << ".\n";
+    llvm::errs() << ">>> " << strerror(errno) << "\n";
     assert(false);
     exit(1);
   }
@@ -5293,6 +5294,7 @@ bool Executor::ks_writeMutantTestsInfos(ExecutionState::KS_MutantIDType mutant_i
     llvm::errs() << "Error: Unable to create test info file: " << out_file_name 
                  << ". Mutant ID is:" << mutant_id << ".\n";
     llvm::errs() << ">>> Failbit: " << ofs.fail() << ", Badbit: " << ofs.bad() << ", Eofbit: " << ofs.eof() << ".\n";
+    llvm::errs() << ">>> " << strerror(errno) << "\n";
     assert(false);
     exit(1);
   }
