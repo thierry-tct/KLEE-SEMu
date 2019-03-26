@@ -2606,12 +2606,14 @@ def main():
                             for filtering_func in [None] + list(considered_mutants_by_functions):
                                 # Compute testsOfThis
                                 if filtering_func is None:
+                                    filt_mutants = set(groundConsideredMutant_covtests)
                                     filt_nMutants = nMutants
                                     filt_targeted_mutants = targeted_mutants
                                     filt_testsOfThis = testsOfThis
                                 else:
                                     assert filtering_func in considered_mutants_by_functions, "BUG: invalid func:"+filtering_func
-                                    filt_nMutants = len(considered_mutants_by_functions[filtering_func])
+                                    filt_mutants = set(considered_mutants_by_functions[filtering_func])
+                                    filt_nMutants = len(filt_mutants)
                                     filt_targeted_mutants = list(set(targeted_mutants) & set(considered_mutants_by_functions[filtering_func]))
                                     filt_testsOfThis = []
                                     for m in filt_targeted_mutants:
@@ -2621,9 +2623,9 @@ def main():
                                 filt_testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in filt_testsOfThis])
                                 testsKillingOfThis = []
                                 if len(filt_testsOfThis) > 0:
-                                    newKilled = matrixHardness.getKillableMutants(sm_file, filt_testsOfThis, testkillinglist=testsKillingOfThis)
-                                    newCovered = matrixHardness.getListCoveredMutants(mcov_file, filt_testsOfThis)
-                                    nnewFailing = len(matrixHardness.getFaultyTests(pf_file, filt_testsOfThis))
+                                    newKilled = set(filt_mutants) & set(matrixHardness.getKillableMutants(sm_file, filt_testsOfThis, testkillinglist=testsKillingOfThis))
+                                    newCovered = set(filt_mutants) & set(matrixHardness.getListCoveredMutants(mcov_file, filt_testsOfThis))
+                                    nnewFailing = len(set(filt_mutants) & set(matrixHardness.getFaultyTests(pf_file, filt_testsOfThis)))
                                 else:
                                     newKilled = []
                                     newCovered = []
