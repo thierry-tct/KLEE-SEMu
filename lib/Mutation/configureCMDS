@@ -55,6 +55,8 @@ cmake -DCMAKE_BUILD_TYPE=Release \
   --enable-posix-runtime \
   --enable-cxx11
 
+# --with-z3=</path/to/z3/install/dir>
+# then copy z3 lib: cp </path/to/z3/install/dir>/lib/libz3.so <path/to/klee-semu/build/dir>/build/Release+Asserts/lib/
 =====
 STP from source with specific minisat install dir: use
 -DCMAKE_PREFIX_PATH="path to minisat install"

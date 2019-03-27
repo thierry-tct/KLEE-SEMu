@@ -151,7 +151,7 @@ def getProjRelDir():
 PROJECT_ID_COL = "projectID"
 SpecialTechs = {'_pureklee_': 'klee', '50_50_0_0_rnd_5_on_nocrit':'concrete'}
 def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
-                                                        projcommonreldir=None):
+                                    projcommonreldir=None, onlykillable=False):
     merged_df = None
     all_initial = {}
     if projcommonreldir is None:
@@ -166,6 +166,15 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         full_initial_json = os.path.join(fulldir, initial_json)
 
         tmp_df = pd.read_csv(full_csv_file, index_col=False)
+
+        # Only killable
+        if onlykillable:
+            msCol = "MS-INC"
+            assert msCol in tmp_df, "no "+msCol+"Column"
+            mses = [float(v) for v in tmp_df[msCol]]
+            if sum(mses) == 0:
+                continue
+
         assert PROJECT_ID_COL not in tmp_df, PROJECT_ID_COL+" is in df"
         if use_func:
             funcNameCol = "FunctionName"
@@ -187,6 +196,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
     # Compute the merged json
     merged_json_obj = {}
+    merged_json_obj["Projects"] = list(all_initial) 
+    merged_json_obj["#Projects"] = len(all_initial) 
     merged_json_obj["Initial#Mutants"] = \
             sum([int(all_initial[v]["Initial#Mutants"]) for v in all_initial])
     merged_json_obj["Initial#KilledMutants"] = \
@@ -202,8 +213,11 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     merged_json_obj["MaxTestGen-Time(min)"] = \
                     all_initial[all_initial.keys()[0]]["MaxTestGen-Time(min)"]
     if use_func:
+        merged_json_obj["#Functions"] = 0
         merged_json_obj['By-Functions'] = {}
         for proj in all_initial:
+            merged_json_obj["#Functions"] += \
+                                        len(all_initial[proj]['By-Functions'])
             for func in all_initial[proj]['By-Functions']:
                 func_name_merged = os.path.join(proj, func)
                 merged_json_obj['By-Functions'][func_name_merged] = \
@@ -404,7 +418,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
     # XXX compare MS with compareState time, %targeted, #testgen, WM%
     if customMaxtime is None:
-        selectedTimes_minutes = [15, 30, 60, 120]
+        selectedTimes_minutes = [5, 15, 30, 60, 120]
     else:
         selectedTimes_minutes = [customMaxtime]
 
@@ -416,6 +430,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     for time_snap in selectedTimes_minutes:
         time_snap_df = merged_df[merged_df[timeCol] == time_snap]
         tmp_tech_confs = set(time_snap_df[techConfCol])
+        nMuts_here = int(time_snap_df[numMutsCol][0])
         metric2techconf2values = {}
         # for each metric, get per techConf list on values
         for tech_conf in tmp_tech_confs:
@@ -458,6 +473,18 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                     fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
                     chang_vals.append(\
                                     metric2techconf2values[chang_y][tech_conf])
+                if chang_y in [targetCol, stateCompTimeCol, covMutsCol]:
+                    if chang_y in (targetCol, covMutsCol):
+                        chang_y = chang_y.replace('#', '%')
+                        m_val = nMuts_here
+                    elif chang_y == stateCompTimeCol:
+                        chang_y = chang_y.replace('(s)', '(%)')
+                        m_val = time_snap * 60
+                    if m_val != 0:
+                        chang_vals = [v*100.0/m_val for v in chang_vals]
+
+                    # compute percentage
+                    m_val = max(chang_vals)
                 make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
                             x_label="Configuations", y_left_label=fixed_y, \
                                                         y_right_label=chang_y)
@@ -516,7 +543,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         killed_muts_overlap = pd.DataFrame(df_obj)
         image_out = os.path.join(outdir, "overlap-"+str(time_snap)+"min")
         # plot
-        sns.set(style="white")
+        sns.set_style("white", \
+                            {'axes.linewidth': 1.25, 'axes.edgecolor':'black'})
         sns.relplot(x=x_label, y=y_label, hue=hue, size=num_x_wins,
                 sizes=(0, 400), alpha=.5, palette="muted",
                 height=6, data=killed_muts_overlap)
@@ -540,7 +568,16 @@ def main():
                 help="space separated customMaxtime list to use (in minutes)")
     parser.add_argument("--onlyprojects", default=None, \
                 help="space separated project list to use")
+    parser.add_argument('--forposter', action='store_true', \
+                                                    help="set poster context")
+    parser.add_argument('--onlykillable', action='store_true', \
+                    help="Only for project/function with a killable mutant")
     args = parser.parse_args()
+
+    if args.forposter:
+        sns.set_context("poster")
+    else:
+        sns.set_context("paper")
 
     outdir = args.output
     intopdir = args.intopdir
@@ -577,13 +614,15 @@ def main():
     if len(proj2dir) > 0:
         print ("# Calling libMain on projects", list(proj2dir), "...")
         if maxtime_list is None:
-            libMain(outdir, proj2dir, use_func=args.usefunctions)
+            libMain(outdir, proj2dir, use_func=args.usefunctions, \
+                                                onlykillable=args.onlykillable)
         else:
             for maxtime in maxtime_list:
                 mt_outdir = os.path.join(outdir, "maxtime-"+maxtime)
                 os.mkdir(mt_outdir)
                 libMain(mt_outdir, proj2dir, use_func=args.usefunctions, \
-                                                customMaxtime=float(maxtime))
+                                            customMaxtime=float(maxtime), \
+                                                onlykillable=args.onlykillable)
 
         print("# DONE")
     else:
