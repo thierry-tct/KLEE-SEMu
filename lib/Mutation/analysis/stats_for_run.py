@@ -464,8 +464,10 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     # get data and plot
     for time_snap in selectedTimes_minutes:
         time_snap_df = merged_df[merged_df[timeCol] == time_snap]
+        if time_snap_df.empty:
+            continue
         tmp_tech_confs = set(time_snap_df[techConfCol])
-        nMuts_here = int(time_snap_df[numMutsCol][0])
+        nMuts_here = int(list(time_snap_df[numMutsCol])[0])
         metric2techconf2values = {}
         # for each metric, get per techConf list on values
         for tech_conf in tmp_tech_confs:
@@ -520,7 +522,9 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                         assert False, "BUG, unreachable"
                     # compute percentage
                     if m_val != 0:
-                        chang_vals = [v*100.0/m_val for v in chang_vals]
+                        for c_ind in range(len(chang_vals)):
+                            chang_vals[c_ind] = \
+                                    [v*100.0/m_val for v in chang_vals[c_ind]]
                         
                 make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
                             x_label="Configuations", y_left_label=fixed_y, \
