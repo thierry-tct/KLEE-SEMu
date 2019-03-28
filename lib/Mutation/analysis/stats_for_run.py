@@ -127,7 +127,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
     else:
         assert len(right_stackbar_legends) == 2, "only support 2 for now"
         ind = np.arange(len(right_y_vals[0]))
-        p = [None] * len(right_stacked_legends)
+        p = [None] * len(right_stackbar_legends)
         p[0] = plt.bar(ind, right_y_vals[0]) #, width, yerr=menStd)
         for i in range(1, len(right_stackbar_legends)):
             p[i] = plt.bar(ind, right_y_vals[i], bottom=right_y_vals[i-1])
@@ -604,20 +604,21 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         chang_vals2 = [[], []]
         klee = SPECIAL_TECHS[KLEE_KEY]
         klee_related_df = killed_muts_overlap[killed_muts_overlap[hue].isin(\
-                                                [klee+'_wins', klee+'loses'])]
+                                                [klee+'_wins', klee+'_loses'])]
+        assert not klee_related_df.empty
         for tech_conf in sorted_techconf_by_ms:
             if tech_conf in SPECIAL_TECHS:
                 continue
             fix_vals2.append(metric2techconf2values[fixed_y][tech_conf])
 
-            tmp_v = klee_related_df[klee_related_df[x_label] == \
-                                tech_conf2position[tech_conf]][num_x_wins]
-            assert len(tmp_v) == 0
+            tmp_v = list(klee_related_df[klee_related_df[x_label] == \
+                                tech_conf2position[tech_conf]][num_x_wins])
+            assert len(tmp_v) != 0
             chang_vals2[0].append(tmp_v[0])
 
-            tmp_v = klee_related_df[klee_related_df[y_label] == \
-                                tech_conf2position[tech_conf]][num_x_wins]
-            assert len(tmp_v) == 0
+            tmp_v = list(klee_related_df[klee_related_df[y_label] == \
+                                tech_conf2position[tech_conf]][num_x_wins])
+            assert len(tmp_v) != 0
             chang_vals2[1].append(tmp_v[0])
 
         make_twoside_plot(fix_vals2, chang_vals2, image_out2, \
