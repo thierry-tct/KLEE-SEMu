@@ -101,7 +101,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
     else:
         fig, ax1 = plt.subplots()
 
-    color = 'tab:red'
+    color = 'tab:blue'
     ax1.set_xlabel(x_label)
 
     flierprops = dict(marker='o', markersize=2, linestyle='none')
@@ -116,7 +116,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
         # instantiate a second axes that shares the same x-axis
         ax2 = ax1.twinx()  
 
-    color = 'tab:blue'
+    color = 'tab:red'
     ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
     if right_stackbar_legends is None:
         bp2 = ax2.boxplot(right_y_vals, flierprops=flierprops)
@@ -333,11 +333,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 keys = set(\
                     only_semu_cfg_df[(only_semu_cfg_df[pc[0]] == val[0]) & \
                             (only_semu_cfg_df[pc[1]] == val[1])][techConfCol])
+                val = tuple(val)
             else:
                 keys = set(\
                     only_semu_cfg_df[only_semu_cfg_df[pc] == val][techConfCol])
             if len(keys) != 0:
-                techConfbyvalbyconf[pc][tuple(val)] = keys
+                techConfbyvalbyconf[pc][val] = keys
         if len(techConfbyvalbyconf[pc]) == 0:
             del techConfbyvalbyconf[pc]
 
