@@ -1,5 +1,7 @@
 
 # Library to compute the stats after run.py
+# Example
+# python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "5 15 30 60 120"
 
 from __future__ import print_function
 import os
@@ -364,7 +366,10 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             max_vals[val] = sorted_by_apfd_tmp[-1]
             med_vals[val] = sorted_by_apfd_tmp[len(sorted_by_apfd_tmp)/2]
         # plot
-        plot_out_file = os.path.join(outdir, "perconf_apfd_"+pc)
+        if type(pc) in (list, tuple):
+            plot_out_file = os.path.join(outdir, "perconf_apfd2_"+".".join(pc))
+        else:
+            plot_out_file = os.path.join(outdir, "perconf_apfd_"+pc)
         data = {str(val): {"min": getListAPFDSForTechConf(min_vals[val]), \
                         "med": getListAPFDSForTechConf(med_vals[val]), \
                         "max": getListAPFDSForTechConf(max_vals[val])} \
@@ -610,7 +615,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         make_twoside_plot(fix_vals2, chang_vals2, image_out2, \
                     x_label="Configuations", y_left_label=fixed_y, \
                                                 y_right_label=chang_y2, \
-                                    right_stackbar_legends=b_legend
+                                    right_stackbar_legends=sb_legend)
 
 #~ def libMain()
 
