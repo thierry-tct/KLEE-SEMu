@@ -10,6 +10,7 @@ import argparse
 import shutil
 import scipy.stats
 import numpy as np
+import itertools
 
 import pandas as pd
 
@@ -88,7 +89,8 @@ def compute_apfd(in_x_list, in_y_list):
 
 def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
                                     x_label="X", y_left_label="Y_LEFT", \
-                                    y_right_label="Y_RIGHT", separate=True):
+                                    y_right_label="Y_RIGHT", separate=True,\
+                                    right_stackbar_legends=None):
 
     if separate:
         fig=plt.figure()
@@ -114,10 +116,20 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
 
     color = 'tab:blue'
     ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
-    bp2 = ax2.boxplot(right_y_vals, flierprops=flierprops)
-    for element in ['boxes', 'whiskers', 'fliers', 'means', 'medians', 'caps']:
-        plt.setp(bp2[element], color=color)
-    ax2.tick_params(axis='y', labelcolor=color)
+    if right_stackbar_legends is None:
+        bp2 = ax2.boxplot(right_y_vals, flierprops=flierprops)
+        for element in ['boxes', 'whiskers', 'fliers', \
+                                                'means', 'medians', 'caps']:
+            plt.setp(bp2[element], color=color)
+        ax2.tick_params(axis='y', labelcolor=color)
+    else:
+        assert len(right_stackbar_legends) == 2, "only support 2 for now"
+        ind = np.arange(len(right_y_vals[0]))
+        p = [None] * len(right_stacked_legends)
+        p[0] = plt.bar(ind, right_y_vals[0]) #, width, yerr=menStd)
+        for i in range(1, len(right_stackbar_legends)):
+            p[i] = plt.bar(ind, right_y_vals[i], bottom=right_y_vals[i-1])
+        plt.legend(p, right_stackbar_legends)
 
     plt.xticks([])
 
@@ -149,9 +161,11 @@ def getProjRelDir():
 #~deg getProjRelDir()
 
 PROJECT_ID_COL = "projectID"
-SpecialTechs = {'_pureklee_': 'klee', '50_50_0_0_rnd_5_on_nocrit':'concrete'}
+SPECIAL_TECHS = {'_pureklee_': 'klee', '50_50_0_0_rnd_5_on_nocrit':'concrete'}
+CONCRETE_KEY = '50_50_0_0_rnd_5_on_nocrit'
+KLEE_KEY = '_pureklee_'
 def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
-                                    projcommonreldir=None, onlykillable=False):
+                projcommonreldir=None, onlykillable=False, no_concrete=False):
     merged_df = None
     all_initial = {}
     if projcommonreldir is None:
@@ -295,20 +309,32 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             ms_apfds[p][t_c] = compute_apfd(tmp_df[timeCol], tmp_df[msCol])
         tmp_df = p_tmp_df = None
     
-    only_semu_cfg_df = merged_df[~merged_df[techConfCol].isin(SpecialTechs)]
+    only_semu_cfg_df = merged_df[~merged_df[techConfCol].isin(SPECIAL_TECHS)]
+
+    SpecialTechs = dict(SPECIAL_TECHS)
+    if no_concrete:
+        del SpecialTechs[CONCRETE_KEY]
 
     vals_by_conf = {}
     for c in config_columns:
         vals_by_conf[c] = list(set(only_semu_cfg_df[c]))
+    # add combinations
+    for ls_, rs_ in itertools.combinations(vals_by_conf.keys(), 2):
+        vals_by_conf[(ls_,rs_)] = list(itertools.product(vals_by_conf[ls_], vals_by_conf[rs_]))
 
     techConfbyvalbyconf = {}
-    for pc in config_columns:
+    for pc in vals_by_conf:
         techConfbyvalbyconf[pc] = {}
         # process param config (get apfds)
         for val in vals_by_conf[pc]:
-            keys = \
-                set(only_semu_cfg_df[only_semu_cfg_df[pc] == val][techConfCol])
-            techConfbyvalbyconf[pc][val] = keys
+            if type(val) in (list, tuple):
+                keys = set(\
+                    only_semu_cfg_df[(only_semu_cfg_df[pc[0]] == val[0]) & \
+                            (only_semu_cfg_df[pc[1]] == val[1])][techConfCol])
+            else:
+                keys = set(\
+                    only_semu_cfg_df[only_semu_cfg_df[pc] == val][techConfCol])
+            techConfbyvalbyconf[pc][tuple(val)] = keys
 
     def getListAPFDSForTechConf (t_c):
         v_list = []
@@ -339,7 +365,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             med_vals[val] = sorted_by_apfd_tmp[len(sorted_by_apfd_tmp)/2]
         # plot
         plot_out_file = os.path.join(outdir, "perconf_apfd_"+pc)
-        data = {val: {"min": getListAPFDSForTechConf(min_vals[val]), \
+        data = {str(val): {"min": getListAPFDSForTechConf(min_vals[val]), \
                         "med": getListAPFDSForTechConf(med_vals[val]), \
                         "max": getListAPFDSForTechConf(max_vals[val])} \
                                             for val in techConfbyvalbyconf[pc]}
@@ -468,11 +494,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 fix_vals = []
                 chang_vals = []
                 for tech_conf in sorted_techconf_by_ms:
-                    if tech_conf in SpecialTechs:
+                    if tech_conf in SPECIAL_TECHS:
                         continue
                     fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
                     chang_vals.append(\
                                     metric2techconf2values[chang_y][tech_conf])
+
                 if chang_y in [targetCol, stateCompTimeCol, covMutsCol]:
                     if chang_y in (targetCol, covMutsCol):
                         chang_y = chang_y.replace('#', '%')
@@ -480,11 +507,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                     elif chang_y == stateCompTimeCol:
                         chang_y = chang_y.replace('(s)', '(%)')
                         m_val = time_snap * 60
+                    else:
+                        assert False, "BUG, unreachable"
+                    # compute percentage
                     if m_val != 0:
                         chang_vals = [v*100.0/m_val for v in chang_vals]
-
-                    # compute percentage
-                    m_val = max(chang_vals)
+                        
                 make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
                             x_label="Configuations", y_left_label=fixed_y, \
                                                         y_right_label=chang_y)
@@ -546,13 +574,44 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         sns.set_style("white", \
                             {'axes.linewidth': 1.25, 'axes.edgecolor':'black'})
         sns.relplot(x=x_label, y=y_label, hue=hue, size=num_x_wins,
-                sizes=(0, 400), alpha=.5, palette="muted",
+                sizes=(0, 300), alpha=.5, palette="muted",
                 height=6, data=killed_muts_overlap)
         plt.xticks([])
         plt.yticks([])
         plt.tight_layout()
         plt.savefig(image_out+".pdf", format="pdf")
         plt.close('all')
+
+        # plot overlap against pure klee
+        image_out2 = os.path.join(outdir, \
+                                "semu_klee-nonoverlap-"+str(time_snap)+"min")
+        chang_y2 = "# Non Overlapping Mutants"
+        fix_vals2 = []
+        sb_legend = ['semu', 'klee']
+        chang_vals2 = [[], []]
+        klee = SPECIAL_TECHS[KLEE_KEY]
+        klee_related_df = killed_muts_overlap[killed_muts_overlap[hue].isin(\
+                                                [klee+'_wins', klee+'loses'])]
+        for tech_conf in sorted_techconf_by_ms:
+            if tech_conf in SPECIAL_TECHS:
+                continue
+            fix_vals2.append(metric2techconf2values[fixed_y][tech_conf])
+
+            tmp_v = klee_related_df[klee_related_df[x_label] == \
+                                tech_conf2position[tech_conf]][num_x_wins]
+            assert len(tmp_v) == 0
+            chang_vals2[0].append(tmp_v[0])
+
+            tmp_v = klee_related_df[klee_related_df[y_label] == \
+                                tech_conf2position[tech_conf]][num_x_wins]
+            assert len(tmp_v) == 0
+            chang_vals2[1].append(tmp_v[0])
+
+        make_twoside_plot(fix_vals2, chang_vals2, image_out2, \
+                    x_label="Configuations", y_left_label=fixed_y, \
+                                                y_right_label=chang_y2, \
+                                    right_stackbar_legends=b_legend
+
 #~ def libMain()
 
 def main():
@@ -572,6 +631,8 @@ def main():
                                                     help="set poster context")
     parser.add_argument('--onlykillable', action='store_true', \
                     help="Only for project/function with a killable mutant")
+    parser.add_argument('--with_concrete', action='store_true', \
+                    help="compare normal semu only with pure klee")
     args = parser.parse_args()
 
     if args.forposter:
@@ -615,14 +676,16 @@ def main():
         print ("# Calling libMain on projects", list(proj2dir), "...")
         if maxtime_list is None:
             libMain(outdir, proj2dir, use_func=args.usefunctions, \
-                                                onlykillable=args.onlykillable)
+                                            onlykillable=args.onlykillable, \
+                                        no_concrete=(not args.with_concrete))
         else:
             for maxtime in maxtime_list:
                 mt_outdir = os.path.join(outdir, "maxtime-"+maxtime)
                 os.mkdir(mt_outdir)
                 libMain(mt_outdir, proj2dir, use_func=args.usefunctions, \
                                             customMaxtime=float(maxtime), \
-                                                onlykillable=args.onlykillable)
+                                            onlykillable=args.onlykillable, \
+                                        no_concrete=(not args.with_concrete))
 
         print("# DONE")
     else:
