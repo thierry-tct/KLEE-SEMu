@@ -336,7 +336,11 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             else:
                 keys = set(\
                     only_semu_cfg_df[only_semu_cfg_df[pc] == val][techConfCol])
-            techConfbyvalbyconf[pc][tuple(val)] = keys
+            if len(keys) != 0:
+                techConfbyvalbyconf[pc][tuple(val)] = keys
+        if len(techConfbyvalbyconf[pc]) == 0:
+            del techConfbyvalbyconf[pc]
+
 
     def getListAPFDSForTechConf (t_c):
         v_list = []
