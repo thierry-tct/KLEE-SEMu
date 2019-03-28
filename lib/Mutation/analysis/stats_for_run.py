@@ -128,10 +128,11 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
         assert len(right_stackbar_legends) == 2, "only support 2 for now"
         ind = np.arange(len(right_y_vals[0]))
         p = [None] * len(right_stackbar_legends)
-        p[0] = plt.bar(ind, right_y_vals[0]) #, width, yerr=menStd)
+        p[0] = ax2.bar(ind, right_y_vals[0]) #, width, yerr=menStd)
         for i in range(1, len(right_stackbar_legends)):
-            p[i] = plt.bar(ind, right_y_vals[i], bottom=right_y_vals[i-1])
-        plt.legend(p, right_stackbar_legends)
+            p[i] = ax2.bar(ind, right_y_vals[i], bottom=right_y_vals[i-1])
+        ax2.legend(p, right_stackbar_legends)
+        #ax.margins(0.05)
 
     plt.xticks([])
 
