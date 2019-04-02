@@ -35,6 +35,8 @@ sys.path.insert(0, os.path.expanduser("~/mytools/MFI-V2.0/REFACTORING"))
 import magma.common.fs as magma_common_fs  # for compress and decmpress dir
 import magma.statistics.algorithms as magma_stats_algo # for Venn
 
+SEMU_ZESTI_RUN_SKIP_FAILURE = "SEMU_ZESTI_RUN_SKIP_FAILURE"
+
 OutFolder = "OUTPUT"
 KleeSemuBCSuff = ".MetaMu.bc"
 ZestiBCSuff = ".Zesti.bc"
@@ -301,8 +303,6 @@ def runZestiOrSemuTC (unwrapped_testlist, devtests, exePath, runtestScript, klee
     testrunlog = " > /dev/null" #+" 2>&1"
     nKleeOut = len(glob.glob(os.path.join(outpdir, "klee-out-*")))
 
-    SEMU_ZESTI_RUN_SKIP_FAILURE = "SEMU_ZESTI_RUN_SKIP_FAILURE"
-
     assert nKleeOut == 0, "Must be no klee out in the begining"
     for tc in unwrapped_testlist:
         semuExecLog = os.path.join(outpdir, "semu.out")
@@ -435,7 +435,7 @@ def parseZestiKtest(filename, test2zestidirMap_arg=None):
     # XXX Watch this: TMP: make sure all files are at the end
     firstFile_ind = -1
     postFileArgv_ind = []
-    assert b.objects[0][0] == 'model_version'
+    assert b.objects[0][0] == 'model_version', "Invalid model_version position for file: "+filename
     for pos, (name, data) in enumerate(b.objects[1:]): #skip model_version
         if name == 'argv':
             if firstFile_ind >= 0:
@@ -498,7 +498,13 @@ def parseZestiKtest(filename, test2zestidirMap_arg=None):
                     indinargs = indexes_ia
 		else: # name != "argv"
                     indexes_ia = [i for i,x in enumerate(b.args[1:]) if name in x]
-                    assert len(indexes_ia) > 0, "Must have at least one argv containing filename in its data"
+                    if len(indexes_ia) <= 0:
+                        if SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().lower() == 'on' :
+                            pass
+                        else:
+                            print "Error: Must have at least one argv containing filename in its data"
+                            print "\n Could run with SEMU_ZESTI_RUN_SKIP_FAILURE=on env var to neglect the error."
+                            assert False
                     if len(indexes_ia) > 1:
                         if test2zestidirMap_arg is not None:
                             actual_test = None
@@ -546,7 +552,8 @@ def parseZestiKtest(filename, test2zestidirMap_arg=None):
         #        fileargsposinObj_remove[ii][iii] += 1
         # Do bothing for fileargsposinObj_remove because already indexed to not account for model version XXX
         if len(fileargsposinObj_remove) > 0:
-            assert max(fileargsposinObj_remove[-1]) < filesNstatsIndex[0], "arguments do not all come before files in object"
+            if len(fileargsposinObj_remove[-1]) > 0:
+                assert max(fileargsposinObj_remove[-1]) < filesNstatsIndex[0], "arguments do not all come before files in object"
         filesNstatsIndex = [(v - 1) for v in filesNstatsIndex] #-1 for model_versio which will be move to end later
 
         # stdin and after files obj
@@ -630,6 +637,10 @@ def getSymArgsFromZestiKtests (ktestFilesList, test2zestidirMap_arg, argv_become
         # Thus, we skip such tests here TODO: remove thes from all tests so to have fair comparison with semu
         if os.system(" ".join(['ktest-tool ', ktestfile, "> /dev/null 2>&1"])) != 0:
             print "@WARNING: Skipping test because Zesti generated invalid KTEST file:", ktestfile
+            continue
+        b_tmp = ktest_tool.KTest.fromfile(ktestfile)
+        if len(b_tmp.objects) == 0:
+            print "@WARNING: Skipping test because Zesti generated empty KTEST file:", ktestfile
             continue
 
         # sed because Zesti give argv, argv_1... while sym args gives arg0, arg1,...
