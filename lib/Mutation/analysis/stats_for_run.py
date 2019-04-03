@@ -677,7 +677,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         make_twoside_plot(overlap_non_vals, chang_vals2, image_out2, \
                     x_label="Configuations", y_left_label="# Mutants", \
                                                 y_right_label=chang_y2, \
-                                leftt_stackbar_legends=['overlap']+sb_legend, \
+                                left_stackbar_legends=['overlap']+sb_legend, \
                                 right_stackbar_legends=sb_legend)
 
 
