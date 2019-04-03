@@ -92,6 +92,7 @@ def compute_apfd(in_x_list, in_y_list):
 def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
                                     x_label="X", y_left_label="Y_LEFT", \
                                     y_right_label="Y_RIGHT", separate=True,\
+                                    left_stackbar_legends=None,\
                                     right_stackbar_legends=None):
 
     if separate:
@@ -107,10 +108,21 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
     flierprops = dict(marker='o', markersize=2, linestyle='none')
 
     ax1.set_ylabel(y_left_label, color=color)
-    bp1 = ax1.boxplot(left_y_vals, flierprops=flierprops)
-    for element in ['boxes', 'whiskers', 'fliers', 'means', 'medians', 'caps']:
-        plt.setp(bp1[element], color=color)
-    ax1.tick_params(axis='y', labelcolor=color)
+    if left_stackbar_legends is None:
+        bp1 = ax1.boxplot(left_y_vals, flierprops=flierprops)
+        for element in ['boxes', 'whiskers', 'fliers', \
+                                                'means', 'medians', 'caps']:
+            plt.setp(bp1[element], color=color)
+        ax1.tick_params(axis='y', labelcolor=color)
+    else:
+        bottoms = [np.array([0]*len(left_y_vals[0]))]
+        for v in left_y_vals:
+            bottoms.append(bottoms[-1] + np.array(v))
+        ind = np.arange(len(left_y_vals[0]))
+        p = [None] * len(left_stackbar_legends)
+        for i in range(len(left_stackbar_legends)):
+            p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i])
+        ax1.legend(p, left_stackbar_legends)
 
     if not separate:
         # instantiate a second axes that shares the same x-axis
@@ -125,12 +137,13 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
             plt.setp(bp2[element], color=color)
         ax2.tick_params(axis='y', labelcolor=color)
     else:
-        assert len(right_stackbar_legends) == 2, "only support 2 for now"
+        bottoms = [np.array([0]*len(right_y_vals[0]))]
+        for v in right_y_vals:
+            bottoms.append(bottoms[-1] + np.array(v))
         ind = np.arange(len(right_y_vals[0]))
         p = [None] * len(right_stackbar_legends)
-        p[0] = ax2.bar(ind, right_y_vals[0]) #, width, yerr=menStd)
         for i in range(1, len(right_stackbar_legends)):
-            p[i] = ax2.bar(ind, right_y_vals[i], bottom=right_y_vals[i-1])
+            p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i])
         ax2.legend(p, right_stackbar_legends)
         #ax.margins(0.05)
 
@@ -258,6 +271,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     targetCol = "#Targeted"
     numMutsCol = "#Mutants"
     covMutsCol = "#Covered"
+    killMutsCol = "#Killed"
     techConfCol = "Tech-Config"
     stateCompTimeCol = "StateComparisonTime(s)"
     numGenTestsCol = "#GenTests"
@@ -434,15 +448,26 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     # get corresponding param values and save as csv (best and worse)
     best_df_obj = []
     worse_df_obj = []
+    conf_name_mapping = {
+        "_precondLength": "precond_len", 
+        "_mutantMaxFork": "max_depth", 
+        "_disableStateDiffInTestgen": "no_state_diff", 
+        "_maxTestsGenPerMut": "mutant_max_tests", 
+        "_postCheckContProba": "continue_prop", 
+        "_genTestForDircardedFrom": "disc_gentest_from", 
+        "_mutantContStrategy": "continue_strategy", 
+    }
     for elem_list, df_obj_list in [(best_elems, best_df_obj), \
                                                 (worse_elems, worse_df_obj)]:
         for v in elem_list:
             row = {}
             for pc in techConfbyvalbyconf:
+                if type(pc) in (list, tuple):
+                    continue
                 for val in techConfbyvalbyconf[pc]:
                     if v in techConfbyvalbyconf[pc][val]:
                         assert pc not in row, "BUG"
-                        row[pc] = val
+                        row[conf_name_mapping[pc]] = val
             row[techConfCol] = v
             row['MS_INC_APFD'] = proj_agg_func(getListAPFDSForTechConf(v))
             df_obj_list.append(row)
@@ -455,7 +480,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
     # XXX compare MS with compareState time, %targeted, #testgen, WM%
     if customMaxtime is None:
-        selectedTimes_minutes = [5, 15, 30, 60, 120]
+        assert False, "Must specify a customMaxtime"
+        #selectedTimes_minutes = [5, 15, 30, 60, 120]
     else:
         selectedTimes_minutes = [customMaxtime]
 
@@ -474,7 +500,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         # for each metric, get per techConf list on values
         for tech_conf in tmp_tech_confs:
             t_c_tmp_df = time_snap_df[time_snap_df[techConfCol] == tech_conf]
-            for metric_col in [fixed_y] + changing_ys:
+            for metric_col in [fixed_y] + changing_ys + [killMutsCol]:
                 if metric_col not in metric2techconf2values:
                     metric2techconf2values[metric_col] = {}
                 # make sure that every value is a number (to be used in median)
@@ -500,16 +526,30 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             sorted_techconf_by_ms.sort(reverse=True, key=lambda x: ( \
                             np.median(metric2techconf2values[fixed_y][x]), \
                             np.average(metric2techconf2values[fixed_y][x])))
+
+            # Compute MS APFD VS MS and compute the fixed_vals
+            ms_inc_apfd_y = "Average MS-INC"
+            ms_inc_apfd_vals = []
+            fix_vals = []
+            for tech_conf in sorted_techconf_by_ms:
+                if tech_conf in SPECIAL_TECHS:
+                    continue
+                fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
+                ms_inc_apfd_vals.append([ms_apfds[p][tech_conf] for p in ms_apfds])
+            plot_img_out_file = os.path.join(outdir, "msapfdVSms-"+ \
+                                                                str(time_snap))
+            make_twoside_plot(fix_vals, ms_inc_apfd_vals, plot_img_out_file, \
+                            x_label="Configuations", y_left_label=fixed_y, \
+                                                y_right_label=ms_inc_apfd_y)
+
             # Make plots of ms and the others
             for chang_y in changing_ys:
                 plot_img_out_file = os.path.join(outdir, "otherVSms-"+ \
                                 str(time_snap) + "-"+chang_y.replace('#','n'))
-                fix_vals = []
                 chang_vals = []
                 for tech_conf in sorted_techconf_by_ms:
                     if tech_conf in SPECIAL_TECHS:
                         continue
-                    fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
                     chang_vals.append(\
                                     metric2techconf2values[chang_y][tech_conf])
 
@@ -517,6 +557,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                     if chang_y in (targetCol, covMutsCol):
                         chang_y = chang_y.replace('#', '%')
                         m_val = nMuts_here
+                        assert m_val != 0, "Max X muts is 0. (PB)"
                     elif chang_y == stateCompTimeCol:
                         chang_y = chang_y.replace('(s)', '(%)')
                         m_val = time_snap * 60
@@ -604,6 +645,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         fix_vals2 = []
         sb_legend = ['semu', 'klee']
         chang_vals2 = [[], []]
+        overlap_vals = []
         klee = SPECIAL_TECHS[KLEE_KEY]
         klee_related_df = killed_muts_overlap[killed_muts_overlap[hue].isin(\
                                                 [klee+'_wins', klee+'_loses'])]
@@ -617,6 +659,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                 tech_conf2position[tech_conf]][num_x_wins])
             assert len(tmp_v) != 0
             chang_vals2[0].append(tmp_v[0])
+            overlap_vals.append(metric2techconf2values[killMutsCol][tech_conf] - chang_vals2[0][-1])
 
             tmp_v = list(klee_related_df[klee_related_df[y_label] == \
                                 tech_conf2position[tech_conf]][num_x_wins])
@@ -627,6 +670,16 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                     x_label="Configuations", y_left_label=fixed_y, \
                                                 y_right_label=chang_y2, \
                                     right_stackbar_legends=sb_legend)
+        # overlap and non overlap
+        image_out3 = os.path.join(outdir, \
+                                "semu_klee-overlap_all-"+str(time_snap)+"min")
+        overlap_non_vals = [overlap_vals] + chang_vals2
+        make_twoside_plot(overlap_non_vals, chang_vals2, image_out2, \
+                    x_label="Configuations", y_left_label="# Mutants", \
+                                                y_right_label=chang_y2, \
+                                leftt_stackbar_legends=['overlap']+sb_legend, \
+                                right_stackbar_legends=sb_legend)
+
 
 #~ def libMain()
 
