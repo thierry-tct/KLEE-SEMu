@@ -360,7 +360,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
     def getListAPFDSForTechConf (t_c):
         v_list = []
-        for p in ms_apfds:
+        for p in ms_apfds.keys():
             assert t_c in ms_apfds[p]
             v_list.append(ms_apfds[p][t_c])
         return v_list
@@ -394,6 +394,28 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                         "med": getListAPFDSForTechConf(med_vals[val]), \
                         "max": getListAPFDSForTechConf(max_vals[val])} \
                                             for val in techConfbyvalbyconf[pc]}
+        emphasis = None
+        if len(data) == 2:
+            n_projs = len(data[data.keys()[0]]['max'])
+            if n_projs >= 2:
+                diff_of_projs = {projpos: None for projpos in range(n_projs)}
+                for projpos in range(n_projs):
+                    diff_of_projs[projpos] = data[data.keys()[0]]['max'] - data[data.keys()[1]['max']]
+                avg = np.average([diff_of_projs[projpos] for projpos in diff_of_projs])
+                lt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] < avg]
+                gt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] >= avg]
+                emphasis = [{}, {}]
+                for val in data:
+                    emphasis[0][val] = {}
+                    emphasis[1][val] = {}
+                    for mmm in data[val]:
+                        emphasis[0][val][mmm] = []
+                        emphasis[1][val][mmm] = []
+                        for v_ind in lt_avg:
+                            emphasis[0][val][mmm].append(data[val][mmm][v_ind])
+                        for v_ind in gt_avg:
+                            emphasis[1][val][mmm].append(data[val][mmm][v_ind])
+
         for sp in SpecialTechs:
             data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp) \
                                                 for em in ['min', 'med','max']}
@@ -429,6 +451,19 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
                                 "AVERAGE MS (%)", yticks_range=yticks_range, \
                                     selectData=['min', 'med', 'max'])
+        
+        if emphasis is not None:
+            plotMerge.plot_Box_Grouped(emphasis[0], \
+                                os.path.join(outdir, "emph1_perconf_apfd_"+pc), \
+                                colors_bw, \
+                                "AVERAGE MS (%)", yticks_range=yticks_range, \
+                                    selectData=['min', 'med', 'max'])
+            plotMerge.plot_Box_Grouped(emphasis[1], \
+                                os.path.join(outdir, "emph2_perconf_apfd_"+pc), \
+                                 colors_bw, \
+                                "AVERAGE MS (%)", yticks_range=yticks_range, \
+                                    selectData=['min', 'med', 'max'])
+
     
     # XXX Find best and worse confs
     apfd_ordered_techconf_list = sorted(list(set(merged_df[techConfCol])), \
@@ -575,7 +610,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             
 
         # XXX Killed mutants overlap
-        overlap_obj = {}
+        overlap_data_dict = {}
+        non_overlap_obj = {}
         for proj in proj2dir:
             fulldir = os.path.join(proj2dir[proj], projcommonreldir)
             full_overlap_file = os.path.join(fulldir, \
@@ -584,30 +620,67 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                 full_overlap_file
             with open(full_overlap_file) as f:
                 fobj = json.load(f)
+                non_overlap_obj[proj] = {}
+                overlap_data_dict[proj] = {}
+                visited = set()
                 for pair in fobj["NON_OVERLAP_VENN"]:
                     a_tmp = pair.split('&')
                     if len(a_tmp) != 2:
                         print("@WARNING: non pair overlap found:", pair)
                         continue
                     left_right = tuple(sorted(a_tmp))
-                    if left_right not in overlap_obj:
-                        overlap_obj[left_right] = {v:0 for v in left_right}
+                    if left_right not in visited:
+                        visited.add(left_right)
+                        overlap_data_dict[proj][left_right] = fobj["OVERLAP_VENN"][pair]
+                        
+                    if left_right not in non_overlap_obj[proj]:
+                        non_overlap_obj[proj][left_right] = {v:0 for v in left_right}
                     for win in fobj["NON_OVERLAP_VENN"][pair]:
-                        overlap_obj[left_right][win] += \
+                        non_overlap_obj[proj][left_right][win] += \
                                     len(fobj["NON_OVERLAP_VENN"][pair][win])
-        all_tech_confs = {v for p in overlap_obj for v in p}
+        all_tech_confs = {v for p in non_overlap_obj[non_overlap_obj.keys()[0]] for v in p}
         assert all_tech_confs == set(sorted_techconf_by_ms), \
                             "Inconsistemcy between dataframe and overlap json"
         tech_conf2position = {}
         for pos, tech_conf in enumerate(sorted_techconf_by_ms):
             tech_conf2position[tech_conf] = pos
 
-        df_obj = []
         x_label = "Winning Technique Configuration"
         y_label = "Other Technique Configuration"
         hue = "special"
         num_x_wins = "# Mutants Killed more by X"
-        for left_right in overlap_obj:
+
+        # Plot klee conf overlap by proj
+        klee_n_semu_by_proj = [[], []]
+        by_proj_overlap = []
+        for proj in non_overlap_obj:
+            klee_n_semu_by_proj[0].append(0)
+            klee_n_semu_by_proj[1].append(0)
+            by_proj_overlap.append(0)
+            for left_right in non_overlap_obj[proj]:
+                if KLEE_KEY in left_right:
+                    s_c_n_o = non_overlap_obj[proj][left_right][list(set(left_right)-{KLEE_KEY})[0]]
+                    k_n_o = non_overlap_obj[proj][left_right][KLEE_KEY]
+                    if  s_c_n_o - k_n_o > klee_n_semu_by_proj[0] - klee_n_semu_by_proj[1]:
+                        klee_n_semu_by_proj[0][-1] = s_c_n_o
+                        klee_n_semu_by_proj[1][-1] = k_n_o
+                        by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
+            if klee_n_semu_by_proj[1] > klee_n_semu_by_proj[0]:
+                print(">>>> Klee has higher non overlap that all semu for project", proj, "(", klee_n_semu_by_proj[1], "VS", klee_n_semu_by_proj[0], ")")
+        ## plot
+        make_twoside_plot(klee_n_semu_by_proj+by_proj_overlap, klee_n_semu_by_proj, \
+                    os.path.join(outdir, "proj_overlap-"+str(time_snap)+"min"), \
+                    x_label="Configuations", y_left_label="# Mutants", \
+                                    y_right_label="# Non Overlapping Mutants", \
+                                left_stackbar_legends=['semu', 'klee', 'overlap'], \
+                                right_stackbar_legends=['semu', 'klee'])
+
+                        
+        #proj_agg_func2 = np.average
+        proj_agg_func2 = np.median
+        df_obj = []
+
+        for left_right in non_overlap_obj[non_overlap_obj.keys()[0]]:
             for left, right in [left_right, reversed(left_right)]:
                 hue_val = "SEMu"
                 if left in SpecialTechs and right in SpecialTechs:
@@ -619,10 +692,10 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                     if left in SpecialTechs:
                         hue_val = SpecialTechs[left]+"_wins"
                 df_obj.append({
-                        x_label:tech_conf2position[left], 
+                        x_label: tech_conf2position[left], 
                         y_label: tech_conf2position[right], 
                         hue: hue_val,
-                        num_x_wins: overlap_obj[left_right][left], 
+                        num_x_wins: proj_agg_func2([non_overlap_obj[p][left_right][left] for p in non_overlap_obj]), 
                         })
         killed_muts_overlap = pd.DataFrame(df_obj)
         image_out = os.path.join(outdir, "overlap-"+str(time_snap)+"min")
@@ -659,7 +732,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                 tech_conf2position[tech_conf]][num_x_wins])
             assert len(tmp_v) != 0
             chang_vals2[0].append(tmp_v[0])
-            overlap_vals.append(sum(metric2techconf2values[killMutsCol][tech_conf]) - chang_vals2[0][-1])
+            left_right = tuple(sorted([tech_conf, KLEE_KEY]))
+            overlap_vals.append(proj_agg_func2([overlap_data_dict[p][left_right] for p in overlap_data_dict.keys()]))
 
             tmp_v = list(klee_related_df[klee_related_df[y_label] == \
                                 tech_conf2position[tech_conf]][num_x_wins])
@@ -673,11 +747,11 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         # overlap and non overlap
         image_out3 = os.path.join(outdir, \
                                 "semu_klee-overlap_all-"+str(time_snap)+"min")
-        overlap_non_vals = [overlap_vals] + chang_vals2
+        overlap_non_vals = chang_vals2 + [overlap_vals] 
         make_twoside_plot(overlap_non_vals, chang_vals2, image_out3, \
                     x_label="Configuations", y_left_label="# Mutants", \
                                                 y_right_label=chang_y2, \
-                                left_stackbar_legends=['overlap']+sb_legend, \
+                                left_stackbar_legends=sb_legend+['overlap'], \
                                 right_stackbar_legends=sb_legend)
 
 
