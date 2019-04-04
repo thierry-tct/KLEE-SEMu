@@ -659,7 +659,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                 tech_conf2position[tech_conf]][num_x_wins])
             assert len(tmp_v) != 0
             chang_vals2[0].append(tmp_v[0])
-            overlap_vals.append(metric2techconf2values[killMutsCol][tech_conf] - chang_vals2[0][-1])
+            overlap_vals.append(sum(metric2techconf2values[killMutsCol][tech_conf]) - chang_vals2[0][-1])
 
             tmp_v = list(klee_related_df[klee_related_df[y_label] == \
                                 tech_conf2position[tech_conf]][num_x_wins])
@@ -674,7 +674,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         image_out3 = os.path.join(outdir, \
                                 "semu_klee-overlap_all-"+str(time_snap)+"min")
         overlap_non_vals = [overlap_vals] + chang_vals2
-        make_twoside_plot(overlap_non_vals, chang_vals2, image_out2, \
+        make_twoside_plot(overlap_non_vals, chang_vals2, image_out3, \
                     x_label="Configuations", y_left_label="# Mutants", \
                                                 y_right_label=chang_y2, \
                                 left_stackbar_legends=['overlap']+sb_legend, \
