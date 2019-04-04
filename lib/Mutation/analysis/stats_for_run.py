@@ -400,7 +400,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             if n_projs >= 2:
                 diff_of_projs = {projpos: None for projpos in range(n_projs)}
                 for projpos in range(n_projs):
-                    diff_of_projs[projpos] = data[data.keys()[0]]['max'] - data[data.keys()[1]['max']]
+                    diff_of_projs[projpos] = data[data.keys()[0]]['max'] - data[data.keys()[1]]['max']
                 avg = np.average([diff_of_projs[projpos] for projpos in diff_of_projs])
                 lt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] < avg]
                 gt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] >= avg]
