@@ -142,7 +142,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
             bottoms.append(bottoms[-1] + np.array(v))
         ind = np.arange(len(right_y_vals[0]))
         p = [None] * len(right_stackbar_legends)
-        for i in range(1, len(right_stackbar_legends)):
+        for i in range(len(right_stackbar_legends)):
             p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i])
         ax2.legend(p, right_stackbar_legends)
         #ax.margins(0.05)
