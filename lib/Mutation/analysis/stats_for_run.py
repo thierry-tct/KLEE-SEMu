@@ -532,13 +532,11 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         if time_snap_df.empty:
             continue
         tmp_tech_confs = set(time_snap_df[techConfCol])
-        assert int(list(time_snap_df[numMutsCol])[0]) == int(list(time_snap_df[numMutsCol])[-1])
-        nMuts_here = int(list(time_snap_df[numMutsCol])[0])
         metric2techconf2values = {}
         # for each metric, get per techConf list on values
         for tech_conf in tmp_tech_confs:
             t_c_tmp_df = time_snap_df[time_snap_df[techConfCol] == tech_conf]
-            for metric_col in [fixed_y] + changing_ys + [killMutsCol]:
+            for metric_col in [fixed_y] + changing_ys + [numMutsCol]:
                 if metric_col not in metric2techconf2values:
                     metric2techconf2values[metric_col] = {}
                 # make sure that every value is a number (to be used in median)
@@ -585,27 +583,36 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 plot_img_out_file = os.path.join(outdir, "otherVSms-"+ \
                                 str(time_snap) + "-"+chang_y.replace('#','n'))
                 chang_vals = []
+                nMuts_here = []
                 for tech_conf in sorted_techconf_by_ms:
                     if tech_conf in SPECIAL_TECHS:
                         continue
                     chang_vals.append(\
                                     metric2techconf2values[chang_y][tech_conf])
+                    nMuts_here.append(\
+                                    metric2techconf2values[numMutsCol][tech_conf])
 
                 if chang_y in [targetCol, stateCompTimeCol, covMutsCol]:
                     if chang_y in (targetCol, covMutsCol):
                         chang_y = chang_y.replace('#', '%')
                         m_val = nMuts_here
-                        assert m_val != 0, "Max X muts is 0. (PB)"
+                        # compute percentage
+                        if len(m_val) != 0:
+                            for c_ind in range(len(chang_vals)):
+                                c_tmp = []
+                                for i_ind in range(len(chang_vals)):
+                                    c_tmp.append(chang_vals[c_ind][i_ind] * 100.0 / m_val[c_ind][i_ind])
+                                chang_vals[c_ind] = c_tmp
                     elif chang_y == stateCompTimeCol:
                         chang_y = chang_y.replace('(s)', '(%)')
                         m_val = time_snap * 60
+                        # compute percentage
+                        if m_val != 0:
+                            for c_ind in range(len(chang_vals)):
+                                chang_vals[c_ind] = \
+                                        [v*100.0/m_val for v in chang_vals[c_ind]]
                     else:
                         assert False, "BUG, unreachable"
-                    # compute percentage
-                    if m_val != 0:
-                        for c_ind in range(len(chang_vals)):
-                            chang_vals[c_ind] = \
-                                    [v*100.0/m_val for v in chang_vals[c_ind]]
                         
                 make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
                             x_label="Configuations", y_left_label=fixed_y, \
