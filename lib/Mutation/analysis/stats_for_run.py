@@ -102,14 +102,16 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
     else:
         fig, ax1 = plt.subplots()
 
-    color = None
-    if not separate:
-        color = 'tab:blue'
+    color = 'tab:blue'
     ax1.set_xlabel(x_label)
 
     flierprops = dict(marker='o', markersize=2, linestyle='none')
 
-    ax1.set_ylabel(y_left_label, color=color)
+    if separate:
+        ax1.set_ylabel(y_left_label)
+    else:
+        ax1.set_ylabel(y_left_label, color=color)
+
     if left_stackbar_legends is None:
         bp1 = ax1.boxplot(left_y_vals, flierprops=flierprops)
         for element in ['boxes', 'whiskers', 'fliers', \
@@ -129,9 +131,14 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
     if not separate:
         # instantiate a second axes that shares the same x-axis
         ax2 = ax1.twinx()  
-        color = 'tab:red'
 
-    ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
+    color = 'tab:red'
+
+    if separate:
+        ax2.set_ylabel(y_right_label)  # we already handled the x-label with ax1
+    else:
+        ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
+
     if right_stackbar_legends is None:
         bp2 = ax2.boxplot(right_y_vals, flierprops=flierprops)
         for element in ['boxes', 'whiskers', 'fliers', \
