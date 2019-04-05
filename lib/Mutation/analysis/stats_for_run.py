@@ -102,7 +102,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
     else:
         fig, ax1 = plt.subplots()
 
-    color = 'tab:black'
+    color = None
     if not separate:
         color = 'tab:blue'
     ax1.set_xlabel(x_label)
