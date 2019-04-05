@@ -661,7 +661,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 if KLEE_KEY in left_right:
                     s_c_n_o = non_overlap_obj[proj][left_right][list(set(left_right)-{KLEE_KEY})[0]]
                     k_n_o = non_overlap_obj[proj][left_right][KLEE_KEY]
-                    if  s_c_n_o - k_n_o > klee_n_semu_by_proj[0] - klee_n_semu_by_proj[1]:
+                    if  s_c_n_o - k_n_o > klee_n_semu_by_proj[0][-1] - klee_n_semu_by_proj[1][-1]:
                         klee_n_semu_by_proj[0][-1] = s_c_n_o
                         klee_n_semu_by_proj[1][-1] = k_n_o
                         by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
