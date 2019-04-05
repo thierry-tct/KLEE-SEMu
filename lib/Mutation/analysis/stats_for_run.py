@@ -668,7 +668,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             if klee_n_semu_by_proj[1] > klee_n_semu_by_proj[0]:
                 print(">>>> Klee has higher non overlap that all semu for project", proj, "(", klee_n_semu_by_proj[1], "VS", klee_n_semu_by_proj[0], ")")
         ## plot
-        make_twoside_plot(klee_n_semu_by_proj+by_proj_overlap, klee_n_semu_by_proj, \
+        make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
                     os.path.join(outdir, "proj_overlap-"+str(time_snap)+"min"), \
                     x_label="Configuations", y_left_label="# Mutants", \
                                     y_right_label="# Non Overlapping Mutants", \
