@@ -454,12 +454,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         
         if emphasis is not None:
             plotMerge.plot_Box_Grouped(emphasis[0], \
-                                os.path.join(outdir, "emph1_perconf_apfd_"+pc), \
+                                os.path.join(outdir, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[emphasis.keys()[0]]['max']))), \
                                 colors_bw, \
                                 "AVERAGE MS (%)", yticks_range=yticks_range, \
                                     selectData=['min', 'med', 'max'])
             plotMerge.plot_Box_Grouped(emphasis[1], \
-                                os.path.join(outdir, "emph2_perconf_apfd_"+pc), \
+                                os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[emphasis.keys()[0]]['max']))), \
                                  colors_bw, \
                                 "AVERAGE MS (%)", yticks_range=yticks_range, \
                                     selectData=['min', 'med', 'max'])
