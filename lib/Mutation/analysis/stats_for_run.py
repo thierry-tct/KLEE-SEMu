@@ -102,7 +102,9 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
     else:
         fig, ax1 = plt.subplots()
 
-    color = 'tab:blue'
+    color = 'tab:black'
+    if not separate:
+        color = 'tab:blue'
     ax1.set_xlabel(x_label)
 
     flierprops = dict(marker='o', markersize=2, linestyle='none')
@@ -127,8 +129,8 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
     if not separate:
         # instantiate a second axes that shares the same x-axis
         ax2 = ax1.twinx()  
+        color = 'tab:red'
 
-    color = 'tab:red'
     ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
     if right_stackbar_legends is None:
         bp2 = ax2.boxplot(right_y_vals, flierprops=flierprops)
@@ -454,12 +456,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         
         if emphasis is not None:
             plotMerge.plot_Box_Grouped(emphasis[0], \
-                                os.path.join(outdir, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[emphasis.keys()[0]]['max']))), \
+                                os.path.join(outdir, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[emphasis[0].keys()[0]]['max']))), \
                                 colors_bw, \
                                 "AVERAGE MS (%)", yticks_range=yticks_range, \
                                     selectData=['min', 'med', 'max'])
             plotMerge.plot_Box_Grouped(emphasis[1], \
-                                os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[emphasis.keys()[0]]['max']))), \
+                                os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[emphasis[1].keys()[0]]['max']))), \
                                  colors_bw, \
                                 "AVERAGE MS (%)", yticks_range=yticks_range, \
                                     selectData=['min', 'med', 'max'])
@@ -530,6 +532,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         if time_snap_df.empty:
             continue
         tmp_tech_confs = set(time_snap_df[techConfCol])
+        assert int(list(time_snap_df[numMutsCol])[0]) == int(list(time_snap_df[numMutsCol])[-1])
         nMuts_here = int(list(time_snap_df[numMutsCol])[0])
         metric2techconf2values = {}
         # for each metric, get per techConf list on values
@@ -670,89 +673,88 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         ## plot
         make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
                     os.path.join(outdir, "proj_overlap-"+str(time_snap)+"min"), \
-                    x_label="Configuations", y_left_label="# Mutants", \
+                    x_label="Programs", y_left_label="# Mutants", \
                                     y_right_label="# Non Overlapping Mutants", \
                                 left_stackbar_legends=['semu', 'klee', 'overlap'], \
                                 right_stackbar_legends=['semu', 'klee'])
 
                         
-        #proj_agg_func2 = np.average
-        proj_agg_func2 = np.median
-        df_obj = []
+        for proj_agg_func2, proj_agg_func2_name in [(np.average, "average"), (np.median, "median")]:
+            df_obj = []
 
-        for left_right in non_overlap_obj[non_overlap_obj.keys()[0]]:
-            for left, right in [left_right, reversed(left_right)]:
-                hue_val = "SEMu"
-                if left in SpecialTechs and right in SpecialTechs:
-                    hue_val = SpecialTechs[left]+"_wins-"\
-                                                +SpecialTechs[right]+"_loses"
-                else:
-                    if right in SpecialTechs:
-                        hue_val = SpecialTechs[right]+"_loses"
-                    if left in SpecialTechs:
-                        hue_val = SpecialTechs[left]+"_wins"
-                df_obj.append({
-                        x_label: tech_conf2position[left], 
-                        y_label: tech_conf2position[right], 
-                        hue: hue_val,
-                        num_x_wins: proj_agg_func2([non_overlap_obj[p][left_right][left] for p in non_overlap_obj]), 
-                        })
-        killed_muts_overlap = pd.DataFrame(df_obj)
-        image_out = os.path.join(outdir, "overlap-"+str(time_snap)+"min")
-        # plot
-        sns.set_style("white", \
-                            {'axes.linewidth': 1.25, 'axes.edgecolor':'black'})
-        sns.relplot(x=x_label, y=y_label, hue=hue, size=num_x_wins,
-                sizes=(0, 300), alpha=.5, palette="muted",
-                height=6, data=killed_muts_overlap)
-        plt.xticks([])
-        plt.yticks([])
-        plt.tight_layout()
-        plt.savefig(image_out+".pdf", format="pdf")
-        plt.close('all')
+            for left_right in non_overlap_obj[non_overlap_obj.keys()[0]]:
+                for left, right in [left_right, reversed(left_right)]:
+                    hue_val = "SEMu"
+                    if left in SpecialTechs and right in SpecialTechs:
+                        hue_val = SpecialTechs[left]+"_wins-"\
+                                                    +SpecialTechs[right]+"_loses"
+                    else:
+                        if right in SpecialTechs:
+                            hue_val = SpecialTechs[right]+"_loses"
+                        if left in SpecialTechs:
+                            hue_val = SpecialTechs[left]+"_wins"
+                    df_obj.append({
+                            x_label: tech_conf2position[left], 
+                            y_label: tech_conf2position[right], 
+                            hue: hue_val,
+                            num_x_wins: proj_agg_func2([non_overlap_obj[p][left_right][left] for p in non_overlap_obj]), 
+                            })
+            killed_muts_overlap = pd.DataFrame(df_obj)
+            image_out = os.path.join(outdir, "overlap-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
+            # plot
+            sns.set_style("white", \
+                                {'axes.linewidth': 1.25, 'axes.edgecolor':'black'})
+            sns.relplot(x=x_label, y=y_label, hue=hue, size=num_x_wins,
+                    sizes=(0, 300), alpha=.5, palette="muted",
+                    height=6, data=killed_muts_overlap)
+            plt.xticks([])
+            plt.yticks([])
+            plt.tight_layout()
+            plt.savefig(image_out+".pdf", format="pdf")
+            plt.close('all')
 
-        # plot overlap against pure klee
-        image_out2 = os.path.join(outdir, \
-                                "semu_klee-nonoverlap-"+str(time_snap)+"min")
-        chang_y2 = "# Non Overlapping Mutants"
-        fix_vals2 = []
-        sb_legend = ['semu', 'klee']
-        chang_vals2 = [[], []]
-        overlap_vals = []
-        klee = SPECIAL_TECHS[KLEE_KEY]
-        klee_related_df = killed_muts_overlap[killed_muts_overlap[hue].isin(\
-                                                [klee+'_wins', klee+'_loses'])]
-        assert not klee_related_df.empty
-        for tech_conf in sorted_techconf_by_ms:
-            if tech_conf in SPECIAL_TECHS:
-                continue
-            fix_vals2.append(metric2techconf2values[fixed_y][tech_conf])
+            # plot overlap against pure klee
+            image_out2 = os.path.join(outdir, \
+                                    "semu_klee-nonoverlap-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
+            chang_y2 = "# Non Overlapping Mutants"
+            fix_vals2 = []
+            sb_legend = ['semu', 'klee']
+            chang_vals2 = [[], []]
+            overlap_vals = []
+            klee = SPECIAL_TECHS[KLEE_KEY]
+            klee_related_df = killed_muts_overlap[killed_muts_overlap[hue].isin(\
+                                                    [klee+'_wins', klee+'_loses'])]
+            assert not klee_related_df.empty
+            for tech_conf in sorted_techconf_by_ms:
+                if tech_conf in SPECIAL_TECHS:
+                    continue
+                fix_vals2.append(metric2techconf2values[fixed_y][tech_conf])
 
-            tmp_v = list(klee_related_df[klee_related_df[x_label] == \
-                                tech_conf2position[tech_conf]][num_x_wins])
-            assert len(tmp_v) != 0
-            chang_vals2[0].append(tmp_v[0])
-            left_right = tuple(sorted([tech_conf, KLEE_KEY]))
-            overlap_vals.append(proj_agg_func2([overlap_data_dict[p][left_right] for p in overlap_data_dict.keys()]))
+                tmp_v = list(klee_related_df[klee_related_df[x_label] == \
+                                    tech_conf2position[tech_conf]][num_x_wins])
+                assert len(tmp_v) != 0
+                chang_vals2[0].append(tmp_v[0])
+                left_right = tuple(sorted([tech_conf, KLEE_KEY]))
+                overlap_vals.append(proj_agg_func2([overlap_data_dict[p][left_right] for p in overlap_data_dict.keys()]))
 
-            tmp_v = list(klee_related_df[klee_related_df[y_label] == \
-                                tech_conf2position[tech_conf]][num_x_wins])
-            assert len(tmp_v) != 0
-            chang_vals2[1].append(tmp_v[0])
+                tmp_v = list(klee_related_df[klee_related_df[y_label] == \
+                                    tech_conf2position[tech_conf]][num_x_wins])
+                assert len(tmp_v) != 0
+                chang_vals2[1].append(tmp_v[0])
 
-        make_twoside_plot(fix_vals2, chang_vals2, image_out2, \
-                    x_label="Configuations", y_left_label=fixed_y, \
-                                                y_right_label=chang_y2, \
+            make_twoside_plot(fix_vals2, chang_vals2, image_out2, \
+                        x_label="Configuations", y_left_label=fixed_y, \
+                                                    y_right_label=chang_y2, \
+                                        right_stackbar_legends=sb_legend)
+            # overlap and non overlap
+            image_out3 = os.path.join(outdir, \
+                                    "semu_klee-overlap_all-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
+            overlap_non_vals = chang_vals2 + [overlap_vals] 
+            make_twoside_plot(overlap_non_vals, chang_vals2, image_out3, \
+                        x_label="Configuations", y_left_label="# Mutants", \
+                                                    y_right_label=chang_y2, \
+                                    left_stackbar_legends=sb_legend+['overlap'], \
                                     right_stackbar_legends=sb_legend)
-        # overlap and non overlap
-        image_out3 = os.path.join(outdir, \
-                                "semu_klee-overlap_all-"+str(time_snap)+"min")
-        overlap_non_vals = chang_vals2 + [overlap_vals] 
-        make_twoside_plot(overlap_non_vals, chang_vals2, image_out3, \
-                    x_label="Configuations", y_left_label="# Mutants", \
-                                                y_right_label=chang_y2, \
-                                left_stackbar_legends=sb_legend+['overlap'], \
-                                right_stackbar_legends=sb_legend)
 
 
 #~ def libMain()
