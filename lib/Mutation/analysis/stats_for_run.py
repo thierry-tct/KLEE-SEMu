@@ -607,7 +607,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                         if len(m_val) != 0:
                             for c_ind in range(len(chang_vals)):
                                 c_tmp = []
-                                for i_ind in range(len(chang_vals)):
+                                for i_ind in range(len(chang_vals[c_ind])):
                                     c_tmp.append(chang_vals[c_ind][i_ind] * 100.0 / m_val[c_ind][i_ind])
                                 chang_vals[c_ind] = c_tmp
                     elif chang_y == stateCompTimeCol:
