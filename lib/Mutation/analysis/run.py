@@ -2778,6 +2778,36 @@ def main():
 
 #~ def main()
 
+def get_subsuming_mutants (initial_sm, surviving_sm, killed_on_surviving_ms):
+    """ Return subsuming clusters
+    """
+    # Loading
+    agg_mat_dat = matrixHardness.loadMatrix(initial_sm, None)
+    for m_f in [surviving_sm, killed_on_surviving_sm]:
+        tmp = matrixHardness.loadMatrix(m_f, None) 
+        for m in tmp:
+            if m in agg_mat_dat:
+                agg_mat_dat[m] += tmp[m]
+            else:
+                agg_mat_dat[m] = tmp[m]
+    # Compute subsumption
+    eq, subs_clusters = magma_stats_algo.getSubsumingMutants (agg_mat_dat)
+    return subs_clusters
+#~ def get_subsuming_mutants()
+
+def subs_clusters_of(subs_clusters, killed_mutants):
+    k_m_set = set(killed_mutants)
+    clusters_of = []
+    for c_id, c in enumerate(subs_clusters):
+        if len(set(c) & k_m_set) > 0:
+            clusters_of.append(c_id)
+    return clusters_of
+#~ def subs_clusters_of()
+
+def subsuming_ms(subs_clusters, killed_mutants):
+    return 100.0 * len(subs_clusters_of(subs_clusters, killed_mutants)) / len(subs_clusters)
+#~ def subsuming_ms()
+
 if __name__ == "__main__":
     main()
 
