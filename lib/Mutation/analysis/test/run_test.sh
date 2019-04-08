@@ -55,10 +55,12 @@ then
         from_exec=4
     elif [ "$FROM_EXECUTION" = "REPLAY" ]; then
         from_exec=5
-    elif [ "$FROM_EXECUTION" = "KILLEDREPLAY" ]; then
+    elif [ "$FROM_EXECUTION" = "KILLEDRESETSTATE" ]; then
         from_exec=6
-    elif [ "$FROM_EXECUTION" = "REPORT" ]; then
+    elif [ "$FROM_EXECUTION" = "KILLEDREPLAY" ]; then
         from_exec=7
+    elif [ "$FROM_EXECUTION" = "REPORT" ]; then
+        from_exec=8
     else
         error_exit "Invalid FROM_EXECUTION value: '$FROM_EXECUTION'"
     fi
@@ -166,7 +168,17 @@ then
     cd - > /dev/null
 fi
 
+# Killed RESETSTATE
 if [ $from_exec -le 6 ] #true 
+then
+    echo "# Setting back the State for Killed Replay..."
+    cd $metadir || error_exit "cd $metadir 6"
+    python ~/mytools/MFI-V2.0/utilities/navigator.py --setexecstate 5 . || error_exit "failed to set exec state to 5"
+    cd - > /dev/null
+fi
+
+# KILLED REPLAY
+if [ $from_exec -le 7 ] #true 
 then
     echo "# RUNNING MFI previous killed additional..."
     sampl_mode=""
@@ -222,7 +234,7 @@ then
 fi
 
 # Analyse
-if [ $from_exec -le 7 ] #true 
+if [ $from_exec -le 8 ] #true 
 then
     echo "# RUNNING Semu analyse..."
     cd $semudir || error_exit "failed to enter semudir 2!"
