@@ -2488,9 +2488,19 @@ def main():
         if executionMode == GenTestsToKill:
             agg_Out = os.path.join(outDir, "TestGenFinalAggregated"+str(ts_size))
             mfi_mutants_list = os.path.join(agg_Out, "mfirun_mutants_list.txt")
+            killed_non_mfi_mutants_list = os.path.join(agg_Out, "killed_non_mfirun_mutants_list.txt")
             mfi_ktests_dir_top = os.path.join(agg_Out, "mfirun_ktests_dir")
             mfi_ktests_dir = os.path.join(mfi_ktests_dir_top, KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0")
             mfi_execution_output = os.path.join(agg_Out, "mfirun_output")
+            killed_non_mfi_execution_output = os.path.join(agg_Out, "killed_non_mfirun_output")
+
+            ## TODO: Remove this when all migrated
+            if "MFI_SEMU_SUBSUMING_MIGRATE_TMP" in os.environ and os.environ["MFI_SEMU_SUBSUMING_MIGRATE_TMP"] == "on":
+                with open(killed_non_mfi_mutants_list, "w") as f:
+                    for m in ground_KilledMutants:
+                        f.write(str(m)+"\n")
+                exit(0)
+            ######~~~~~~~~~~~
 
             if COMPUTE_TASK in toExecute: 
                 ktdirs = []
@@ -2515,6 +2525,10 @@ def main():
                     # All mutant list must be same
                     part_mfi_mutants_list, part_mfi_ktests_dir_top, part_mfi_ktests_dir, part_mfi_execution_output, part_this_Out, part_d_name = ctp_return[0]
                     shutil.copy2(part_mfi_mutants_list, mfi_mutants_list)
+
+                    with open(killed_non_mfi_mutants_list, "w") as f:
+                        for m in ground_KilledMutants:
+                            f.write(str(m)+"\n")
 
                     # Merge tests.  
                     fdupesAggregateKtestDirs (mfi_ktests_dir_top, mfi_ktests_dir, ktdirs, d_names)

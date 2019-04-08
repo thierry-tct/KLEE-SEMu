@@ -55,8 +55,10 @@ then
         from_exec=4
     elif [ "$FROM_EXECUTION" = "REPLAY" ]; then
         from_exec=5
-    elif [ "$FROM_EXECUTION" = "REPORT" ]; then
+    elif [ "$FROM_EXECUTION" = "KILLEDREPLAY" ]; then
         from_exec=6
+    elif [ "$FROM_EXECUTION" = "REPORT" ]; then
+        from_exec=7
     else
         error_exit "Invalid FROM_EXECUTION value: '$FROM_EXECUTION'"
     fi
@@ -156,12 +158,64 @@ then
     done
     [ "$sampl_mode" = "" ] && error_exit "maybe problem with gentest replaying: sampl_mode neither of PASS KLEE DEV NUM"
 
-    MFI_OVERRIDE_OUTPUT=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_output MFI_OVERRIDE_MUTANTSLIST=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_mutants_list.txt MFI_OVERRIDE_GENTESTSDIR=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_ktests_dir ~/mytools/MFI-V2.0/MFI.sh "$projID"_conf-script.conf || error_exit "MFI Failed 2!"
+    MFI_OVERRIDE_OUTPUT=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_output \
+    MFI_OVERRIDE_MUTANTSLIST=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_mutants_list.txt \
+    MFI_OVERRIDE_GENTESTSDIR=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_ktests_dir \
+    ~/mytools/MFI-V2.0/MFI.sh "$projID"_conf-script.conf || error_exit "MFI Failed 2!"
+    cd - > /dev/null
+fi
+
+if [ $from_exec -le 6 ] #true 
+then
+    echo "# RUNNING MFI previous killed additional..."
+    cd $metadir || error_exit "cd $metadir 3"
+    sampl_mode=""
+    for tmp in 'PASS' 'KLEE' 'DEV' 'NUM'
+    do
+        if test -f $semudir/OUTPUT/TestGenFinalAggregated"$tmp"_100.0/mfirun_mutants_list.txt
+        then
+            sampl_mode=$tmp
+            break
+        fi
+    done
+    [ "$sampl_mode" = "" ] && error_exit "maybe problem with gentest replaying: sampl_mode neither of PASS KLEE DEV NUM"
+
+    prev_sm=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_output/data/matrices/SM.dat
+    prev_test_loc=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/mfirun_ktests_dir
+
+    meaningful_ktest_dir=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/tmp_killed_non_mfirun_ktests_dir
+    test -d $meaningful_ktest_dir && rm -rf $meaningful_ktest_dir
+    mkdir -p $meaningful_ktest_dir/MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh-out/klee-out-0 || error_exit "failed to create meaningful ktest dir"
+    test_pos_start=2
+    test_pos_end=$(head -n1 $prev_sm | awk '{print NF}')
+    for t_pos in `seq $test_pos_start $test_pos_end`
+    do
+        test_name=$(cut -d' ' -f$tpos $prev_sm | head -n1)
+        # if kills a mutant, copy
+        if cut -d' ' -f$tpos $prev_sm | sed 1d | grep "1" > /dev/null
+        then
+            cp -f $prev_test_loc/$test_name $meaningful_ktest_dir/$test_name || error_exit "failed to copy test $test_name"
+        fi
+    done
+
+    killed_non_list=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/killed_non_mfirun_mutants_list.txt
+    if ! test -f $killed_non_list
+    then
+        SKIP_TASKS="ZESTI_DEV_TASK TEST_GEN_TASK SEMU_EXECUTION COMPUTE_TASK" GIVEN_CONF_SCRIPT=$metadir/"$projID"_conf-script.conf \
+        MFI_SEMU_SUBSUMING_MIGRATE_TMP=on \
+        bash ~/mytools/klee-semu/src/lib/Mutation/analysis/example/22/run_cmd . $run_semu_config || error_exit "Failed to get killed muts list"
+        test -f $killed_non_list || error_exit "killed mut list still abscent"
+    fi
+
+    MFI_OVERRIDE_OUTPUT=$semudir/OUTPUT/TestGenFinalAggregated"$sampl_mode"_100.0/killed_non_mfirun_output \
+    MFI_OVERRIDE_MUTANTSLIST=$killed_non_list \
+    MFI_OVERRIDE_GENTESTSDIR=$meaningful_ktest_dir \
+    ~/mytools/MFI-V2.0/MFI.sh "$projID"_conf-script.conf || error_exit "MFI Failed 2!"
     cd - > /dev/null
 fi
 
 # Analyse
-if [ $from_exec -le 6 ] #true 
+if [ $from_exec -le 7 ] #true 
 then
     echo "# RUNNING Semu analyse..."
     cd $semudir || error_exit "failed to enter semudir 2!"
