@@ -166,6 +166,59 @@ def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
     plt.close('all')
 #~ def make_twoside_plot()
 
+def get_minimal_conf_set(tech_conf_missed_muts):
+    """ the input has this format: 
+        {project: {tc: set()<missed muts>}}
+    """
+    clusters_by_proj = {}
+    for proj in tech_conf_missed_muts:
+        visited = set()
+        clusters_by_proj[proj] = []
+        for tc in tech_conf_missed_muts[proj]:
+            if tc in visited:
+                continue
+            visited.add(tc)
+            cluster = [tc]
+            for otc in tech_conf_missed_muts[proj]:
+                if otc in visited:
+                    continue
+                if tech_conf_missed_muts[proj][tc] == tech_conf_missed_muts[proj][otc]:
+                    cluster.append(otc)
+                    visited.add(otc)
+                elif len(tech_conf_missed_muts[proj][tc] - tech_conf_missed_muts[proj][otc]) == 0:
+                    visited.add(otc)
+                elif len(tech_conf_missed_muts[proj][otc] - tech_conf_missed_muts[proj][tc]) == 0:
+                    cluster = None
+                    break
+            if cluster is not None:
+                clusters_by_proj[proj].append(cluster)
+        # TODO: compute the minimal cluters of the project
+    tech_conf2proj_clust = {}
+    for proj in clusters_by_proj:
+        for c_id, cluster in enumerate(clusters_by_proj[proj]):
+            for tc in cluster:
+                if tc not in tech_conf2proj_clust:
+                    tech_conf2proj_clust[tc] = set()
+                tech_conf2proj_clust[tc].add((proj, c_id))
+
+    tc_list = tech_conf2proj_clust.keys()
+    toremove = set()
+    for tc in tc_list:
+        if tc in toremove:
+            continue
+        for otc in tc_list:
+            if otc in toremove:
+                continue
+            if tech_conf2proj_clust[tc] != tech_conf2proj_clust[otc]:
+                if len(tech_conf2proj_clust[tc] - tech_conf2proj_clust[otc]) == 0:
+                    toremove.add(tc)
+                elif len(tech_conf2proj_clust[tc] - tech_conf2proj_clust[otc]) == 0:
+                    toremove.add(tc)
+    for r in toremove:
+        del tech_conf2proj_clust[r]
+
+    return tech_conf2proj_clust 
+#~ def get_minimal_conf_set()
 
 csv_file="Results.csv"
 funcs_csv_file="Results-byfunctions.csv"
@@ -273,6 +326,15 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                         "_mutantContStrategy", "_maxTestsGenPerMut", 
                         "_disableStateDiffInTestgen"
                     ]
+    conf_name_mapping = {
+        "_precondLength": "precond_len", 
+        "_mutantMaxFork": "max_depth", 
+        "_disableStateDiffInTestgen": "no_state_diff", 
+        "_maxTestsGenPerMut": "mutant_max_tests", 
+        "_postCheckContProba": "continue_prop", 
+        "_genTestForDircardedFrom": "disc_gentest_from", 
+        "_mutantContStrategy": "continue_strategy", 
+    }
     other_cols = ["_testGenOnlyCriticalDiffs" ]
 
     msCol = "MS-INC"
@@ -290,6 +352,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     propNoDiffOnForkedMutsStatesCol = "percentageNodiffFoundAtMutPoint"
     assert propNoDiffOnForkedMutsStatesCol not in merged_df, \
                                                     "Use different key (BUG)" 
+
+    SpecialTechs = dict(SPECIAL_TECHS)
+    if no_concrete:
+        del SpecialTechs[CONCRETE_KEY]
+        merged_df = merged_df[merged_df[techConfCol] != CONCRETE_KEY]
+
     propNDOFMS = []
     for ind, row in merged_df.iterrows():
         num_denom = []
@@ -337,10 +405,6 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     
     only_semu_cfg_df = merged_df[~merged_df[techConfCol].isin(SPECIAL_TECHS)]
 
-    SpecialTechs = dict(SPECIAL_TECHS)
-    if no_concrete:
-        del SpecialTechs[CONCRETE_KEY]
-
     vals_by_conf = {}
     for c in config_columns:
         vals_by_conf[c] = list(set(only_semu_cfg_df[c]))
@@ -348,6 +412,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     for ls_, rs_ in itertools.combinations(vals_by_conf.keys(), 2):
         vals_by_conf[(ls_,rs_)] = list(itertools.product(vals_by_conf[ls_], vals_by_conf[rs_]))
 
+    techConf2ParamVals = {k: {conf_name_mapping[cc]: None for cc in config_columns} for k in SpecialTechs}
     techConfbyvalbyconf = {}
     for pc in vals_by_conf:
         techConfbyvalbyconf[pc] = {}
@@ -361,6 +426,11 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             else:
                 keys = set(\
                     only_semu_cfg_df[only_semu_cfg_df[pc] == val][techConfCol])
+                for k in keys:
+                    if k not in techConf2ParamVals:
+                        techConf2ParamVals[k] = {}
+                    assert conf_name_mapping[pc] not in techConf2ParamVals[k], "each param once per conf"
+                    techConf2ParamVals[k][conf_name_mapping[pc]] = val
             if len(keys) != 0:
                 techConfbyvalbyconf[pc][val] = keys
         if len(techConfbyvalbyconf[pc]) == 0:
@@ -492,15 +562,6 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     # get corresponding param values and save as csv (best and worse)
     best_df_obj = []
     worse_df_obj = []
-    conf_name_mapping = {
-        "_precondLength": "precond_len", 
-        "_mutantMaxFork": "max_depth", 
-        "_disableStateDiffInTestgen": "no_state_diff", 
-        "_maxTestsGenPerMut": "mutant_max_tests", 
-        "_postCheckContProba": "continue_prop", 
-        "_genTestForDircardedFrom": "disc_gentest_from", 
-        "_mutantContStrategy": "continue_strategy", 
-    }
     for elem_list, df_obj_list in [(best_elems, best_df_obj), \
                                                 (worse_elems, worse_df_obj)]:
         for v in elem_list:
@@ -629,6 +690,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         # XXX Killed mutants overlap
         overlap_data_dict = {}
         non_overlap_obj = {}
+        tech_conf_missed_muts = {}
         for proj in proj2dir:
             fulldir = os.path.join(proj2dir[proj], projcommonreldir)
             full_overlap_file = os.path.join(fulldir, \
@@ -639,6 +701,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 fobj = json.load(f)
                 non_overlap_obj[proj] = {}
                 overlap_data_dict[proj] = {}
+                tech_conf_missed_muts[proj] = {}
                 visited = set()
                 for pair in fobj["NON_OVERLAP_VENN"]:
                     a_tmp = pair.split('&')
@@ -655,12 +718,25 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                     for win in fobj["NON_OVERLAP_VENN"][pair]:
                         non_overlap_obj[proj][left_right][win] += \
                                     len(fobj["NON_OVERLAP_VENN"][pair][win])
+                        lose = set(left_right) - {win}
+                        if lose not in tech_conf_missed_muts[proj]:
+                            tech_conf_missed_muts[proj][lose] = set()
+                        tech_conf_missed_muts[proj][lose] |= set(fobj["NON_OVERLAP_VENN"][pair][win])
         all_tech_confs = {v for p in non_overlap_obj[non_overlap_obj.keys()[0]] for v in p}
         assert all_tech_confs == set(sorted_techconf_by_ms), \
                             "Inconsistemcy between dataframe and overlap json"
         tech_conf2position = {}
         for pos, tech_conf in enumerate(sorted_techconf_by_ms):
             tech_conf2position[tech_conf] = pos
+
+        # write down the minimal config set to kill all muts
+        minimal_tech_confs = get_minimal_conf_set(tech_conf_missed_muts)
+        minimal_df_obj = []
+        for mtc in minimal_tech_confs:
+            minimal_df_obj.append(dict(list({'_TechConf': mtc}.items())+list(techConf2ParamVals[mtc].items())))
+        minimal_df = pd.DataFrame(minimal_df_obj)
+        minimal_df.to_csv(os.path.join(outdir, "minimal_tech_confs.csv"), index=False)        
+        #~
 
         x_label = "Winning Technique Configuration"
         y_label = "Other Technique Configuration"
