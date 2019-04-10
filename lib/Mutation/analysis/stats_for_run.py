@@ -192,7 +192,19 @@ def get_minimal_conf_set(tech_conf_missed_muts):
                     break
             if cluster is not None:
                 clusters_by_proj[proj].append(cluster)
-        # TODO: compute the minimal cluters of the project
+        tmp = clusters_by_proj[proj]
+        clusters_by_proj[proj] = []
+        for ncomb in range(len(tmp)):
+            if len(clusters_by_proj[proj]) > 0:
+                break
+            for tc_comb in itertools.combinations(tmp, ncomb):
+                intersect = set(tech_conf_missed_muts[proj][tc_comb[0]])
+                for tc in tc_comb[1:]:
+                    intersect &= tech_conf_missed_muts[proj][tc]
+                if len(intersect) == 0:
+                    clusters_by_proj[proj] += list(tc_comb)
+        assert len(clusters_by_proj[proj]) > 0, "Must have something"
+
     tech_conf2proj_clust = {}
     for proj in clusters_by_proj:
         for c_id, cluster in enumerate(clusters_by_proj[proj]):
