@@ -2718,7 +2718,10 @@ def main():
                                     tmp_data["#SubsTargetedClusters"] = len(subsuming_filt_targeted_mutants_clust)
                                     tmp_data["#SubsCoveredClusters"] = nsubsuming_newCovered_clust 
                                     tmp_data["#SubsKilledClusters"] = nsubsuming_newKilled_clust
-                                    tmp_data["MS_SUBSUMING-INC"] = (nsubsuming_newKilled_clust * 100.0 / subsuming_filt_nMutants_clust)
+                                    if subsuming_filt_nMutants_clust != 0:
+                                        tmp_data["MS_SUBSUMING-INC"] = (nsubsuming_newKilled_clust * 100.0 / subsuming_filt_nMutants_clust)
+                                    else:
+                                        tmp_data["MS_SUBSUMING-INC"] = None
 
                                 if filtering_func is None:
                                     time_snap_dfs_dats.append(tmp_data)
