@@ -1930,6 +1930,7 @@ def main():
     parser.add_argument("--disable_pureklee", action="store_true", help="Disable doing computation for pureklee")
     parser.add_argument("--fixedmutantnumbertarget", type=str, default=ALIVE_ALL, help="Specify the how the mutants to terget are set (<mode>[:<#Mutants>]): "+str(FIXED_MUTANT_NUMBER_STRATEGIES))
     parser.add_argument("--semucontinueunfinishedtunings", action="store_true", help="enable reusing previous semu execution and computation result (if available). Useful when execution fail for some tunings and we do not want to reexecute other completed tunings")
+    parser.add_argument("--disable_subsuming_mutants", action="store_true", help="Disable considering subsuming mutants in reporting")
 
     parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(1, 240, 1)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
 
@@ -2595,6 +2596,12 @@ def main():
                     sm_file = os.path.join(mfi_execution_output, "data", "matrices", "SM.dat")
                     mcov_file = os.path.join(mfi_execution_output, "data", "matrices", "MCOV.dat")
                     pf_file = os.path.join(mfi_execution_output, "data", "matrices", "ktestPassFail.txt")
+                    gen_on_killed_sm = os.path.join(killed_non_mfi_execution_output, "data", "matrices", "SM.dat")
+
+                    # get subsuming mutants
+                    subsuming_mutants_clusters = None
+                    if not args.disable_subsuming_mutants:
+                        subsuming_mutants_clusters = get_subsuming_mutants(matrix, sm_file, gen_on_killed_sm)
 
                     out_df_parts = []
                     funcs_out_df_parts = []
@@ -2602,6 +2609,7 @@ def main():
                         outjsonfile = outjsonfile_common+"-"+str(time_snapshot_minute)+'min.json'
                         outobj_ = {}
                         killedMutsPerTuning = {}
+                        killedSubsumingMutsPerTuning = {}
                         time_snap_dfs_dats = []
                         funcs_time_snap_dfs_dats = []
                         for semuTuning in semuTuningList:
@@ -2644,19 +2652,31 @@ def main():
                                     for m in filt_targeted_mutants:
                                         filt_testsOfThis += mutants2ktests[m]
                                     filt_testsOfThis = list(set(filt_testsOfThis) & set(testsOfThis))
+                                # subsuming
+                                if subsuming_mutants_clusters is not None:
+                                    subsuming_filt_mutants_clust = subs_clusters_of(subsuming_mutants_clusters, filt_mutants)
+                                    subsuming_filt_nMutants_clust = len(subsuming_filt_mutants_clust)
+                                    subsuming_filt_targeted_mutants_clust = subs_clusters_of(subsuming_mutants_clusters, filt_targeted_mutants)
 
                                 filt_testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in filt_testsOfThis])
                                 testsKillingOfThis = []
                                 if len(filt_testsOfThis) > 0:
                                     newKilled = set(filt_mutants) & set(matrixHardness.getKillableMutants(sm_file, filt_testsOfThis, testkillinglist=testsKillingOfThis))
                                     newCovered = set(filt_mutants) & set(matrixHardness.getListCoveredMutants(mcov_file, filt_testsOfThis))
-                                    nnewFailing = len(set(filt_mutants) & set(matrixHardness.getFaultyTests(pf_file, filt_testsOfThis)))
+                                    nnewFailing = len(set(matrixHardness.getFaultyTests(pf_file, filt_testsOfThis)))
                                 else:
                                     newKilled = []
                                     newCovered = []
                                     nnewFailing = 0
                                 nnewKilled = len(newKilled)
                                 nnewCovered = len(newCovered)
+
+                                # subsuming
+                                if subsuming_mutants_clusters is not None:
+                                    subsuming_newKilled_clust = subs_clusters_of(subsuming_mutants_clusters, newKilled)
+                                    subsuming_newCovered_clust = subs_clusters_of(subsuming_mutants_clusters, newCovered)
+                                    nsubsuming_newKilled_clust = len(subsuming_newKilled_clust)
+                                    nsubsuming_newCovered_clust = len(subsuming_newCovered_clust)
 
                                 semu_info_df = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-semu_execution_info.csv"))
                                 semu_info_stateCmpTime = '-'
@@ -2691,9 +2711,20 @@ def main():
                                                 "#MutStatesForkedFromOriginal": semu_info_numMutstatesForkedFromOrig,
                                                 "#MutStatesEqWithOrigAtMutPoint": semu_info_numMutstatesEqWithOrigAtMutPoint,
                                             }
+
+                                # Subsuming
+                                if subsuming_mutants_clusters is not None:
+                                    tmp_data["#SubsMutantsClusters"] = subsuming_filt_nMutants_clust
+                                    tmp_data["#SubsTargetedClusters"] = len(subsuming_filt_targeted_mutants_clust)
+                                    tmp_data["#SubsCoveredClusters"] = nsubsuming_newCovered_clust 
+                                    tmp_data["#SubsKilledClusters"] = nsubsuming_newKilled_clust
+                                    tmp_data["MS_SUBSUMING-INC"] = (nsubsuming_newKilled_clust * 100.0 / subsuming_filt_nMutants_clust)
+
                                 if filtering_func is None:
                                     time_snap_dfs_dats.append(tmp_data)
                                     killedMutsPerTuning[nameprefix] = set(newKilled)
+                                    if subsuming_mutants_clusters is not None:
+                                        killedSubsumingMutsPerTuning[nameprefix] = set(subsuming_newKilled_clust)
                                 else:
                                     tmp_data["FunctionName"] = filtering_func
                                     funcs_time_snap_dfs_dats.append(tmp_data) 
@@ -2706,19 +2737,31 @@ def main():
                         funcs_out_df_parts += funcs_time_snap_dfs_dats
 
                         extra_res = {}
+                        subsuming_extra_res = {}
                         #venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=1, setsize_to=len(killedMutsPerTuning), name_delim='&')
-                        venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=2, setsize_to=2, name_delim='&', not_common=extra_res)
+                        venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (killedMutsPerTuning, setsize_from=2, setsize_to=2, \
+                                                                                                name_delim='&', not_common=extra_res)
+                        if subsuming_mutants_clusters is not None:
+                            subsuming_venn_killedMutsInCommon, _ = magma_stats_algo.getCommonSetsSizes_venn (\
+                                                                                                killedSubsumingMutsPerTuning, setsize_from=2, setsize_to=2, \
+                                                                                                name_delim='&', not_common=subsuming_extra_res)
 
-                        extra_keys_outobj = []
-                        assert "OVERLAP_VENN" not in outobj_
-                        outobj_["OVERLAP_VENN"] = venn_killedMutsInCommon
-                        extra_keys_outobj.append('OVERLAP_VENN')
-                        assert "NON_OVERLAP_VENN" not in outobj_
-                        outobj_["NON_OVERLAP_VENN"] = extra_res
-                        extra_keys_outobj.append('NON_OVERLAP_VENN')
+                        #extra_keys_outobj = []
                         assert "MAX_SEMU_TIMEOUT" not in outobj_
                         outobj_["MAX_SEMU_TIMEOUT"] = args.semutimeout
-                        extra_keys_outobj.append('MAX_SEMU_TIMEOUT')
+                        #extra_keys_outobj.append('MAX_SEMU_TIMEOUT')
+                        overlap_nonoverlap = [("MUTANTS", venn_killedMutsInCommon, extra_res)]
+                        # subsuming
+                        if subsuming_mutants_clusters is not None:
+                            overlap_nonoverlap.append(("SUBSUMING_CLUSTERS", subsuming_venn_killedMutsInCommon, subsuming_extra_res))
+                        for mut_mode, _venn, _extra in overlap_nonoverlap:
+                            outobj_[mut_mode] = {}
+                            assert "OVERLAP_VENN" not in outobj_[mut_mode]
+                            outobj_[mut_mode]["OVERLAP_VENN"] = _venn
+                            #extra_keys_outobj.append('OVERLAP_VENN')
+                            assert "NON_OVERLAP_VENN" not in outobj_[mut_mode]
+                            outobj_[mut_mode]["NON_OVERLAP_VENN"] = _extra
+                            #extra_keys_outobj.append('NON_OVERLAP_VENN')
 
                         dumpJson(outobj_, outjsonfile)
                         print "Kill Mutant TestGen Analyse Result:"
@@ -2734,6 +2777,13 @@ def main():
                                 "MaxTestGen-Time(min)": max_time_minutes, \
                                 "By-Functions": {} \
                                 } 
+                    # subsuming
+                    if subsuming_mutants_clusters is not None:
+                        initial_json_obj["Initial#SubsumingMutants"] = len(subs_clusters_of(subsuming_mutants_clusters, testgen_mode_initial_muts))
+                        initial_json_obj["Initial#SubsumingKilledMutants"] = len(subs_clusters_of(subsuming_mutants_clusters, testgen_mode_initial_killmuts))
+                        initial_json_obj["Initial-MS_Subsuming"] = \
+                                                            initial_json_obj["Initial#SubsumingKilledMutants"] * 100.0 / initial_json_obj["Initial#SubsumingMutants"]
+
                     for mlist_list, mlist_key in [(testgen_mode_initial_muts, "Initial#Mutants"), \
                                                 (testgen_mode_initial_killmuts, "Initial#KilledMutants")]:
                         for m in mlist_list:
@@ -2752,9 +2802,11 @@ def main():
 
                     res_df = pd.DataFrame(out_df_parts)
                     funcs_res_df = pd.DataFrame(funcs_out_df_parts)
-                    ordered_df_cols = ["TimeSnapshot(min)", "Tech-Config", "#Mutants", "#Targeted", "#Covered", "#Killed", \
-                                        "#GenTests", "#GenTestsKilling", "#FailingTests", "MS-INC", "#AggregatedTestGen", \
-                                        "#SeedDuplicatedGenTests", "StateComparisonTime(s)", "#MutStatesForkedFromOriginal", "#MutStatesEqWithOrigAtMutPoint"]
+                    ordered_df_cols = ["TimeSnapshot(min)", "Tech-Config", 
+                                        "#SubsMutantsClusters", "#SubsTargetedClusters", "#SubsCoveredClusters", "#SubsKilledClusters", "MS_SUBSUMING-INC", \
+                                        "#Mutants", "#Targeted", "#Covered", "#Killed", "#GenTests", "#GenTestsKilling", "#FailingTests", "MS-INC", \
+                                        "#AggregatedTestGen", "#SeedDuplicatedGenTests", \
+                                        "StateComparisonTime(s)", "#MutStatesForkedFromOriginal", "#MutStatesEqWithOrigAtMutPoint"]
                     funcs_ordered_df_cols = ["FunctionName"]+ordered_df_cols
                     if set(res_df) != set(ordered_df_cols):
                         error_exit ("(BUG), need to update ordered_df_cols: inconsistent")
