@@ -2830,7 +2830,7 @@ def main():
 
 #~ def main()
 
-def get_subsuming_mutants (initial_sm, surviving_sm, killed_on_surviving_ms):
+def get_subsuming_mutants (initial_sm, surviving_sm, killed_on_surviving_sm):
     """ Return subsuming clusters
     """
     # Loading
