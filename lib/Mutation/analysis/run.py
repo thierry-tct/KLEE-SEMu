@@ -2840,8 +2840,8 @@ def get_subsuming_mutants (initial_sm, surviving_sm, killed_on_surviving_sm):
     agg_mat_dat = matrixHardness.loadMatrix(initial_sm, None)
     for m_f in [surviving_sm, killed_on_surviving_sm]:
         tmp = matrixHardness.loadMatrix(m_f, None) 
-        for m in tmp:
-            if m in agg_mat_dat:
+        for m in set(tmp) - {matrixHardness.SM_index_string}:
+            if m in set(agg_mat_dat) - {matrixHardness.SM_index_string}:
                 agg_mat_dat[m] += tmp[m]
             else:
                 agg_mat_dat[m] = tmp[m]
