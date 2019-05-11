@@ -458,7 +458,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     outdir_bak = outdir
     merged_df_bak = merged_df
 
-    for subsuming in (True, False):
+    for subsuming in ((True, False) if has_subsuming_data else (False,)):
         merged_df = merged_df_bak.copy(deep=True)
         if subsuming:
             outdir = os.path.join(outdir_bak, "subsumingMS")
@@ -467,6 +467,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             targetCol = "#SubsTargetedClusters"
             covMutsCol = "#SubsCoveredClusters"
             killMutsCol = "#SubsKilledClusters"
+            n_suff = '*'
         else:
             outdir = os.path.join(outdir_bak, "traditionalMS")
             msCol = "MS-INC"
@@ -474,6 +475,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             targetCol = "#Targeted"
             covMutsCol = "#Covered"
             killMutsCol = "#Killed"
+            n_suff = ''
 
         tech_confs = set(merged_df[techConfCol])
         projects = set(merged_df[PROJECT_ID_COL])
@@ -613,19 +615,19 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 max_y = min(100, max_y)
             yticks_range = range(min_y, max_y+1, step_y)
             plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
-                                    "AVERAGE MS (%)", yticks_range=yticks_range, \
+                                    "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
                                         selectData=['min', 'med', 'max'])
             
             if emphasis is not None:
                 plotMerge.plot_Box_Grouped(emphasis[0], \
                                     os.path.join(outdir, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[0][emphasis[0].keys()[0]]['max']))), \
                                     colors_bw, \
-                                    "AVERAGE MS (%)", yticks_range=yticks_range, \
+                                    "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
                                         selectData=['min', 'med', 'max'])
                 plotMerge.plot_Box_Grouped(emphasis[1], \
                                     os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[1][emphasis[1].keys()[0]]['max']))), \
                                     colors_bw, \
-                                    "AVERAGE MS (%)", yticks_range=yticks_range, \
+                                    "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
                                         selectData=['min', 'med', 'max'])
 
         
@@ -663,7 +665,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                             assert pc not in row, "BUG"
                             row[conf_name_mapping[pc]] = val
                 row[techConfCol] = v
-                row['MS_INC_APFD'] = proj_agg_func(getListAPFDSForTechConf(v))
+                row['MS'+n_suff+'_INC_APFD'] = proj_agg_func(getListAPFDSForTechConf(v))
                 df_obj_list.append(row)
         best_df = pd.DataFrame(best_df_obj)
         worse_df = pd.DataFrame(worse_df_obj)
@@ -677,15 +679,21 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         w_image = os.path.join(outdir, "worst_tech_conf_time-top"+str(topN))
         for bw_elems, bw_image, bw in zip((best_elems, b_image, 'best'), (worse_elems, w_image, 'worst')):
             plotobj = {}
-            for i, v in enumerate(bw_elems):
-                # TODO: make sure that klee is added
+            if not KLEE_KEY in bw_elems:
+                elems = bw_elems + [KLEE_KEY]
+            else:
+                elems = bw_elems
+            for i, v in enumerate(elems):
+                if v == KLEE_KEY:
+                    name_ = SpecialTechs[v]
+                else:
+                    name_ = bw+str(i+1)
                 v_data = ms_by_time[v]
-                name_ = bw+str(i+1)
                 plotobj[name_] = []
                 plotobj[name_].append(np.median([v_data[p][0] for p in v_data]))
                 plotobj[name_].append(np.median([v_data[p][1] for p in v_data]))
 
-            plotLines(plotobj, sorted(plotobj.keys()), "time(min)", "MS", bw_image, colors, linestyles, linewidths, fontsize)
+            plotLines(plotobj, sorted(plotobj.keys()), "time(min)", "MS"+n_suff, bw_image, colors, linestyles, linewidths, fontsize)
 
         # XXX compare MS with compareState time, %targeted, #testgen, WM%
         if customMaxtime is None:
@@ -693,6 +701,17 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             #selectedTimes_minutes = [5, 15, 30, 60, 120]
         else:
             selectedTimes_minutes = [customMaxtime]
+
+        # XXX: XXX: Decide whether to continue with all, only topN or only worseN or both topN and worseN
+        SEL_use_these_confs = 'topN'
+        if SEL_use_these_confs != "ALL":
+            if SEL_use_these_confs == "topN":
+                considered_c = list(set(best_elems+[KLEE_KEY]))
+            elif SEL_use_these_confs == "worstN":
+                considered_c = list(set(worse_elems+[KLEE_KEY]))
+            elif SEL_use_these_confs == "topN-worstN":
+                considered_c = list(set(best_elems+worse_elems+[KLEE_KEY]))
+            merged_df = merged_df[merged_df[techConfCol].isin(considered_c)]
 
         fixed_y = msCol
         changing_ys = [targetCol, covMutsCol, stateCompTimeCol, numGenTestsCol, \
@@ -736,7 +755,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                 np.average(metric2techconf2values[fixed_y][x])))
 
                 # Compute MS APFD VS MS and compute the fixed_vals
-                ms_inc_apfd_y = "Average MS-INC"
+                ms_inc_apfd_y = "Average MS"+n_suff+"-INC"
                 ms_inc_apfd_vals = []
                 fix_vals = []
                 for tech_conf in sorted_techconf_by_ms:
@@ -850,19 +869,29 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             # Plot klee conf overlap by proj
             klee_n_semu_by_proj = [[], []]
             by_proj_overlap = []
+            SEL_use_best_apfd = True # decide whether to use best APFD of maxes
             for proj in non_overlap_obj:
                 klee_n_semu_by_proj[0].append(None)
                 klee_n_semu_by_proj[1].append(None)
                 by_proj_overlap.append(0)
-                for left_right in non_overlap_obj[proj]:
-                    if KLEE_KEY in left_right:
-                        s_c_n_o = non_overlap_obj[proj][left_right][list(set(left_right)-{KLEE_KEY})[0]]
-                        k_n_o = non_overlap_obj[proj][left_right][KLEE_KEY]
-                        if klee_n_semu_by_proj[0][-1] is None or \
-                                s_c_n_o - k_n_o > klee_n_semu_by_proj[0][-1] - klee_n_semu_by_proj[1][-1]:
-                            klee_n_semu_by_proj[0][-1] = s_c_n_o
-                            klee_n_semu_by_proj[1][-1] = k_n_o
+                if SEL_use_best_apfd:
+                    best_ = best_elems[0]
+                    for left_right in non_overlap_obj[proj]:
+                        if KLEE_KEY in left_right and best_ in left_right:
+                            klee_n_semu_by_proj[0][-1] = non_overlap_obj[proj][left_right][best_]
+                            klee_n_semu_by_proj[1][-1] = non_overlap_obj[proj][left_right][KLEE_KEY]
                             by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
+                            break
+                else:
+                    for left_right in non_overlap_obj[proj]:
+                        if KLEE_KEY in left_right:
+                            s_c_n_o = non_overlap_obj[proj][left_right][list(set(left_right)-{KLEE_KEY})[0]]
+                            k_n_o = non_overlap_obj[proj][left_right][KLEE_KEY]
+                            if klee_n_semu_by_proj[0][-1] is None or \
+                                    s_c_n_o - k_n_o > klee_n_semu_by_proj[0][-1] - klee_n_semu_by_proj[1][-1]:
+                                klee_n_semu_by_proj[0][-1] = s_c_n_o
+                                klee_n_semu_by_proj[1][-1] = k_n_o
+                                by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
                 if klee_n_semu_by_proj[1] > klee_n_semu_by_proj[0]:
                     print(">>>> Klee has higher non overlap that all semu for project", proj, "(", klee_n_semu_by_proj[1], "VS", klee_n_semu_by_proj[0], ")")
             ## plot
