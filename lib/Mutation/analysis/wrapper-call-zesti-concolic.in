@@ -22,7 +22,7 @@ then
     (ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" > $semuout 2>&1) ; EXIT_CODE=$?
     /usr/bin/touch $tmpstdindata
 else
-#/usr/bin/tee >(ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1) >(cat - > $tmpstdindata || EXIT_CODE=1) 
+#/usr/bin/tee >(ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" ; EXIT_CODE=$? | /usr/bin/tee $semuout 2>&1) >(/bin/cat - > $tmpstdindata || EXIT_CODE=1) 
 (/bin/cat - > $tmpstdindata ) || EXIT_CODE=1
 #(/bin/cat $tmpstdindata | ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" | /usr/bin/tee $semuout 2>&1); EXIT_CODE=$?
 (/bin/cat $tmpstdindata | ZESTI_KLEE_EXECUTABLE_DIRNAME/klee -allow-external-sym-calls --posix-runtime --libc=uclibc --max-time=$maxTime --watchdog=true --max-solver-time=$solvermaxtime --search=bfs -shadow -shadow-replay-standalone -zest -only-output-states-covering-new -dont-simplify -write-pcs -write-sym-paths -write-paths "IN_TOOL_DIR/IN_TOOL_NAME.bc" "${@:1}" > $semuout 2>&1); EXIT_CODE=$?
@@ -42,7 +42,7 @@ fi
 /bin/mv $tmpstdindata $stdindata || EXIT_CODE=2 
 
 # Replace the /usr/bin/tee above. is it needed?
-cat $semuout
+/bin/cat $semuout
 
 # Provoke "unbound variable" if KLEE fails
 # Preserve the KLEE exit code
