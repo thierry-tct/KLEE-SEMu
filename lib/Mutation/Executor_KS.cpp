@@ -191,6 +191,10 @@ cl::opt<bool> semuTestgenOnlyForCriticalDiffs("semu-testsgen-only-for-critical-d
                                           cl::init(false), 
                                           cl::desc("Enable Outputting tests only for critial diffs (involving environment (this excludes local/global vars))"));
 
+cl::opt<bool> semuConsiderOutEnvForDiffs("semu-consider-outenv-for-diffs", 
+                                          cl::init(false), 
+                                          cl::desc("Enable also checking outenv calls parameters for diffs."));
+	
 // Use shadow test case generation for mutants ()
 cl::opt<bool> semuShadowTestGeneration("semu-shadow-test-gen", 
                                           cl::init(false), 
@@ -4616,10 +4620,12 @@ inline bool Executor::ks_isOutEnvCallInvoke (Instruction *cii) {
 inline bool Executor::ks_nextIsOutEnv (ExecutionState &state) {
   //if ((uint64_t)state.pc->inst==1) {state.prevPC->inst->getParent()->dump();state.prevPC->inst->dump();} 
   // Is the next instruction to execute an external call that change output
-  if (llvm::dyn_cast_or_null<llvm::UnreachableInst>(state.prevPC->inst) 
-                                                                != nullptr) {
-    if (ks_isOutEnvCallInvoke(state.pc->inst)) {
-      return true;
+  if (semuConsiderOutEnvForDiffs) {
+    if (llvm::dyn_cast_or_null<llvm::UnreachableInst>(state.prevPC->inst) 
+                                                                == nullptr) {
+      if (ks_isOutEnvCallInvoke(state.pc->inst)) {
+        return true;
+      }
     }
   }
   return false;
