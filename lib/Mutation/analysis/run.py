@@ -2721,7 +2721,7 @@ def main():
                                     if subsuming_filt_nMutants_clust != 0:
                                         tmp_data["MS_SUBSUMING-INC"] = (nsubsuming_newKilled_clust * 100.0 / subsuming_filt_nMutants_clust)
                                     else:
-                                        tmp_data["MS_SUBSUMING-INC"] = None
+                                        tmp_data["MS_SUBSUMING-INC"] = 0.0 #None
 
                                 if filtering_func is None:
                                     time_snap_dfs_dats.append(tmp_data)
