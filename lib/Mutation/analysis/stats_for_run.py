@@ -179,7 +179,8 @@ def plotLines(x_y_lists_pair_dict, order, xlabel, ylabel, imagepath, colors, lin
     fontsize = 26
     if order is None:
         order = x_y_lists_pair_dict.keys()
-    maxx = max([max(x_y_lists_pair_dict[t][0]) for t in order])
+    #maxx = max([max(x_y_lists_pair_dict[t][0]) for t in order])
+    maxx = max([x_y_lists_pair_dict[t][0] for t in order])
     for ti,tech in enumerate(order):
         x, y = x_y_lists_pair_dict[tech]
         plt.plot(x, y, color=colors[ti], linestyle=linestyles[ti], linewidth=linewidths[ti], label=tech, alpha=0.8)
@@ -210,7 +211,8 @@ def get_minimal_conf_set(tech_conf_missed_muts):
         {project: {tc: set()<missed muts>}}
     """
     clusters_by_proj = {}
-    for proj in tech_conf_missed_muts:
+    for pp, proj in enumerate(tech_conf_missed_muts.keys()):
+        print("\nDBG, minimal conf set of", proj, ", position",str(pp), 'over',len(tech_conf_missed_muts))
         visited = set()
         clusters_by_proj[proj] = []
         for tc in tech_conf_missed_muts[proj]:
@@ -233,16 +235,53 @@ def get_minimal_conf_set(tech_conf_missed_muts):
                 clusters_by_proj[proj].append(cluster)
         tmp = clusters_by_proj[proj]
         clusters_by_proj[proj] = []
-        for ncomb in range(len(tmp)):
-            if len(clusters_by_proj[proj]) > 0:
-                break
-            for tc_comb in itertools.combinations(tmp, ncomb):
-                intersect = set(tech_conf_missed_muts[proj][tc_comb[0]])
-                for tc in tc_comb[1:]:
-                    intersect &= tech_conf_missed_muts[proj][tc]
-                if len(intersect) == 0:
-                    clusters_by_proj[proj] += list(tc_comb)
-        assert len(clusters_by_proj[proj]) > 0, "Must have something"
+        # case where klee killed but semu couldn't
+        all_inter = set()
+        if len(tmp) > 0:
+            all_inter = set(tech_conf_missed_muts[proj][tmp[0][0]])
+            for c in tmp[1:]:
+                all_inter &= tech_conf_missed_muts[proj][c[0]] 
+            if len(all_inter) > 0:
+                print("#> Klee, mamaged to kill {} extra mutants".format(len(all_inter)))
+        
+	    # Use greedy Algorithm to find the smallest combination
+	    selected_pos = set()
+	    min_pos = 0
+	    min_size = len(tech_conf_missed_muts[proj][tmp[0][0]])
+	    for i in range(1,len(tmp)):
+		if len(tech_conf_missed_muts[proj][tmp[i][0]]) < min_size:
+		    min_size = len(tech_conf_missed_muts[proj][tmp[i][0]])
+		    min_pos = i
+	    selected_pos.add(min_pos)
+	    sel_missed = set(tech_conf_missed_muts[proj][tmp[min_pos][0]])
+	    while sel_missed != all_inter:
+		min_size = len(sel_missed)
+		min_pos = None
+		for i in range(len(tmp)):
+		    if i in selected_pos:
+			continue
+		    if len(tech_conf_missed_muts[proj][tmp[i][0]] & sel_missed) < min_size:
+			min_size = len(tech_conf_missed_muts[proj][tmp[i][0]] & sel_missed)
+			min_pos = i
+		assert min_pos is not None, "Bug: Should have stopped the while loop. "+str(sel_missed)+str(all_inter)
+		selected_pos.add(min_pos)
+		sel_missed &= tech_conf_missed_muts[proj][tmp[min_pos][0]] 
+		    
+	    for ncomb in [len(selected_pos)]: #range(1,len(tmp)):
+		if len(clusters_by_proj[proj]) > 0:
+		    break
+		#print("# dbg: in loop 2", tmp, ncomb)
+                print ("# ncomb =", ncomb, "; num cluster for comb is", len(list(itertools.combinations(tmp, ncomb))))
+		for tc_comb in itertools.combinations(tmp, ncomb):
+		    intersect = set(tech_conf_missed_muts[proj][tc_comb[0][0]])
+		    for tc_list in tc_comb[1:]:
+			tc = tc_list[0]
+			intersect &= tech_conf_missed_muts[proj][tc]
+		    if intersect == all_inter:
+			clusters_by_proj[proj] += list(tc_comb)
+        if len(clusters_by_proj[proj]) == 0:
+            #assert False, "Must have something"
+            print ('> Warning: Project do not have minimal cluster: '+str(proj))
 
     tech_conf2proj_clust = {}
     for proj in clusters_by_proj:
@@ -476,6 +515,9 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             covMutsCol = "#Covered"
             killMutsCol = "#Killed"
             n_suff = ''
+        
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
 
         tech_confs = set(merged_df[techConfCol])
         projects = set(merged_df[PROJECT_ID_COL])
@@ -537,6 +579,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         linestyles = ['solid', 'solid', 'dashed', 'dashed', 'dashdot', 'dotted', \
                                                                         'solid']
         linewidths = [1.75, 1.75, 2.5, 2.5, 3.25, 3.75, 2]
+        fontsize = 26
+        
+        colors_bw += colors_bw*3
+        colors += colors*3
+        linestyles += linestyles*3
+        linewidths += linewidths*3
 
         # XXX process APFDs (max, min, med)
         #proj_agg_func = np.median
@@ -677,7 +725,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         # XXX plot best and worse median over time compared with klee
         b_image = os.path.join(outdir, "best_tech_conf_time-top"+str(topN))
         w_image = os.path.join(outdir, "worst_tech_conf_time-top"+str(topN))
-        for bw_elems, bw_image, bw in zip((best_elems, b_image, 'best'), (worse_elems, w_image, 'worst')):
+        for bw_elems, bw_image, bw in ((best_elems, b_image, 'best'), (worse_elems, w_image, 'worst')):
             plotobj = {}
             if not KLEE_KEY in bw_elems:
                 elems = bw_elems + [KLEE_KEY]
@@ -792,7 +840,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                 for c_ind in range(len(chang_vals)):
                                     c_tmp = []
                                     for i_ind in range(len(chang_vals[c_ind])):
-                                        c_tmp.append(chang_vals[c_ind][i_ind] * 100.0 / m_val[c_ind][i_ind])
+                                        if m_val[c_ind][i_ind] != 0:
+                                            c_tmp.append(chang_vals[c_ind][i_ind] * 100.0 / m_val[c_ind][i_ind])
                                     chang_vals[c_ind] = c_tmp
                         elif chang_y == stateCompTimeCol:
                             chang_y = chang_y.replace('(s)', '(%)')
@@ -826,7 +875,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                     overlap_data_dict[proj] = {}
                     tech_conf_missed_muts[proj] = {}
                     visited = set()
-                    for pair in fobj["NON_OVERLAP_VENN"]:
+                    s_m_key = 'SUBSUMING_CLUSTERS' if subsuming else 'MUTANTS'
+                    for pair in fobj[s_m_key]["NON_OVERLAP_VENN"]:
                         a_tmp = pair.split('&')
                         if len(a_tmp) != 2:
                             print("@WARNING: non pair overlap found:", pair)
@@ -834,20 +884,23 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                         left_right = tuple(sorted(a_tmp))
                         if left_right not in visited:
                             visited.add(left_right)
-                            overlap_data_dict[proj][left_right] = fobj["OVERLAP_VENN"][pair]
+                            overlap_data_dict[proj][left_right] = fobj[s_m_key]["OVERLAP_VENN"][pair]
                             
                         if left_right not in non_overlap_obj[proj]:
                             non_overlap_obj[proj][left_right] = {v:0 for v in left_right}
-                        for win in fobj["NON_OVERLAP_VENN"][pair]:
+                        for win in fobj[s_m_key]["NON_OVERLAP_VENN"][pair]:
                             non_overlap_obj[proj][left_right][win] += \
-                                        len(fobj["NON_OVERLAP_VENN"][pair][win])
+                                        len(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
                             lose = set(left_right) - {win}
+                            assert len(lose) == 1
+                            lose = list(lose)[0]
                             if lose not in tech_conf_missed_muts[proj]:
                                 tech_conf_missed_muts[proj][lose] = set()
-                            tech_conf_missed_muts[proj][lose] |= set(fobj["NON_OVERLAP_VENN"][pair][win])
+                            tech_conf_missed_muts[proj][lose] |= set(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
             all_tech_confs = {v for p in non_overlap_obj[non_overlap_obj.keys()[0]] for v in p}
-            assert all_tech_confs == set(sorted_techconf_by_ms), \
-                                "Inconsistemcy between dataframe and overlap json"
+            # We only use top 5 and KLEE
+            #assert all_tech_confs == set(sorted_techconf_by_ms), \
+            #                    "Inconsistemcy between dataframe and overlap json"
             tech_conf2position = {}
             for pos, tech_conf in enumerate(sorted_techconf_by_ms):
                 tech_conf2position[tech_conf] = pos
@@ -917,12 +970,13 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                 hue_val = SpecialTechs[right]+"_loses"
                             if left in SpecialTechs:
                                 hue_val = SpecialTechs[left]+"_wins"
-                        df_obj.append({
-                                x_label: tech_conf2position[left], 
-                                y_label: tech_conf2position[right], 
-                                hue: hue_val,
-                                num_x_wins: proj_agg_func2([non_overlap_obj[p][left_right][left] for p in non_overlap_obj]), 
-                                })
+                        if left in tech_conf2position and right in tech_conf2position:
+                            df_obj.append({
+                                    x_label: tech_conf2position[left], 
+                                    y_label: tech_conf2position[right], 
+                                    hue: hue_val,
+                                    num_x_wins: proj_agg_func2([non_overlap_obj[p][left_right][left] for p in non_overlap_obj]), 
+                                    })
                 killed_muts_overlap = pd.DataFrame(df_obj)
                 image_out = os.path.join(outdir, "overlap-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
                 # plot
@@ -1043,6 +1097,7 @@ def main():
                 del proj2dir[p]
     if len(proj2dir) > 0:
         print ("# Calling libMain on projects", list(proj2dir), "...")
+        #print(" ".join(list(proj2dir)))
         if maxtime_list is None:
             libMain(outdir, proj2dir, use_func=args.usefunctions, \
                                             onlykillable=args.onlykillable, \
