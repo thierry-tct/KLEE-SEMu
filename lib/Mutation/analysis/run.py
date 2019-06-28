@@ -655,7 +655,8 @@ def getSymArgsFromZestiKtests (ktestFilesList, test2zestidirMap_arg, argv_become
 
     if len(listTestArgs) <= 0:
         print "Err: no ktest data, ktest PCs:", ktestFilesList
-        error_exit ("No ktest data could be extracted from ktests.")
+	if not (SEMU_ZESTI_RUN_SKIP_FAILURE in os.environ and os.environ[SEMU_ZESTI_RUN_SKIP_FAILURE].strip().lower() == 'on') :
+            error_exit ("No ktest data could be extracted from ktests.")
 
     # update file data in objects (shortname and size)
     nmax_files = max([len(fpv) for fpv in filenstatsInObj]) / 2 # divide by 2 beacause has stats
@@ -2115,6 +2116,7 @@ def main():
             dumpJson(stripRootTest2Dir(outDir, test2zestidirMap), test2zestidirMapFile)
 
             # Compress zestioutdir and delete the directory, keeping only the tar.gz file
+	    os.system(" ".join(["chmod -R 777", zestioutdir]))
             errmsg = magma_common_fs.compressDir(zestioutdir, zestioutdir_targz, remove_in_directory=True)
             if errmsg is not None:
                 error_exit(errmsg)
