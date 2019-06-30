@@ -332,8 +332,53 @@ PROJECT_ID_COL = "projectID"
 SPECIAL_TECHS = {'_pureklee_': 'klee', '50_50_0_0_rnd_5_on_nocrit':'concrete'}
 CONCRETE_KEY = '50_50_0_0_rnd_5_on_nocrit'
 KLEE_KEY = '_pureklee_'
-def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
-                projcommonreldir=None, onlykillable=False, no_concrete=False):
+
+# Columns ####
+timeCol = "TimeSnapshot(min)"
+config_columns = ["_precondLength","_mutantMaxFork", 
+                    "_genTestForDircardedFrom", "_postCheckContProba", 
+                    "_mutantContStrategy", "_maxTestsGenPerMut", 
+                    "_disableStateDiffInTestgen"
+                ]
+conf_name_mapping = {
+    "_precondLength": "precond_len", 
+    "_mutantMaxFork": "max_depth", 
+    "_disableStateDiffInTestgen": "no_state_diff", 
+    "_maxTestsGenPerMut": "mutant_max_tests", 
+    "_postCheckContProba": "continue_prop", 
+    "_genTestForDircardedFrom": "disc_gentest_from", 
+    "_mutantContStrategy": "continue_strategy", 
+}
+other_cols = ["_testGenOnlyCriticalDiffs" ]
+
+numFailTestsCol = "#FailingTests"
+techConfCol = "Tech-Config"
+stateCompTimeCol = "StateComparisonTime(s)"
+numGenTestsCol = "#GenTests"
+numForkedMutStatesCol = "#MutStatesForkedFromOriginal"
+mutPointNoDifCol = "#MutStatesEqWithOrigAtMutPoint"
+
+propNoDiffOnForkedMutsStatesCol = "percentageNodiffFoundAtMutPoint"
+######~
+
+## PLot const
+colors_bw = ['white', 'whitesmoke', 'lightgray', 'silver', 'darkgrey', \
+                                                'gray', 'dimgrey', "black"]
+colors = ["green", 'blue', 'red', "black", "maroon", "magenta", "cyan"]
+linestyles = ['solid', 'solid', 'dashed', 'dashed', 'dashdot', 'dotted', \
+                                                                'solid']
+linewidths = [1.75, 1.75, 2.5, 2.5, 3.25, 3.75, 2]
+fontsize = 26
+
+colors_bw += colors_bw*3
+colors += colors*3
+linestyles += linestyles*3
+linewidths += linewidths*3
+#####~
+
+
+def loadData(proj2dir, use_func=False, projcommonreldir=None, \
+                                                        onlykillable=False):
     merged_df = None
     all_initial = {}
     if projcommonreldir is None:
@@ -376,8 +421,10 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         with open(full_initial_json) as fp:
             all_initial[proj] = json.load(fp)
 
-    has_subsuming_data = True
+        return merged_df, all_initial
+#~ loadData()
 
+def merge_initial(all_initial, outdir, use_func, has_subsuming_data=True):
     # Compute the merged json
     merged_json_obj = {}
     merged_json_obj["Projects"] = list(all_initial) 
@@ -421,36 +468,13 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     # save merged json
     with open(os.path.join(outdir, initial_json), 'w') as fp:
         json.dump(merged_json_obj, fp, indent=2, sort_keys=True)
-    
-    # COMPUTATIONS ON DF
-    timeCol = "TimeSnapshot(min)"
-    config_columns = ["_precondLength","_mutantMaxFork", 
-                        "_genTestForDircardedFrom", "_postCheckContProba", 
-                        "_mutantContStrategy", "_maxTestsGenPerMut", 
-                        "_disableStateDiffInTestgen"
-                    ]
-    conf_name_mapping = {
-        "_precondLength": "precond_len", 
-        "_mutantMaxFork": "max_depth", 
-        "_disableStateDiffInTestgen": "no_state_diff", 
-        "_maxTestsGenPerMut": "mutant_max_tests", 
-        "_postCheckContProba": "continue_prop", 
-        "_genTestForDircardedFrom": "disc_gentest_from", 
-        "_mutantContStrategy": "continue_strategy", 
-    }
-    other_cols = ["_testGenOnlyCriticalDiffs" ]
+    return merged_json_obj
+#~ def merge_initial()
 
-    numFailTestsCol = "#FailingTests"
-    techConfCol = "Tech-Config"
-    stateCompTimeCol = "StateComparisonTime(s)"
-    numGenTestsCol = "#GenTests"
-    numForkedMutStatesCol = "#MutStatesForkedFromOriginal"
-    mutPointNoDifCol = "#MutStatesEqWithOrigAtMutPoint"
-
-    propNoDiffOnForkedMutsStatesCol = "percentageNodiffFoundAtMutPoint"
-    assert propNoDiffOnForkedMutsStatesCol not in merged_df, \
+def preprocessing_merge_df(loaded_merged_df, customMaxtime, no_concrete):
+    assert propNoDiffOnForkedMutsStatesCol not in loaded_merged_df, \
                                                     "Use different key (BUG)" 
-
+    merged_df = loaded_merged_df.copy(deep=True)
     SpecialTechs = dict(SPECIAL_TECHS)
     if no_concrete:
         del SpecialTechs[CONCRETE_KEY]
@@ -490,105 +514,71 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             print("# The customMaxtime specified is too low. Terminating ...")
             exit(1)
 
-    ##################################
-    ##################################
+    return merged_df, SpecialTechs
+#~ def preprocessing_merge_df()
 
-    # backup outdir
-    outdir_bak = outdir
-    merged_df_bak = merged_df
+def get_ms_apfds(merged_df, msCol):
+    tech_confs = set(merged_df[techConfCol])
+    projects = set(merged_df[PROJECT_ID_COL])
+    ms_by_time = {t_c: {p:None for p in projects} for t_c in tech_confs}
+    ms_apfds = {p: {t_c: None for t_c in tech_confs} for p in projects}
+    for p in ms_apfds:
+        p_tmp_df = merged_df[merged_df[PROJECT_ID_COL] == p]
+        for t_c in ms_apfds[p]:
+            # get the data
+            tmp_df = p_tmp_df[p_tmp_df[techConfCol] == t_c]
+            ms_by_time[t_c][p] = [list(tmp_df[timeCol]), list(tmp_df[msCol])]
+            ms_apfds[p][t_c] = compute_apfd(tmp_df[timeCol], tmp_df[msCol])
+        tmp_df = p_tmp_df = None
 
-    for subsuming in ((True, False) if has_subsuming_data else (False,)):
-        merged_df = merged_df_bak.copy(deep=True)
-        if subsuming:
-            outdir = os.path.join(outdir_bak, "subsumingMS")
-            msCol = "MS_SUBSUMING-INC"
-            numMutsCol = "#SubsMutantsClusters"
-            targetCol = "#SubsTargetedClusters"
-            covMutsCol = "#SubsCoveredClusters"
-            killMutsCol = "#SubsKilledClusters"
-            n_suff = '*'
-        else:
-            outdir = os.path.join(outdir_bak, "traditionalMS")
-            msCol = "MS-INC"
-            numMutsCol = "#Mutants"
-            targetCol = "#Targeted"
-            covMutsCol = "#Covered"
-            killMutsCol = "#Killed"
-            n_suff = ''
+    return ms_apfds, ms_by_time
+#~ def get_ms_apfds()
+
+def getListAPFDSForTechConf (t_c, ms_apfds):
+    v_list = []
+    for p in ms_apfds.keys():
+        assert t_c in ms_apfds[p]
+        v_list.append(ms_apfds[p][t_c])
+    return v_list
+#~ def getListAPFDSForTechConf ()
         
-        if not os.path.isdir(outdir):
-            os.mkdir(outdir)
+def get_techConfUtils(only_semu_cfg_df, SpecialTechs):
+    vals_by_conf = {}
+    for c in config_columns:
+        vals_by_conf[c] = list(set(only_semu_cfg_df[c]))
+    # add combinations
+    for ls_, rs_ in itertools.combinations(vals_by_conf.keys(), 2):
+        vals_by_conf[(ls_,rs_)] = list(itertools.product(vals_by_conf[ls_], vals_by_conf[rs_]))
 
-        tech_confs = set(merged_df[techConfCol])
-        projects = set(merged_df[PROJECT_ID_COL])
-        ms_by_time = {t_c: {p:None for p in projects} for t_c in tech_confs}
-        ms_apfds = {p: {t_c: None for t_c in tech_confs} for p in projects}
-        for p in ms_apfds:
-            p_tmp_df = merged_df[merged_df[PROJECT_ID_COL] == p]
-            for t_c in ms_apfds[p]:
-                # get the data
-                tmp_df = p_tmp_df[p_tmp_df[techConfCol] == t_c]
-                ms_by_time[t_c][p] = [list(tmp_df[timeCol]), list(tmp_df[msCol])]
-                ms_apfds[p][t_c] = compute_apfd(tmp_df[timeCol], tmp_df[msCol])
-            tmp_df = p_tmp_df = None
-        
-        only_semu_cfg_df = merged_df[~merged_df[techConfCol].isin(SPECIAL_TECHS)]
+    techConf2ParamVals = {k: {conf_name_mapping[cc]: None for cc in config_columns} for k in SpecialTechs}
+    techConfbyvalbyconf = {}
+    for pc in vals_by_conf:
+        techConfbyvalbyconf[pc] = {}
+        # process param config (get apfds)
+        for val in vals_by_conf[pc]:
+            if type(val) in (list, tuple):
+                keys = set(\
+                    only_semu_cfg_df[(only_semu_cfg_df[pc[0]] == val[0]) & \
+                            (only_semu_cfg_df[pc[1]] == val[1])][techConfCol])
+                val = tuple(val)
+            else:
+                keys = set(\
+                    only_semu_cfg_df[only_semu_cfg_df[pc] == val][techConfCol])
+                for k in keys:
+                    if k not in techConf2ParamVals:
+                        techConf2ParamVals[k] = {}
+                    assert conf_name_mapping[pc] not in techConf2ParamVals[k], "each param once per conf"
+                    techConf2ParamVals[k][conf_name_mapping[pc]] = val
+            if len(keys) != 0:
+                techConfbyvalbyconf[pc][val] = keys
+        if len(techConfbyvalbyconf[pc]) == 0:
+            del techConfbyvalbyconf[pc]
 
-        vals_by_conf = {}
-        for c in config_columns:
-            vals_by_conf[c] = list(set(only_semu_cfg_df[c]))
-        # add combinations
-        for ls_, rs_ in itertools.combinations(vals_by_conf.keys(), 2):
-            vals_by_conf[(ls_,rs_)] = list(itertools.product(vals_by_conf[ls_], vals_by_conf[rs_]))
+    return techConf2ParamVals, techConfbyvalbyconf
+#~ def get_techConfUtils()
 
-        techConf2ParamVals = {k: {conf_name_mapping[cc]: None for cc in config_columns} for k in SpecialTechs}
-        techConfbyvalbyconf = {}
-        for pc in vals_by_conf:
-            techConfbyvalbyconf[pc] = {}
-            # process param config (get apfds)
-            for val in vals_by_conf[pc]:
-                if type(val) in (list, tuple):
-                    keys = set(\
-                        only_semu_cfg_df[(only_semu_cfg_df[pc[0]] == val[0]) & \
-                                (only_semu_cfg_df[pc[1]] == val[1])][techConfCol])
-                    val = tuple(val)
-                else:
-                    keys = set(\
-                        only_semu_cfg_df[only_semu_cfg_df[pc] == val][techConfCol])
-                    for k in keys:
-                        if k not in techConf2ParamVals:
-                            techConf2ParamVals[k] = {}
-                        assert conf_name_mapping[pc] not in techConf2ParamVals[k], "each param once per conf"
-                        techConf2ParamVals[k][conf_name_mapping[pc]] = val
-                if len(keys) != 0:
-                    techConfbyvalbyconf[pc][val] = keys
-            if len(techConfbyvalbyconf[pc]) == 0:
-                del techConfbyvalbyconf[pc]
-
-
-        def getListAPFDSForTechConf (t_c):
-            v_list = []
-            for p in ms_apfds.keys():
-                assert t_c in ms_apfds[p]
-                v_list.append(ms_apfds[p][t_c])
-            return v_list
-
-        colors_bw = ['white', 'whitesmoke', 'lightgray', 'silver', 'darkgrey', \
-                                                        'gray', 'dimgrey', "black"]
-        colors = ["green", 'blue', 'red', "black", "maroon", "magenta", "cyan"]
-        linestyles = ['solid', 'solid', 'dashed', 'dashed', 'dashdot', 'dotted', \
-                                                                        'solid']
-        linewidths = [1.75, 1.75, 2.5, 2.5, 3.25, 3.75, 2]
-        fontsize = 26
-        
-        colors_bw += colors_bw*3
-        colors += colors*3
-        linestyles += linestyles*3
-        linewidths += linewidths*3
-
-        # XXX process APFDs (max, min, med)
-        #proj_agg_func = np.median
-        proj_agg_func = np.average
+def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
+                                                n_suff, proj_agg_func=None):
         for pc in techConfbyvalbyconf:
             min_vals = {}
             max_vals = {}
@@ -677,8 +667,77 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                     colors_bw, \
                                     "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
                                         selectData=['min', 'med', 'max'])
+#~ def compute_n_plot_param_influence()
 
+#### CONTROLLER ####
+def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
+                projcommonreldir=None, onlykillable=False, no_concrete=False):
+    has_subsuming_data = True
+
+    # load the data
+    loaded_merged_df, all_initial = loadData(proj2dir, use_func, \
+                                                projcommonreldir, onlykillable)
+
+    # Compute merged initial
+    merged_initial_ms_json_obj = merge_initial(all_initial, outdir, use_func, \
+                                        has_subsuming_data=has_subsuming_data)
+    
+    # COMPUTATIONS ON DF
+    merged_df, SpecialTechs = preprocessing_merge_df(loaded_merged_df, \
+                                                    customMaxtime, no_concrete)
+
+    ##################################
+    ##################################
+
+    # backup outdir
+    outdir_bak = outdir
+    merged_df_bak = merged_df
+
+    for subsuming in ((True, False) if has_subsuming_data else (False,)):
+        merged_df = merged_df_bak.copy(deep=True)
+        if subsuming:
+            outdir = os.path.join(outdir_bak, "subsumingMS")
+            msCol = "MS_SUBSUMING-INC"
+            numMutsCol = "#SubsMutantsClusters"
+            targetCol = "#SubsTargetedClusters"
+            covMutsCol = "#SubsCoveredClusters"
+            killMutsCol = "#SubsKilledClusters"
+            n_suff = '*'
+        else:
+            outdir = os.path.join(outdir_bak, "traditionalMS")
+            msCol = "MS-INC"
+            numMutsCol = "#Mutants"
+            targetCol = "#Targeted"
+            covMutsCol = "#Covered"
+            killMutsCol = "#Killed"
+            n_suff = ''
         
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
+
+        # APFDs Computation
+        ms_apfds, ms_by_time = get_ms_apfds(merged_df, msCol)
+
+        # Get only SEMU df
+        only_semu_cfg_df = merged_df[~merged_df[techConfCol].isin(SPECIAL_TECHS)]
+
+        # get some utils ...
+        techConf2ParamVals, techConfbyvalbyconf = get_techConfUtils(only_semu_cfg_df)
+
+        #proj_agg_func = np.median
+        proj_agg_func = np.average
+
+        # XXX Check the influence of each parameter. 
+        # TODO: do not aggregate and do statistical test
+        compute_n_plot_param_influence(techConfbyvalbyconf, outdir, \
+                                    SpecialTechs, n_suff, proj_agg_func=None)
+        
+
+
+
+
+
+
         # XXX Find best and worse confs
         #topN = 1
         topN = 5
@@ -1033,7 +1092,6 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                                         y_right_label=chang_y2, \
                                         left_stackbar_legends=sb_legend+['overlap'], \
                                         right_stackbar_legends=sb_legend)
-
 
 #~ def libMain()
 
