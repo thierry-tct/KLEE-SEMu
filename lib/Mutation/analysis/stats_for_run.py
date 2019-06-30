@@ -210,104 +210,85 @@ def get_minimal_conf_set(tech_conf_missed_muts):
     """ the input has this format: 
         {project: {tc: set()<missed muts>}}
     """
-    clusters_by_proj = {}
-    for pp, proj in enumerate(tech_conf_missed_muts.keys()):
-        print("\nDBG, minimal conf set of", proj, ", position",str(pp), 'over',len(tech_conf_missed_muts))
-        visited = set()
-        clusters_by_proj[proj] = []
-        for tc in tech_conf_missed_muts[proj]:
-            if tc in visited:
+    flatten_tc_missed_muts = {}
+    for proj, tc2mutset in list(tech_conf_missed_muts.items()):
+        for tc, mutset in list(tc2mutset.items()):
+            if tc not in flatten_tc_missed_muts:
+                flatten_tc_missed_muts[tc] = set()
+            flatten_tc_missed_muts[tc] |= set([os.path.join(proj, m) for m in mutset])
+
+    visited = set()
+    clusters_list = []
+    for tc in flatten_tc_missed_muts:
+        if tc in visited:
+            continue
+        visited.add(tc)
+        cluster = [tc]
+        for otc in flatten_tc_missed_muts:
+            if otc in visited:
                 continue
-            visited.add(tc)
-            cluster = [tc]
-            for otc in tech_conf_missed_muts[proj]:
-                if otc in visited:
-                    continue
-                if tech_conf_missed_muts[proj][tc] == tech_conf_missed_muts[proj][otc]:
-                    cluster.append(otc)
-                    visited.add(otc)
-                elif len(tech_conf_missed_muts[proj][tc] - tech_conf_missed_muts[proj][otc]) == 0:
-                    visited.add(otc)
-                elif len(tech_conf_missed_muts[proj][otc] - tech_conf_missed_muts[proj][tc]) == 0:
-                    cluster = None
-                    break
-            if cluster is not None:
-                clusters_by_proj[proj].append(cluster)
-        tmp = clusters_by_proj[proj]
-        clusters_by_proj[proj] = []
-        # case where klee killed but semu couldn't
-        all_inter = set()
-        if len(tmp) > 0:
-            all_inter = set(tech_conf_missed_muts[proj][tmp[0][0]])
-            for c in tmp[1:]:
-                all_inter &= tech_conf_missed_muts[proj][c[0]] 
-            if len(all_inter) > 0:
-                print("#> Klee, mamaged to kill {} extra mutants".format(len(all_inter)))
+            if flatten_tc_missed_muts[tc] == flatten_tc_missed_muts[otc]:
+                cluster.append(otc)
+                visited.add(otc)
+            elif len(flatten_tc_missed_muts[tc] - flatten_tc_missed_muts[otc]) == 0:
+                visited.add(otc)
+            elif len(flatten_tc_missed_muts[otc] - flatten_tc_missed_muts[tc]) == 0:
+                cluster = None
+                break
+        if cluster is not None:
+            clusters_list.append(cluster)
+    tmp = clusters_list
+    clusters_list = []
+
+    # case where klee killed but semu couldn't
+    all_inter = set()
+    if len(tmp) > 0:
+        all_inter = set(flatten_tc_missed_muts[tmp[0][0]])
+        for c in tmp[1:]:
+            all_inter &= flatten_tc_missed_muts[c[0]] 
+        if len(all_inter) > 0:
+            print("#> Klee or concrete, managed to kill {} extra mutants".format(len(all_inter)))
+    
+    # Use greedy Algorithm to find the smallest combination
+    selected_pos = set()
+    min_pos = 0
+    min_size = len(flatten_tc_missed_muts[tmp[0][0]])
+    for i in range(1,len(tmp)):
+        if len(flatten_tc_missed_muts[tmp[i][0]]) < min_size:
+            min_size = len(flatten_tc_missed_muts[tmp[i][0]])
+            min_pos = i
+    selected_pos.add(min_pos)
+    sel_missed = set(flatten_tc_missed_muts[tmp[min_pos][0]])
+    while sel_missed != all_inter:
+        min_size = len(sel_missed)
+        min_pos = None
+        for i in range(len(tmp)):
+            if i in selected_pos:
+                continue
+            if len(flatten_tc_missed_muts[tmp[i][0]] & sel_missed) < min_size:
+                min_size = len(flatten_tc_missed_muts[tmp[i][0]] & sel_missed)
+                min_pos = i
+        assert min_pos is not None, "Bug: Should have stopped the while loop. "+str(sel_missed)+str(all_inter)
+        selected_pos.add(min_pos)
+        sel_missed &= flatten_tc_missed_muts[tmp[min_pos][0]] 
         
-	    # Use greedy Algorithm to find the smallest combination
-	    selected_pos = set()
-	    min_pos = 0
-	    min_size = len(tech_conf_missed_muts[proj][tmp[0][0]])
-	    for i in range(1,len(tmp)):
-		if len(tech_conf_missed_muts[proj][tmp[i][0]]) < min_size:
-		    min_size = len(tech_conf_missed_muts[proj][tmp[i][0]])
-		    min_pos = i
-	    selected_pos.add(min_pos)
-	    sel_missed = set(tech_conf_missed_muts[proj][tmp[min_pos][0]])
-	    while sel_missed != all_inter:
-		min_size = len(sel_missed)
-		min_pos = None
-		for i in range(len(tmp)):
-		    if i in selected_pos:
-			continue
-		    if len(tech_conf_missed_muts[proj][tmp[i][0]] & sel_missed) < min_size:
-			min_size = len(tech_conf_missed_muts[proj][tmp[i][0]] & sel_missed)
-			min_pos = i
-		assert min_pos is not None, "Bug: Should have stopped the while loop. "+str(sel_missed)+str(all_inter)
-		selected_pos.add(min_pos)
-		sel_missed &= tech_conf_missed_muts[proj][tmp[min_pos][0]] 
-		    
-	    for ncomb in [len(selected_pos)]: #range(1,len(tmp)):
-		if len(clusters_by_proj[proj]) > 0:
-		    break
-		#print("# dbg: in loop 2", tmp, ncomb)
-                print ("# ncomb =", ncomb, "; num cluster for comb is", len(list(itertools.combinations(tmp, ncomb))))
-		for tc_comb in itertools.combinations(tmp, ncomb):
-		    intersect = set(tech_conf_missed_muts[proj][tc_comb[0][0]])
-		    for tc_list in tc_comb[1:]:
-			tc = tc_list[0]
-			intersect &= tech_conf_missed_muts[proj][tc]
-		    if intersect == all_inter:
-			clusters_by_proj[proj] += list(tc_comb)
-        if len(clusters_by_proj[proj]) == 0:
+    for ncomb in [len(selected_pos)]: #range(1,len(tmp)):
+        if len(clusters_list) > 0:
+            break
+        #print("# dbg: in loop 2", tmp, ncomb)
+        print ("# ncomb =", ncomb, "; num cluster for comb is", len(list(itertools.combinations(tmp, ncomb))))
+        for tc_comb in itertools.combinations(tmp, ncomb):
+            intersect = set(flatten_tc_missed_muts[tc_comb[0][0]])
+            for tc_list in tc_comb[1:]:
+                tc = tc_list[0]
+                intersect &= flatten_tc_missed_muts[tc]
+                if intersect == all_inter:
+                    clusters_list += list(tc_comb)
+        if len(clusters_list) == 0:
             #assert False, "Must have something"
             print ('> Warning: Project do not have minimal cluster: '+str(proj))
 
-    tech_conf2proj_clust = {}
-    for proj in clusters_by_proj:
-        for c_id, cluster in enumerate(clusters_by_proj[proj]):
-            for tc in cluster:
-                if tc not in tech_conf2proj_clust:
-                    tech_conf2proj_clust[tc] = set()
-                tech_conf2proj_clust[tc].add((proj, c_id))
-
-    tc_list = tech_conf2proj_clust.keys()
-    toremove = set()
-    for tc in tc_list:
-        if tc in toremove:
-            continue
-        for otc in tc_list:
-            if otc in toremove:
-                continue
-            if tech_conf2proj_clust[tc] != tech_conf2proj_clust[otc]:
-                if len(tech_conf2proj_clust[tc] - tech_conf2proj_clust[otc]) == 0:
-                    toremove.add(tc)
-                elif len(tech_conf2proj_clust[tc] - tech_conf2proj_clust[otc]) == 0:
-                    toremove.add(tc)
-    for r in toremove:
-        del tech_conf2proj_clust[r]
-
-    return tech_conf2proj_clust 
+    return clusters_list 
 #~ def get_minimal_conf_set()
 
 csv_file="Results.csv"
@@ -578,14 +559,14 @@ def get_techConfUtils(only_semu_cfg_df, SpecialTechs):
 #~ def get_techConfUtils()
 
 def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
-                                                n_suff, proj_agg_func=None):
+                                                n_suff, ms_apfds, proj_agg_func=None):
         for pc in techConfbyvalbyconf:
             min_vals = {}
             max_vals = {}
             med_vals = {}
             for val in techConfbyvalbyconf[pc]:
                 sorted_by_apfd_tmp = sorted(techConfbyvalbyconf[pc][val], \
-                        key=lambda x: proj_agg_func(getListAPFDSForTechConf(x)))
+                        key=lambda x: proj_agg_func(getListAPFDSForTechConf(x, ms_apfds)))
                 min_vals[val] = sorted_by_apfd_tmp[0]
                 max_vals[val] = sorted_by_apfd_tmp[-1]
                 med_vals[val] = sorted_by_apfd_tmp[len(sorted_by_apfd_tmp)/2]
@@ -594,9 +575,9 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                 plot_out_file = os.path.join(outdir, "perconf_apfd2_"+".".join(pc))
             else:
                 plot_out_file = os.path.join(outdir, "perconf_apfd_"+pc)
-            data = {str(val): {"min": getListAPFDSForTechConf(min_vals[val]), \
-                            "med": getListAPFDSForTechConf(med_vals[val]), \
-                            "max": getListAPFDSForTechConf(max_vals[val])} \
+            data = {str(val): {"min": getListAPFDSForTechConf(min_vals[val], ms_apfds), \
+                            "med": getListAPFDSForTechConf(med_vals[val], ms_apfds), \
+                            "max": getListAPFDSForTechConf(max_vals[val], ms_apfds)} \
                                                 for val in techConfbyvalbyconf[pc]}
             emphasis = None
             if len(data) == 2:
@@ -621,7 +602,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                 emphasis[1][val][mmm].append(data[val][mmm][v_ind])
 
             for sp in SpecialTechs:
-                data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp) \
+                data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp, ms_apfds) \
                                                     for em in ['min', 'med','max']}
             tmp_all_vals = []
             for g in data:
@@ -668,6 +649,390 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                     "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
                                         selectData=['min', 'med', 'max'])
 #~ def compute_n_plot_param_influence()
+
+def best_worst_conf(merged_df, outdir, SpecialTechs, ms_by_time, n_suff, \
+                                techConfbyvalbyconf, ms_apfds, proj_agg_func=None):
+    #topN = 1
+    topN = 5
+    apfd_ordered_techconf_list = sorted(list(set(merged_df[techConfCol])), \
+                    reverse=True, \
+                    key=lambda x: proj_agg_func(getListAPFDSForTechConf(x, ms_apfds)))
+    best_val_tmp = proj_agg_func(getListAPFDSForTechConf(\
+                                            apfd_ordered_techconf_list[topN-1], ms_apfds))
+    worse_val_tmp = proj_agg_func(getListAPFDSForTechConf(\
+                                            apfd_ordered_techconf_list[-topN], ms_apfds))
+    best_elems = []
+    worse_elems = []
+    for i, v in enumerate(apfd_ordered_techconf_list):
+        if proj_agg_func(getListAPFDSForTechConf(v, ms_apfds)) >= best_val_tmp:
+            best_elems.append(v)
+        if proj_agg_func(getListAPFDSForTechConf(v, ms_apfds)) <= worse_val_tmp:
+            worse_elems.append(v)
+    best_elems.sort(reverse=True, key=lambda x: proj_agg_func(getListAPFDSForTechConf(v, ms_apfds)))
+    worse_elems.sort(reverse=False, key=lambda x: proj_agg_func(getListAPFDSForTechConf(v, ms_apfds)))
+    # get corresponding param values and save as csv (best and worse)
+    best_df_obj = []
+    worse_df_obj = []
+    for elem_list, df_obj_list in [(best_elems, best_df_obj), \
+                                                (worse_elems, worse_df_obj)]:
+        for v in elem_list:
+            row = {}
+            for pc in techConfbyvalbyconf:
+                if type(pc) in (list, tuple):
+                    continue
+                for val in techConfbyvalbyconf[pc]:
+                    if v in techConfbyvalbyconf[pc][val]:
+                        assert pc not in row, "BUG"
+                        row[conf_name_mapping[pc]] = val
+            row[techConfCol] = v
+            row['MS'+n_suff+'_INC_APFD'] = proj_agg_func(getListAPFDSForTechConf(v, ms_apfds))
+            df_obj_list.append(row)
+    best_df = pd.DataFrame(best_df_obj)
+    worse_df = pd.DataFrame(worse_df_obj)
+    best_df_file = os.path.join(outdir, "best_tech_conf_apfd-top"+str(topN)+".csv")
+    worse_df_file = os.path.join(outdir, "worst_tech_conf_apfd-worst"+str(topN)+".csv")
+    best_df.to_csv(best_df_file, index=False)
+    worse_df.to_csv(worse_df_file, index=False)
+
+    # XXX plot best and worse median over time compared with klee
+    b_image = os.path.join(outdir, "best_tech_conf_time-top"+str(topN))
+    w_image = os.path.join(outdir, "worst_tech_conf_time-top"+str(topN))
+    for bw_elems, bw_image, bw in ((best_elems, b_image, 'best'), (worse_elems, w_image, 'worst')):
+        plotobj = {}
+        if not KLEE_KEY in bw_elems:
+            elems = bw_elems + [KLEE_KEY]
+        else:
+            elems = bw_elems
+        for i, v in enumerate(elems):
+            if v == KLEE_KEY:
+                name_ = SpecialTechs[v]
+            else:
+                name_ = bw+str(i+1)
+            v_data = ms_by_time[v]
+            plotobj[name_] = []
+            plotobj[name_].append(np.median([v_data[p][0] for p in v_data]))
+            plotobj[name_].append(np.median([v_data[p][1] for p in v_data]))
+
+        plotLines(plotobj, sorted(plotobj.keys()), "time(min)", "MS"+n_suff, bw_image, colors, linestyles, linewidths, fontsize)
+
+    return best_elems, worse_elems
+#~ def best_worst_conf()
+
+def select_top_or_all(merged_df, customMaxtime, best_elems, worse_elems):
+    if customMaxtime is None:
+        assert False, "Must specify a customMaxtime"
+        #selectedTimes_minutes = [5, 15, 30, 60, 120]
+    else:
+        selectedTimes_minutes = [customMaxtime]
+
+    # XXX: XXX: Decide whether to continue with all, only topN or only worseN or both topN and worseN
+    SEL_use_these_confs = 'topN'
+    if SEL_use_these_confs != "ALL":
+        if SEL_use_these_confs == "topN":
+            considered_c = list(set(best_elems+[KLEE_KEY]))
+        elif SEL_use_these_confs == "worstN":
+            considered_c = list(set(worse_elems+[KLEE_KEY]))
+        elif SEL_use_these_confs == "topN-worstN":
+            considered_c = list(set(best_elems+worse_elems+[KLEE_KEY]))
+        sel_merged_df = merged_df[merged_df[techConfCol].isin(considered_c)]
+    return sel_merged_df, selectedTimes_minutes
+#~ def select_top_or_all()
+
+def plot_extra_data(time_snap_df, time_snap, outdir, ms_apfds, msCol, \
+                                    targetCol, covMutsCol, \
+                                    numMutsCol, n_suff, selectedTimes_minutes):
+    fixed_y = msCol
+    changing_ys = [targetCol, covMutsCol, stateCompTimeCol, numGenTestsCol, \
+                        propNoDiffOnForkedMutsStatesCol, \
+                        numFailTestsCol] # Fail is used for verification purpose
+    # get data and plot
+    tmp_tech_confs = set(time_snap_df[techConfCol])
+    metric2techconf2values = {}
+    # for each metric, get per techConf list on values
+    for tech_conf in tmp_tech_confs:
+        t_c_tmp_df = time_snap_df[time_snap_df[techConfCol] == tech_conf]
+        for metric_col in [fixed_y] + changing_ys + [numMutsCol]:
+            if metric_col not in metric2techconf2values:
+                metric2techconf2values[metric_col] = {}
+            # make sure that every value is a number (to be used in median)
+            tmp_vals_list = []
+            for v in t_c_tmp_df[metric_col]:
+                try:
+                    tmp_vals_list.append(float(v))
+                except ValueError:
+                    if v == '-':
+                        #continue
+                        tmp_vals_list.append(0.0)
+                    else:
+                        print ("\n# Error: Invalid number for metric_col",\
+                            metric_col, ". value is:", v)
+                        print ("# ... Tech_conf is:", tech_conf, '\n')
+                        assert False
+            metric2techconf2values[metric_col][tech_conf] = tmp_vals_list
+    
+    if len(metric2techconf2values) == 0:
+        print ("#WARNING: metric2techconf2values is empty!")
+    else:
+        sorted_techconf_by_ms = metric2techconf2values[fixed_y].keys()
+        sorted_techconf_by_ms.sort(reverse=True, key=lambda x: ( \
+                        np.median(metric2techconf2values[fixed_y][x]), \
+                        np.average(metric2techconf2values[fixed_y][x])))
+
+        # Compute MS APFD VS MS and compute the fixed_vals
+        ms_inc_apfd_y = "Average MS"+n_suff+"-INC"
+        ms_inc_apfd_vals = []
+        fix_vals = []
+        for tech_conf in sorted_techconf_by_ms:
+            if tech_conf in SPECIAL_TECHS:
+                continue
+            fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
+            ms_inc_apfd_vals.append([ms_apfds[p][tech_conf] for p in ms_apfds])
+        plot_img_out_file = os.path.join(outdir, "msapfdVSms-"+ \
+                                                            str(time_snap))
+        make_twoside_plot(fix_vals, ms_inc_apfd_vals, plot_img_out_file, \
+                        x_label="Configuations", y_left_label=fixed_y, \
+                                            y_right_label=ms_inc_apfd_y)
+
+        # Make plots of ms and the others
+        for chang_y in changing_ys:
+            plot_img_out_file = os.path.join(outdir, "otherVSms-"+ \
+                            str(time_snap) + "-"+chang_y.replace('#','n'))
+            chang_vals = []
+            nMuts_here = []
+            for tech_conf in sorted_techconf_by_ms:
+                if tech_conf in SPECIAL_TECHS:
+                    continue
+                chang_vals.append(\
+                                metric2techconf2values[chang_y][tech_conf])
+                nMuts_here.append(\
+                                metric2techconf2values[numMutsCol][tech_conf])
+
+            if chang_y in [targetCol, stateCompTimeCol, covMutsCol]:
+                if chang_y in (targetCol, covMutsCol):
+                    chang_y = chang_y.replace('#', '%')
+                    m_val = nMuts_here
+                    # compute percentage
+                    if len(m_val) != 0:
+                        for c_ind in range(len(chang_vals)):
+                            c_tmp = []
+                            for i_ind in range(len(chang_vals[c_ind])):
+                                if m_val[c_ind][i_ind] != 0:
+                                    c_tmp.append(chang_vals[c_ind][i_ind] * 100.0 / m_val[c_ind][i_ind])
+                            chang_vals[c_ind] = c_tmp
+                elif chang_y == stateCompTimeCol:
+                    chang_y = chang_y.replace('(s)', '(%)')
+                    m_val = time_snap * 60
+                    # compute percentage
+                    if m_val != 0:
+                        for c_ind in range(len(chang_vals)):
+                            chang_vals[c_ind] = \
+                                    [v*100.0/m_val for v in chang_vals[c_ind]]
+                else:
+                    assert False, "BUG, unreachable"
+                    
+            make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
+                        x_label="Configuations", y_left_label=fixed_y, \
+                                                    y_right_label=chang_y)
+    return sorted_techconf_by_ms, metric2techconf2values  
+#~ plot_extra_data()
+
+def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
+                                                        sorted_techconf_by_ms):
+    overlap_data_dict = {}
+    non_overlap_obj = {}
+    tech_conf_missed_muts = {}
+    for proj in proj2dir:
+        fulldir = os.path.join(proj2dir[proj], projcommonreldir)
+        full_overlap_file = os.path.join(fulldir, \
+                    "Techs-relation.json-"+str(int(time_snap))+"min.json")
+        assert os.path.isfile(full_overlap_file), "file not existing: "+\
+                            full_overlap_file
+        with open(full_overlap_file) as f:
+            fobj = json.load(f)
+            non_overlap_obj[proj] = {}
+            overlap_data_dict[proj] = {}
+            tech_conf_missed_muts[proj] = {}
+            visited = set()
+            s_m_key = 'SUBSUMING_CLUSTERS' if subsuming else 'MUTANTS'
+            for pair in fobj[s_m_key]["NON_OVERLAP_VENN"]:
+                a_tmp = pair.split('&')
+                if len(a_tmp) != 2:
+                    print("@WARNING: non pair overlap found:", pair)
+                    continue
+                left_right = tuple(sorted(a_tmp))
+                if left_right not in visited:
+                    visited.add(left_right)
+                    overlap_data_dict[proj][left_right] = fobj[s_m_key]["OVERLAP_VENN"][pair]
+                    
+                if left_right not in non_overlap_obj[proj]:
+                    non_overlap_obj[proj][left_right] = {v:0 for v in left_right}
+                for win in fobj[s_m_key]["NON_OVERLAP_VENN"][pair]:
+                    non_overlap_obj[proj][left_right][win] += \
+                                len(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
+                    lose = set(left_right) - {win}
+                    assert len(lose) == 1
+                    lose = list(lose)[0]
+                    if lose not in tech_conf_missed_muts[proj]:
+                        tech_conf_missed_muts[proj][lose] = set()
+                    tech_conf_missed_muts[proj][lose] |= set(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
+    all_tech_confs = {v for p in non_overlap_obj[non_overlap_obj.keys()[0]] for v in p}
+    # We only use top 5 and KLEE
+    #assert all_tech_confs == set(sorted_techconf_by_ms), \
+    #                    "Inconsistemcy between dataframe and overlap json"
+    tech_conf2position = {}
+    for pos, tech_conf in enumerate(sorted_techconf_by_ms):
+        tech_conf2position[tech_conf] = pos
+    return tech_conf_missed_muts, non_overlap_obj, overlap_data_dict, tech_conf2position  
+#~ def get_overlap_data()
+
+def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals):
+    # write down the minimal config set to kill all muts
+    minimal_tech_confs = get_minimal_conf_set(tech_conf_missed_muts)
+    minimal_df_obj = []
+    for mtc in minimal_tech_confs:
+        minimal_df_obj.append(dict(list({'_TechConf': mtc}.items())+list(techConf2ParamVals[mtc].items())))
+    minimal_df = pd.DataFrame(minimal_df_obj)
+    minimal_df.to_csv(os.path.join(outdir, "minimal_tech_confs.csv"), index=False)        
+#~ def process_minimal_config_set()
+
+def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict):
+            #x_label = "Winning Technique Configuration"
+            #y_label = "Other Technique Configuration"
+            #hue = "special"
+            #num_x_wins = "# Mutants Killed more by X"
+
+            # Plot klee conf overlap by proj
+            klee_n_semu_by_proj = [[], []]
+            by_proj_overlap = []
+            SEL_use_best_apfd = True # decide whether to use best APFD of maxes
+            for proj in non_overlap_obj:
+                klee_n_semu_by_proj[0].append(None)
+                klee_n_semu_by_proj[1].append(None)
+                by_proj_overlap.append(0)
+                if SEL_use_best_apfd:
+                    best_ = best_elems[0]
+                    for left_right in non_overlap_obj[proj]:
+                        if KLEE_KEY in left_right and best_ in left_right:
+                            klee_n_semu_by_proj[0][-1] = non_overlap_obj[proj][left_right][best_]
+                            klee_n_semu_by_proj[1][-1] = non_overlap_obj[proj][left_right][KLEE_KEY]
+                            by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
+                            break
+                else:
+                    for left_right in non_overlap_obj[proj]:
+                        if KLEE_KEY in left_right:
+                            s_c_n_o = non_overlap_obj[proj][left_right][list(set(left_right)-{KLEE_KEY})[0]]
+                            k_n_o = non_overlap_obj[proj][left_right][KLEE_KEY]
+                            if klee_n_semu_by_proj[0][-1] is None or \
+                                    s_c_n_o - k_n_o > klee_n_semu_by_proj[0][-1] - klee_n_semu_by_proj[1][-1]:
+                                klee_n_semu_by_proj[0][-1] = s_c_n_o
+                                klee_n_semu_by_proj[1][-1] = k_n_o
+                                by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
+                if klee_n_semu_by_proj[1] > klee_n_semu_by_proj[0]:
+                    print(">>>> Klee has higher non overlap that all semu for project", proj, "(", klee_n_semu_by_proj[1], "VS", klee_n_semu_by_proj[0], ")")
+            ## plot
+            make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
+                        os.path.join(outdir, "proj_overlap-"+str(time_snap)+"min"), \
+                        x_label="Programs", y_left_label="# Mutants", \
+                                        y_right_label="# Non Overlapping Mutants", \
+                                    left_stackbar_legends=['semu', 'klee', 'overlap'], \
+                                    right_stackbar_legends=['semu', 'klee'])
+#~ def plot_overlap_1()
+
+def plot_overlap_2(outdir, non_overlap_obj, SpecialTechs, tech_conf2position, \
+                            proj_agg_func2, proj_agg_func2_name, time_snap):
+    x_label = "Winning Technique Configuration"
+    y_label = "Other Technique Configuration"
+    hue = "special"
+    num_x_wins = "# Mutants Killed more by X"
+    df_obj = []
+
+    for left_right in non_overlap_obj[non_overlap_obj.keys()[0]]:
+        for left, right in [left_right, reversed(left_right)]:
+            hue_val = "SEMu"
+            if left in SpecialTechs and right in SpecialTechs:
+                hue_val = SpecialTechs[left]+"_wins-"\
+                                            +SpecialTechs[right]+"_loses"
+            else:
+                if right in SpecialTechs:
+                    hue_val = SpecialTechs[right]+"_loses"
+                if left in SpecialTechs:
+                    hue_val = SpecialTechs[left]+"_wins"
+            if left in tech_conf2position and right in tech_conf2position:
+                df_obj.append({
+                        x_label: tech_conf2position[left], 
+                        y_label: tech_conf2position[right], 
+                        hue: hue_val,
+                        num_x_wins: proj_agg_func2([non_overlap_obj[p][left_right][left] for p in non_overlap_obj]), 
+                        })
+    killed_muts_overlap = pd.DataFrame(df_obj)
+    image_out = os.path.join(outdir, "overlap-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
+    # plot
+    sns.set_style("white", \
+                        {'axes.linewidth': 1.25, 'axes.edgecolor':'black'})
+    sns.relplot(x=x_label, y=y_label, hue=hue, size=num_x_wins,
+            sizes=(0, 300), alpha=.5, palette="muted",
+            height=6, data=killed_muts_overlap)
+    plt.xticks([])
+    plt.yticks([])
+    plt.tight_layout()
+    plt.savefig(image_out+".pdf", format="pdf")
+    plt.close('all')
+
+    return killed_muts_overlap
+#~ def plot_overlap_2()
+
+def plot_overlap_3(outdir, msCol, proj_agg_func2_name,time_snap, \
+                    killed_muts_overlap, sorted_techconf_by_ms, \
+                        metric2techconf2values, tech_conf2position, \
+                                        proj_agg_func2, overlap_data_dict):
+    x_label = "Winning Technique Configuration"
+    y_label = "Other Technique Configuration"
+    hue = "special"
+    num_x_wins = "# Mutants Killed more by X"
+    # plot overlap against pure klee
+    image_out2 = os.path.join(outdir, \
+                            "semu_klee-nonoverlap-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
+    fixed_y = msCol
+    chang_y2 = "# Non Overlapping Mutants"
+    fix_vals2 = []
+    sb_legend = ['semu', 'klee']
+    chang_vals2 = [[], []]
+    overlap_vals = []
+    klee = SPECIAL_TECHS[KLEE_KEY]
+    klee_related_df = killed_muts_overlap[killed_muts_overlap[hue].isin(\
+                                            [klee+'_wins', klee+'_loses'])]
+    assert not klee_related_df.empty
+    for tech_conf in sorted_techconf_by_ms:
+        if tech_conf in SPECIAL_TECHS:
+            continue
+        fix_vals2.append(metric2techconf2values[fixed_y][tech_conf])
+
+        tmp_v = list(klee_related_df[klee_related_df[x_label] == \
+                            tech_conf2position[tech_conf]][num_x_wins])
+        assert len(tmp_v) != 0
+        chang_vals2[0].append(tmp_v[0])
+        left_right = tuple(sorted([tech_conf, KLEE_KEY]))
+        overlap_vals.append(proj_agg_func2([overlap_data_dict[p][left_right] for p in overlap_data_dict.keys()]))
+
+        tmp_v = list(klee_related_df[klee_related_df[y_label] == \
+                            tech_conf2position[tech_conf]][num_x_wins])
+        assert len(tmp_v) != 0
+        chang_vals2[1].append(tmp_v[0])
+
+    make_twoside_plot(fix_vals2, chang_vals2, image_out2, \
+                x_label="Configuations", y_left_label=fixed_y, \
+                                            y_right_label=chang_y2, \
+                                right_stackbar_legends=sb_legend)
+    # overlap and non overlap
+    image_out3 = os.path.join(outdir, \
+                            "semu_klee-overlap_all-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
+    overlap_non_vals = chang_vals2 + [overlap_vals] 
+    make_twoside_plot(overlap_non_vals, chang_vals2, image_out3, \
+                x_label="Configuations", y_left_label="# Mutants", \
+                                            y_right_label=chang_y2, \
+                            left_stackbar_legends=sb_legend+['overlap'], \
+                            right_stackbar_legends=sb_legend)
+#~ def plot_overlap_3()
 
 #### CONTROLLER ####
 def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
@@ -722,7 +1087,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         only_semu_cfg_df = merged_df[~merged_df[techConfCol].isin(SPECIAL_TECHS)]
 
         # get some utils ...
-        techConf2ParamVals, techConfbyvalbyconf = get_techConfUtils(only_semu_cfg_df)
+        techConf2ParamVals, techConfbyvalbyconf = get_techConfUtils(only_semu_cfg_df, SpecialTechs)
 
         #proj_agg_func = np.median
         proj_agg_func = np.average
@@ -730,368 +1095,50 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         # XXX Check the influence of each parameter. 
         # TODO: do not aggregate and do statistical test
         compute_n_plot_param_influence(techConfbyvalbyconf, outdir, \
-                                    SpecialTechs, n_suff, proj_agg_func=None)
+                                    SpecialTechs, n_suff, ms_apfds, proj_agg_func=None)
         
-
-
-
-
-
-
         # XXX Find best and worse confs
-        #topN = 1
-        topN = 5
-        apfd_ordered_techconf_list = sorted(list(set(merged_df[techConfCol])), \
-                        reverse=True, \
-                        key=lambda x: proj_agg_func(getListAPFDSForTechConf(x)))
-        best_val_tmp = proj_agg_func(getListAPFDSForTechConf(\
-                                                apfd_ordered_techconf_list[topN-1]))
-        worse_val_tmp = proj_agg_func(getListAPFDSForTechConf(\
-                                                apfd_ordered_techconf_list[-topN]))
-        best_elems = []
-        worse_elems = []
-        for i, v in enumerate(apfd_ordered_techconf_list):
-            if proj_agg_func(getListAPFDSForTechConf(v)) >= best_val_tmp:
-                best_elems.append(v)
-            if proj_agg_func(getListAPFDSForTechConf(v)) <= worse_val_tmp:
-                worse_elems.append(v)
-        best_elems.sort(reverse=True, key=lambda x: proj_agg_func(getListAPFDSForTechConf(v)))
-        worse_elems.sort(reverse=False, key=lambda x: proj_agg_func(getListAPFDSForTechConf(v)))
-        # get corresponding param values and save as csv (best and worse)
-        best_df_obj = []
-        worse_df_obj = []
-        for elem_list, df_obj_list in [(best_elems, best_df_obj), \
-                                                    (worse_elems, worse_df_obj)]:
-            for v in elem_list:
-                row = {}
-                for pc in techConfbyvalbyconf:
-                    if type(pc) in (list, tuple):
-                        continue
-                    for val in techConfbyvalbyconf[pc]:
-                        if v in techConfbyvalbyconf[pc][val]:
-                            assert pc not in row, "BUG"
-                            row[conf_name_mapping[pc]] = val
-                row[techConfCol] = v
-                row['MS'+n_suff+'_INC_APFD'] = proj_agg_func(getListAPFDSForTechConf(v))
-                df_obj_list.append(row)
-        best_df = pd.DataFrame(best_df_obj)
-        worse_df = pd.DataFrame(worse_df_obj)
-        best_df_file = os.path.join(outdir, "best_tech_conf_apfd-top"+str(topN)+".csv")
-        worse_df_file = os.path.join(outdir, "worst_tech_conf_apfd-worst"+str(topN)+".csv")
-        best_df.to_csv(best_df_file, index=False)
-        worse_df.to_csv(worse_df_file, index=False)
+        best_elems, worse_elems = best_worst_conf(merged_df, outdir, \
+                                    SpecialTechs, ms_by_time, n_suff, \
+                                    techConfbyvalbyconf, ms_apfds, proj_agg_func=None)
 
-        # XXX plot best and worse median over time compared with klee
-        b_image = os.path.join(outdir, "best_tech_conf_time-top"+str(topN))
-        w_image = os.path.join(outdir, "worst_tech_conf_time-top"+str(topN))
-        for bw_elems, bw_image, bw in ((best_elems, b_image, 'best'), (worse_elems, w_image, 'worst')):
-            plotobj = {}
-            if not KLEE_KEY in bw_elems:
-                elems = bw_elems + [KLEE_KEY]
-            else:
-                elems = bw_elems
-            for i, v in enumerate(elems):
-                if v == KLEE_KEY:
-                    name_ = SpecialTechs[v]
-                else:
-                    name_ = bw+str(i+1)
-                v_data = ms_by_time[v]
-                plotobj[name_] = []
-                plotobj[name_].append(np.median([v_data[p][0] for p in v_data]))
-                plotobj[name_].append(np.median([v_data[p][1] for p in v_data]))
+        # Select what to continue
+        sel_merged_df, selectedTimes_minutes = select_top_or_all(merged_df, \
+                                        customMaxtime, best_elems, worse_elems)
 
-            plotLines(plotobj, sorted(plotobj.keys()), "time(min)", "MS"+n_suff, bw_image, colors, linestyles, linewidths, fontsize)
-
-        # XXX compare MS with compareState time, %targeted, #testgen, WM%
-        if customMaxtime is None:
-            assert False, "Must specify a customMaxtime"
-            #selectedTimes_minutes = [5, 15, 30, 60, 120]
-        else:
-            selectedTimes_minutes = [customMaxtime]
-
-        # XXX: XXX: Decide whether to continue with all, only topN or only worseN or both topN and worseN
-        SEL_use_these_confs = 'topN'
-        if SEL_use_these_confs != "ALL":
-            if SEL_use_these_confs == "topN":
-                considered_c = list(set(best_elems+[KLEE_KEY]))
-            elif SEL_use_these_confs == "worstN":
-                considered_c = list(set(worse_elems+[KLEE_KEY]))
-            elif SEL_use_these_confs == "topN-worstN":
-                considered_c = list(set(best_elems+worse_elems+[KLEE_KEY]))
-            merged_df = merged_df[merged_df[techConfCol].isin(considered_c)]
-
-        fixed_y = msCol
-        changing_ys = [targetCol, covMutsCol, stateCompTimeCol, numGenTestsCol, \
-                            propNoDiffOnForkedMutsStatesCol, \
-                            numFailTestsCol] # Fail is used for verification purpose
-        # get data and plot
         for time_snap in selectedTimes_minutes:
             time_snap_df = merged_df[merged_df[timeCol] == time_snap]
             if time_snap_df.empty:
                 continue
-            tmp_tech_confs = set(time_snap_df[techConfCol])
-            metric2techconf2values = {}
-            # for each metric, get per techConf list on values
-            for tech_conf in tmp_tech_confs:
-                t_c_tmp_df = time_snap_df[time_snap_df[techConfCol] == tech_conf]
-                for metric_col in [fixed_y] + changing_ys + [numMutsCol]:
-                    if metric_col not in metric2techconf2values:
-                        metric2techconf2values[metric_col] = {}
-                    # make sure that every value is a number (to be used in median)
-                    tmp_vals_list = []
-                    for v in t_c_tmp_df[metric_col]:
-                        try:
-                            tmp_vals_list.append(float(v))
-                        except ValueError:
-                            if v == '-':
-                                #continue
-                                tmp_vals_list.append(0.0)
-                            else:
-                                print ("\n# Error: Invalid number for metric_col",\
-                                    metric_col, ". value is:", v)
-                                print ("# ... Tech_conf is:", tech_conf, '\n')
-                                assert False
-                    metric2techconf2values[metric_col][tech_conf] = tmp_vals_list
-            
-            if len(metric2techconf2values) == 0:
-                print ("#WARNING: metric2techconf2values is empty!")
-            else:
-                sorted_techconf_by_ms = metric2techconf2values[fixed_y].keys()
-                sorted_techconf_by_ms.sort(reverse=True, key=lambda x: ( \
-                                np.median(metric2techconf2values[fixed_y][x]), \
-                                np.average(metric2techconf2values[fixed_y][x])))
 
-                # Compute MS APFD VS MS and compute the fixed_vals
-                ms_inc_apfd_y = "Average MS"+n_suff+"-INC"
-                ms_inc_apfd_vals = []
-                fix_vals = []
-                for tech_conf in sorted_techconf_by_ms:
-                    if tech_conf in SPECIAL_TECHS:
-                        continue
-                    fix_vals.append(metric2techconf2values[fixed_y][tech_conf])
-                    ms_inc_apfd_vals.append([ms_apfds[p][tech_conf] for p in ms_apfds])
-                plot_img_out_file = os.path.join(outdir, "msapfdVSms-"+ \
-                                                                    str(time_snap))
-                make_twoside_plot(fix_vals, ms_inc_apfd_vals, plot_img_out_file, \
-                                x_label="Configuations", y_left_label=fixed_y, \
-                                                    y_right_label=ms_inc_apfd_y)
-
-                # Make plots of ms and the others
-                for chang_y in changing_ys:
-                    plot_img_out_file = os.path.join(outdir, "otherVSms-"+ \
-                                    str(time_snap) + "-"+chang_y.replace('#','n'))
-                    chang_vals = []
-                    nMuts_here = []
-                    for tech_conf in sorted_techconf_by_ms:
-                        if tech_conf in SPECIAL_TECHS:
-                            continue
-                        chang_vals.append(\
-                                        metric2techconf2values[chang_y][tech_conf])
-                        nMuts_here.append(\
-                                        metric2techconf2values[numMutsCol][tech_conf])
-
-                    if chang_y in [targetCol, stateCompTimeCol, covMutsCol]:
-                        if chang_y in (targetCol, covMutsCol):
-                            chang_y = chang_y.replace('#', '%')
-                            m_val = nMuts_here
-                            # compute percentage
-                            if len(m_val) != 0:
-                                for c_ind in range(len(chang_vals)):
-                                    c_tmp = []
-                                    for i_ind in range(len(chang_vals[c_ind])):
-                                        if m_val[c_ind][i_ind] != 0:
-                                            c_tmp.append(chang_vals[c_ind][i_ind] * 100.0 / m_val[c_ind][i_ind])
-                                    chang_vals[c_ind] = c_tmp
-                        elif chang_y == stateCompTimeCol:
-                            chang_y = chang_y.replace('(s)', '(%)')
-                            m_val = time_snap * 60
-                            # compute percentage
-                            if m_val != 0:
-                                for c_ind in range(len(chang_vals)):
-                                    chang_vals[c_ind] = \
-                                            [v*100.0/m_val for v in chang_vals[c_ind]]
-                        else:
-                            assert False, "BUG, unreachable"
-                            
-                    make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
-                                x_label="Configuations", y_left_label=fixed_y, \
-                                                            y_right_label=chang_y)
-                
+            # XXX compare MS with compareState time, %targeted, #testgen, WM%
+            sorted_techconf_by_ms, metric2techconf2values = \
+                                plot_extra_data(sel_merged_df, time_snap, \
+                                        outdir, ms_apfds, msCol, targetCol,\
+                                        covMutsCol, numMutsCol, n_suff, \
+                                                        selectedTimes_minutes)
 
             # XXX Killed mutants overlap
-            overlap_data_dict = {}
-            non_overlap_obj = {}
-            tech_conf_missed_muts = {}
-            for proj in proj2dir:
-                fulldir = os.path.join(proj2dir[proj], projcommonreldir)
-                full_overlap_file = os.path.join(fulldir, \
-                            "Techs-relation.json-"+str(int(time_snap))+"min.json")
-                assert os.path.isfile(full_overlap_file), "file not existing: "+\
-                                    full_overlap_file
-                with open(full_overlap_file) as f:
-                    fobj = json.load(f)
-                    non_overlap_obj[proj] = {}
-                    overlap_data_dict[proj] = {}
-                    tech_conf_missed_muts[proj] = {}
-                    visited = set()
-                    s_m_key = 'SUBSUMING_CLUSTERS' if subsuming else 'MUTANTS'
-                    for pair in fobj[s_m_key]["NON_OVERLAP_VENN"]:
-                        a_tmp = pair.split('&')
-                        if len(a_tmp) != 2:
-                            print("@WARNING: non pair overlap found:", pair)
-                            continue
-                        left_right = tuple(sorted(a_tmp))
-                        if left_right not in visited:
-                            visited.add(left_right)
-                            overlap_data_dict[proj][left_right] = fobj[s_m_key]["OVERLAP_VENN"][pair]
-                            
-                        if left_right not in non_overlap_obj[proj]:
-                            non_overlap_obj[proj][left_right] = {v:0 for v in left_right}
-                        for win in fobj[s_m_key]["NON_OVERLAP_VENN"][pair]:
-                            non_overlap_obj[proj][left_right][win] += \
-                                        len(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
-                            lose = set(left_right) - {win}
-                            assert len(lose) == 1
-                            lose = list(lose)[0]
-                            if lose not in tech_conf_missed_muts[proj]:
-                                tech_conf_missed_muts[proj][lose] = set()
-                            tech_conf_missed_muts[proj][lose] |= set(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
-            all_tech_confs = {v for p in non_overlap_obj[non_overlap_obj.keys()[0]] for v in p}
-            # We only use top 5 and KLEE
-            #assert all_tech_confs == set(sorted_techconf_by_ms), \
-            #                    "Inconsistemcy between dataframe and overlap json"
-            tech_conf2position = {}
-            for pos, tech_conf in enumerate(sorted_techconf_by_ms):
-                tech_conf2position[tech_conf] = pos
+            tech_conf_missed_muts, non_overlap_obj, \
+                overlap_data_dict, tech_conf2position = \
+                                    get_overlap_data(proj2dir, \
+                                    projcommonreldir, time_snap, subsuming, \
+                                                        sorted_techconf_by_ms)
 
-            # write down the minimal config set to kill all muts
-            minimal_tech_confs = get_minimal_conf_set(tech_conf_missed_muts)
-            minimal_df_obj = []
-            for mtc in minimal_tech_confs:
-                minimal_df_obj.append(dict(list({'_TechConf': mtc}.items())+list(techConf2ParamVals[mtc].items())))
-            minimal_df = pd.DataFrame(minimal_df_obj)
-            minimal_df.to_csv(os.path.join(outdir, "minimal_tech_confs.csv"), index=False)        
-            #~
+            process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals)
 
-            x_label = "Winning Technique Configuration"
-            y_label = "Other Technique Configuration"
-            hue = "special"
-            num_x_wins = "# Mutants Killed more by X"
-
-            # Plot klee conf overlap by proj
-            klee_n_semu_by_proj = [[], []]
-            by_proj_overlap = []
-            SEL_use_best_apfd = True # decide whether to use best APFD of maxes
-            for proj in non_overlap_obj:
-                klee_n_semu_by_proj[0].append(None)
-                klee_n_semu_by_proj[1].append(None)
-                by_proj_overlap.append(0)
-                if SEL_use_best_apfd:
-                    best_ = best_elems[0]
-                    for left_right in non_overlap_obj[proj]:
-                        if KLEE_KEY in left_right and best_ in left_right:
-                            klee_n_semu_by_proj[0][-1] = non_overlap_obj[proj][left_right][best_]
-                            klee_n_semu_by_proj[1][-1] = non_overlap_obj[proj][left_right][KLEE_KEY]
-                            by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
-                            break
-                else:
-                    for left_right in non_overlap_obj[proj]:
-                        if KLEE_KEY in left_right:
-                            s_c_n_o = non_overlap_obj[proj][left_right][list(set(left_right)-{KLEE_KEY})[0]]
-                            k_n_o = non_overlap_obj[proj][left_right][KLEE_KEY]
-                            if klee_n_semu_by_proj[0][-1] is None or \
-                                    s_c_n_o - k_n_o > klee_n_semu_by_proj[0][-1] - klee_n_semu_by_proj[1][-1]:
-                                klee_n_semu_by_proj[0][-1] = s_c_n_o
-                                klee_n_semu_by_proj[1][-1] = k_n_o
-                                by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
-                if klee_n_semu_by_proj[1] > klee_n_semu_by_proj[0]:
-                    print(">>>> Klee has higher non overlap that all semu for project", proj, "(", klee_n_semu_by_proj[1], "VS", klee_n_semu_by_proj[0], ")")
-            ## plot
-            make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
-                        os.path.join(outdir, "proj_overlap-"+str(time_snap)+"min"), \
-                        x_label="Programs", y_left_label="# Mutants", \
-                                        y_right_label="# Non Overlapping Mutants", \
-                                    left_stackbar_legends=['semu', 'klee', 'overlap'], \
-                                    right_stackbar_legends=['semu', 'klee'])
+            plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict)
 
                             
             for proj_agg_func2, proj_agg_func2_name in [(np.average, "average"), (np.median, "median")]:
-                df_obj = []
+                killed_muts_overlap = plot_overlap_2(outdir, non_overlap_obj, \
+                                SpecialTechs, tech_conf2position, \
+                                proj_agg_func2, proj_agg_func2_name, time_snap)
 
-                for left_right in non_overlap_obj[non_overlap_obj.keys()[0]]:
-                    for left, right in [left_right, reversed(left_right)]:
-                        hue_val = "SEMu"
-                        if left in SpecialTechs and right in SpecialTechs:
-                            hue_val = SpecialTechs[left]+"_wins-"\
-                                                        +SpecialTechs[right]+"_loses"
-                        else:
-                            if right in SpecialTechs:
-                                hue_val = SpecialTechs[right]+"_loses"
-                            if left in SpecialTechs:
-                                hue_val = SpecialTechs[left]+"_wins"
-                        if left in tech_conf2position and right in tech_conf2position:
-                            df_obj.append({
-                                    x_label: tech_conf2position[left], 
-                                    y_label: tech_conf2position[right], 
-                                    hue: hue_val,
-                                    num_x_wins: proj_agg_func2([non_overlap_obj[p][left_right][left] for p in non_overlap_obj]), 
-                                    })
-                killed_muts_overlap = pd.DataFrame(df_obj)
-                image_out = os.path.join(outdir, "overlap-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
-                # plot
-                sns.set_style("white", \
-                                    {'axes.linewidth': 1.25, 'axes.edgecolor':'black'})
-                sns.relplot(x=x_label, y=y_label, hue=hue, size=num_x_wins,
-                        sizes=(0, 300), alpha=.5, palette="muted",
-                        height=6, data=killed_muts_overlap)
-                plt.xticks([])
-                plt.yticks([])
-                plt.tight_layout()
-                plt.savefig(image_out+".pdf", format="pdf")
-                plt.close('all')
-
-                # plot overlap against pure klee
-                image_out2 = os.path.join(outdir, \
-                                        "semu_klee-nonoverlap-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
-                chang_y2 = "# Non Overlapping Mutants"
-                fix_vals2 = []
-                sb_legend = ['semu', 'klee']
-                chang_vals2 = [[], []]
-                overlap_vals = []
-                klee = SPECIAL_TECHS[KLEE_KEY]
-                klee_related_df = killed_muts_overlap[killed_muts_overlap[hue].isin(\
-                                                        [klee+'_wins', klee+'_loses'])]
-                assert not klee_related_df.empty
-                for tech_conf in sorted_techconf_by_ms:
-                    if tech_conf in SPECIAL_TECHS:
-                        continue
-                    fix_vals2.append(metric2techconf2values[fixed_y][tech_conf])
-
-                    tmp_v = list(klee_related_df[klee_related_df[x_label] == \
-                                        tech_conf2position[tech_conf]][num_x_wins])
-                    assert len(tmp_v) != 0
-                    chang_vals2[0].append(tmp_v[0])
-                    left_right = tuple(sorted([tech_conf, KLEE_KEY]))
-                    overlap_vals.append(proj_agg_func2([overlap_data_dict[p][left_right] for p in overlap_data_dict.keys()]))
-
-                    tmp_v = list(klee_related_df[klee_related_df[y_label] == \
-                                        tech_conf2position[tech_conf]][num_x_wins])
-                    assert len(tmp_v) != 0
-                    chang_vals2[1].append(tmp_v[0])
-
-                make_twoside_plot(fix_vals2, chang_vals2, image_out2, \
-                            x_label="Configuations", y_left_label=fixed_y, \
-                                                        y_right_label=chang_y2, \
-                                            right_stackbar_legends=sb_legend)
-                # overlap and non overlap
-                image_out3 = os.path.join(outdir, \
-                                        "semu_klee-overlap_all-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
-                overlap_non_vals = chang_vals2 + [overlap_vals] 
-                make_twoside_plot(overlap_non_vals, chang_vals2, image_out3, \
-                            x_label="Configuations", y_left_label="# Mutants", \
-                                                        y_right_label=chang_y2, \
-                                        left_stackbar_legends=sb_legend+['overlap'], \
-                                        right_stackbar_legends=sb_legend)
+                plot_overlap_3(outdir, msCol, proj_agg_func2_name,time_snap, \
+                            killed_muts_overlap, sorted_techconf_by_ms, \
+                                metric2techconf2values, tech_conf2position, \
+                                    proj_agg_func2, overlap_data_dict)
 
 #~ def libMain()
 
