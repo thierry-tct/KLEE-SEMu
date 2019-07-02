@@ -748,6 +748,9 @@ def best_worst_conf(merged_df, outdir, SpecialTechs, ms_by_time, n_suff, \
             plotobj[name_].append(np.median([v_data[p][0] for p in v_data]))
             plotobj[name_].append(np.median([v_data[p][1] for p in v_data]))
 
+            if i > topN: #XXX focus on topN
+                break
+
         plotLines(plotobj, sorted(plotobj.keys()), "time(min)", "MS"+n_suff, bw_image, colors, linestyles, linewidths, fontsize)
 
     return best_elems, worse_elems
