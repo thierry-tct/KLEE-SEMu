@@ -1131,10 +1131,14 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         for use_fixed in [True, False]:
             if use_fixed:
                 outdir = os.path.join(outdir_inner_bak, "fixed_at_"+str(customMaxtime))
+                if not os.path.isdir(outdir):
+                    os.mkdir(outdir)
                 # fix val Computation
                 ms_apfds, ms_by_time = get_ms_apfds(merged_df[merged_df[timeCol] == customMaxtime], msCol)
             else:
                 outdir = os.path.join(outdir_inner_bak, "apfd")
+                if not os.path.isdir(outdir):
+                    os.mkdir(outdir)
                 # APFDs Computation
                 ms_apfds, ms_by_time = get_ms_apfds(merged_df, msCol)
 
