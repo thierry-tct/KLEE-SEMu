@@ -198,7 +198,7 @@ def plotLines(x_y_lists_pair_dict, order, xlabel, ylabel, imagepath, colors, lin
         plt.plot(x, y, color=colors[ti], linestyle=linestyles[ti], linewidth=linewidths[ti], label=tech, alpha=0.8)
     plt.ylabel(ylabel, fontsize=fontsize)
     plt.xlabel(xlabel, fontsize=fontsize)
-    plt.xticks(range(1, maxx+1, maxx/10) if (maxx % 10 == 0 or type(maxx) == int) else np.arange(1,maxx+1, maxx/10.0), fontsize=fontsize-5)
+    plt.xticks((range(1, int(maxx+1), int(maxx/10)) if (maxx % 10 == 0 or type(maxx) == int) else np.arange(1,maxx+1, maxx/10.0)), fontsize=fontsize-5)
     plt.yticks(np.arange(0,1.01,0.2), fontsize=fontsize-5)
     legendMode=1 if len(order) <= 3 else 2
     if legendMode==1:
