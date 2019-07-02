@@ -227,7 +227,7 @@ def get_minimal_conf_set(tech_conf_missed_muts):
         for tc, mutset in list(tc2mutset.items()):
             if tc not in flatten_tc_missed_muts:
                 flatten_tc_missed_muts[tc] = set()
-            flatten_tc_missed_muts[tc] |= set([os.path.join(proj, m) for m in mutset])
+            flatten_tc_missed_muts[tc] |= set([os.path.join(proj, str(m)) for m in mutset])
 
     visited = set()
     clusters_list = []
