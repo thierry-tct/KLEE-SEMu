@@ -374,8 +374,6 @@ def loadData(proj2dir, use_func=False, projcommonreldir=None, \
                                                         onlykillable=False):
     merged_df = None
     all_initial = {}
-    if projcommonreldir is None:
-        projcommonreldir = getProjRelDir()
 
     input_csv = funcs_csv_file if use_func else csv_file
 
@@ -1088,6 +1086,9 @@ def plot_overlap_3(outdir, msCol, proj_agg_func2_name,time_snap, \
 def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 projcommonreldir=None, onlykillable=False, no_concrete=False):
     has_subsuming_data = True
+
+    if projcommonreldir is None:
+        projcommonreldir = getProjRelDir()
 
     # load the data
     loaded_merged_df, all_initial = loadData(proj2dir, use_func, \
