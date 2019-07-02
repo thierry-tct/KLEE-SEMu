@@ -657,7 +657,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                     for k in tmp_stats:
                         tmp_stats[k]['p_value'] = wilcoxon(in_data[g1][k], in_data[g2][k], isranksum=False)
                         tmp_stats[k]['A12'] = a12(in_data[g1][k], in_data[g2][k], pairwise=True)
-                    statstest_obj[(g1, g2)] = tmp_stats
+                    statstest_obj[str((g1, g2))] = tmp_stats
             dumpJson(statstest_obj, filename)
         #~ def inner_stattest()
 
