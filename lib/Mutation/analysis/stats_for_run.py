@@ -2,6 +2,7 @@
 # Library to compute the stats after run.py
 # Example
 # python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "5 15 30 60 120"
+# python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "120"
 
 from __future__ import print_function
 import os
@@ -45,6 +46,14 @@ def wilcoxon(list1, list2, isranksum=True):
         p_value = scipy.stats.wilcoxon(list1, list2)
     return p_value
 #~ def wilcoxon()
+
+def dumpJson (obj, filename, pretty=True):
+    with open(filename, "w") as fp:
+        if pretty:
+            json.dump(obj, fp, indent=2, sort_keys=True)
+        else:
+            json.dump(obj, fp)
+#~ dumpJson()
 #############################################
 def compute_auc(in_x_list, in_y_list):
     """ SUM(abs(x2-x1) * abs(y2-y1) / 2 + (x2 - x1) * min(y1, y2))
@@ -66,15 +75,18 @@ def compute_auc(in_x_list, in_y_list):
         print ("# WARNING: only one element for compute_auc")
         return y_list[0]
 
-    auc = 0.0
-    prev_x = None
-    prev_y = None
-    for p_ind, (x_val, y_val) in enumerate(zip(x_list, y_list)):
-        if prev_x is not None:
-            auc += (x_val - prev_x) * \
-                                (min(y_val, prev_y) + abs(y_val - prev_y)/2.0)
-        prev_x = x_val
-        prev_y = y_val
+    if len(x_list) == 1:
+        auc = y_list[0]
+    else:
+        auc = 0.0
+        prev_x = None
+        prev_y = None
+        for p_ind, (x_val, y_val) in enumerate(zip(x_list, y_list)):
+            if prev_x is not None:
+                auc += (x_val - prev_x) * \
+                                    (min(y_val, prev_y) + abs(y_val - prev_y)/2.0)
+            prev_x = x_val
+            prev_y = y_val
     return auc
 #~ def compute_auc()
   
@@ -288,7 +300,7 @@ def get_minimal_conf_set(tech_conf_missed_muts):
             #assert False, "Must have something"
             print ('> Warning: Project do not have minimal cluster: '+str(proj))
 
-    return clusters_list 
+    return clusters_list, all_inter 
 #~ def get_minimal_conf_set()
 
 csv_file="Results.csv"
@@ -560,94 +572,117 @@ def get_techConfUtils(only_semu_cfg_df, SpecialTechs):
 
 def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                                 n_suff, ms_apfds, proj_agg_func=None):
-        for pc in techConfbyvalbyconf:
-            min_vals = {}
-            max_vals = {}
-            med_vals = {}
-            for val in techConfbyvalbyconf[pc]:
-                sorted_by_apfd_tmp = sorted(techConfbyvalbyconf[pc][val], \
-                        key=lambda x: proj_agg_func(getListAPFDSForTechConf(x, ms_apfds)))
-                min_vals[val] = sorted_by_apfd_tmp[0]
-                max_vals[val] = sorted_by_apfd_tmp[-1]
-                med_vals[val] = sorted_by_apfd_tmp[len(sorted_by_apfd_tmp)/2]
-            # plot
-            if type(pc) in (list, tuple):
-                plot_out_file = os.path.join(outdir, "perconf_apfd2_"+".".join(pc))
-            else:
-                plot_out_file = os.path.join(outdir, "perconf_apfd_"+pc)
-            data = {str(val): {"min": getListAPFDSForTechConf(min_vals[val], ms_apfds), \
-                            "med": getListAPFDSForTechConf(med_vals[val], ms_apfds), \
-                            "max": getListAPFDSForTechConf(max_vals[val], ms_apfds)} \
-                                                for val in techConfbyvalbyconf[pc]}
-            emphasis = None
-            if len(data) == 2:
-                n_projs = len(data[data.keys()[0]]['max'])
-                if n_projs >= 2:
-                    diff_of_projs = {projpos: None for projpos in range(n_projs)}
-                    for projpos in range(n_projs):
-                        diff_of_projs[projpos] = data[data.keys()[0]]['max'][projpos] - data[data.keys()[1]]['max'][projpos]
-                    avg = np.average([diff_of_projs[projpos] for projpos in diff_of_projs])
-                    lt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] < avg]
-                    gt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] >= avg]
-                    emphasis = [{}, {}]
-                    for val in data:
-                        emphasis[0][val] = {}
-                        emphasis[1][val] = {}
-                        for mmm in data[val]:
-                            emphasis[0][val][mmm] = []
-                            emphasis[1][val][mmm] = []
-                            for v_ind in lt_avg:
-                                emphasis[0][val][mmm].append(data[val][mmm][v_ind])
-                            for v_ind in gt_avg:
-                                emphasis[1][val][mmm].append(data[val][mmm][v_ind])
+    for pc in techConfbyvalbyconf:
+        min_vals = {}
+        max_vals = {}
+        med_vals = {}
+        for val in techConfbyvalbyconf[pc]:
+            sorted_by_apfd_tmp = sorted(techConfbyvalbyconf[pc][val], \
+                    key=lambda x: proj_agg_func(getListAPFDSForTechConf(x, ms_apfds)))
+            min_vals[val] = sorted_by_apfd_tmp[0]
+            max_vals[val] = sorted_by_apfd_tmp[-1]
+            med_vals[val] = sorted_by_apfd_tmp[len(sorted_by_apfd_tmp)/2]
+        # plot
+        if type(pc) in (list, tuple):
+            plot_out_file = os.path.join(outdir, "perconf_apfd2_"+".".join(pc))
+        else:
+            plot_out_file = os.path.join(outdir, "perconf_apfd_"+pc)
+        data = {str(val): {"min": getListAPFDSForTechConf(min_vals[val], ms_apfds), \
+                        "med": getListAPFDSForTechConf(med_vals[val], ms_apfds), \
+                        "max": getListAPFDSForTechConf(max_vals[val], ms_apfds)} \
+                                            for val in techConfbyvalbyconf[pc]}
+        emphasis = None
+        if len(data) == 2:
+            n_projs = len(data[data.keys()[0]]['max'])
+            if n_projs >= 2:
+                diff_of_projs = {projpos: None for projpos in range(n_projs)}
+                for projpos in range(n_projs):
+                    diff_of_projs[projpos] = data[data.keys()[0]]['max'][projpos] - data[data.keys()[1]]['max'][projpos]
+                avg = np.average([diff_of_projs[projpos] for projpos in diff_of_projs])
+                lt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] < avg]
+                gt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] >= avg]
+                emphasis = [{}, {}]
+                for val in data:
+                    emphasis[0][val] = {}
+                    emphasis[1][val] = {}
+                    for mmm in data[val]:
+                        emphasis[0][val][mmm] = []
+                        emphasis[1][val][mmm] = []
+                        for v_ind in lt_avg:
+                            emphasis[0][val][mmm].append(data[val][mmm][v_ind])
+                        for v_ind in gt_avg:
+                            emphasis[1][val][mmm].append(data[val][mmm][v_ind])
 
-            for sp in SpecialTechs:
-                data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp, ms_apfds) \
-                                                    for em in ['min', 'med','max']}
-            tmp_all_vals = []
-            for g in data:
-                for m in data[g]:
-                    tmp_all_vals += data[g][m]
-            min_y = min(tmp_all_vals)
-            max_y = max(tmp_all_vals)
-            assert min_y >= 0 and min_y <= 100, "invalid min_y: "+str(min_y)
-            assert max_y >= 0 and max_y <= 100, "invalid max_y: "+str(max_y)
-            # Actual plot with data 
-            # TODO arange max_y, min_y and step_y
-            if max_y - min_y >= 10:
-                max_y = min(100, int(max_y) + 2) 
-                min_y = max(0, int(min_y) - 1)
-                step_y = (max_y - min_y) / 10
+        for sp in SpecialTechs:
+            data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp, ms_apfds) \
+                                                for em in ['min', 'med','max']}
+        tmp_all_vals = []
+        for g in data:
+            for m in data[g]:
+                tmp_all_vals += data[g][m]
+        min_y = min(tmp_all_vals)
+        max_y = max(tmp_all_vals)
+        assert min_y >= 0 and min_y <= 100, "invalid min_y: "+str(min_y)
+        assert max_y >= 0 and max_y <= 100, "invalid max_y: "+str(max_y)
+        # Actual plot with data 
+        # TODO arange max_y, min_y and step_y
+        if max_y - min_y >= 10:
+            max_y = min(100, int(max_y) + 2) 
+            min_y = max(0, int(min_y) - 1)
+            step_y = (max_y - min_y) / 10
+        else:
+            step_y = 1
+            rem_tmp = 10 - (max_y - min_y) + 1
+            if 100 - max_y < rem_tmp/2:
+                min_y = int(min_y - (rem_tmp - (100 - max_y)))
+                max_y = 100
+            elif min_y < rem_tmp/2:
+                max_y = int(max_y + (rem_tmp - min_y)) 
+                min_y = 0
             else:
-                step_y = 1
-                rem_tmp = 10 - (max_y - min_y) + 1
-                if 100 - max_y < rem_tmp/2:
-                    min_y = int(min_y - (rem_tmp - (100 - max_y)))
-                    max_y = 100
-                elif min_y < rem_tmp/2:
-                    max_y = int(max_y + (rem_tmp - min_y)) 
-                    min_y = 0
-                else:
-                    max_y = int(max_y + rem_tmp/2)
-                    min_y = int(min_y - rem_tmp/2)
-                min_y = max(0, min_y)
-                max_y = min(100, max_y)
-            yticks_range = range(min_y, max_y+1, step_y)
-            plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
-                                    "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
-                                        selectData=['min', 'med', 'max'])
-            
-            if emphasis is not None:
-                plotMerge.plot_Box_Grouped(emphasis[0], \
-                                    os.path.join(outdir, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[0][emphasis[0].keys()[0]]['max']))), \
-                                    colors_bw, \
-                                    "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
-                                        selectData=['min', 'med', 'max'])
-                plotMerge.plot_Box_Grouped(emphasis[1], \
-                                    os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[1][emphasis[1].keys()[0]]['max']))), \
-                                    colors_bw, \
-                                    "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
-                                        selectData=['min', 'med', 'max'])
+                max_y = int(max_y + rem_tmp/2)
+                min_y = int(min_y - rem_tmp/2)
+            min_y = max(0, min_y)
+            max_y = min(100, max_y)
+        yticks_range = range(min_y, max_y+1, step_y)
+
+        # stat test
+        def inner_stattest(in_data, filename):
+            statstest_obj = {}
+            for pos1,g1 in enumerate(in_data):
+                for pos2, g2 in enumerate(in_data):
+                    if pos1 >= pos2:
+                        continue
+                    tmp_stats = {v:{} for v in ['min', 'med', 'max']}
+                    for k in tmp_stats:
+                        tmp_stats[k]['p_value'] = wilcoxon(in_data[g1][k], in_data[g2][k], isranksum=False)
+                        tmp_stats[k]['A12'] = a12(in_data[g1][k], in_data[g2][k], pairwise=True)
+                    statstest_obj[(g1, g2)] = tmp_stats
+            dumpJson(statstest_obj, filename)
+        #~ def inner_stattest()
+
+        # plot
+        inner_stattest(data, plot_out_file+'.json')
+        plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
+                                "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
+                                    selectData=['min', 'med', 'max'])
+        
+        if emphasis is not None:
+            emph1_plot_out_file = os.path.join(outdir, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[0][emphasis[0].keys()[0]]['max'])))
+            inner_stattest(emphasis[0], emph1_plot_out_file+'.json')
+            plotMerge.plot_Box_Grouped(emphasis[0], \
+                                emph1_plot_out_file, \
+                                colors_bw, \
+                                "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
+                                    selectData=['min', 'med', 'max'])
+
+            emph2_plot_out_file = os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[1][emphasis[1].keys()[0]]['max'])))
+            inner_stattest(emphasis[0], emph2_plot_out_file+'.json')
+            plotMerge.plot_Box_Grouped(emphasis[1], \
+                                emph2_plot_out_file, \
+                                colors_bw, \
+                                "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
+                                    selectData=['min', 'med', 'max'])
 #~ def compute_n_plot_param_influence()
 
 def best_worst_conf(merged_df, outdir, SpecialTechs, ms_by_time, n_suff, \
@@ -721,9 +756,6 @@ def best_worst_conf(merged_df, outdir, SpecialTechs, ms_by_time, n_suff, \
 def select_top_or_all(merged_df, customMaxtime, best_elems, worse_elems):
     if customMaxtime is None:
         assert False, "Must specify a customMaxtime"
-        #selectedTimes_minutes = [5, 15, 30, 60, 120]
-    else:
-        selectedTimes_minutes = [customMaxtime]
 
     # XXX: XXX: Decide whether to continue with all, only topN or only worseN or both topN and worseN
     SEL_use_these_confs = 'topN'
@@ -735,12 +767,12 @@ def select_top_or_all(merged_df, customMaxtime, best_elems, worse_elems):
         elif SEL_use_these_confs == "topN-worstN":
             considered_c = list(set(best_elems+worse_elems+[KLEE_KEY]))
         sel_merged_df = merged_df[merged_df[techConfCol].isin(considered_c)]
-    return sel_merged_df, selectedTimes_minutes
+    return sel_merged_df
 #~ def select_top_or_all()
 
 def plot_extra_data(time_snap_df, time_snap, outdir, ms_apfds, msCol, \
                                     targetCol, covMutsCol, \
-                                    numMutsCol, n_suff, selectedTimes_minutes):
+                                    numMutsCol, n_suff):
     fixed_y = msCol
     changing_ys = [targetCol, covMutsCol, stateCompTimeCol, numGenTestsCol, \
                         propNoDiffOnForkedMutsStatesCol, \
@@ -887,13 +919,28 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
 
 def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals):
     # write down the minimal config set to kill all muts
-    minimal_tech_confs = get_minimal_conf_set(tech_conf_missed_muts)
+    minimal_tech_confs, minimal_missed = get_minimal_conf_set(tech_conf_missed_muts)
     minimal_df_obj = []
     for mtc in minimal_tech_confs:
         minimal_df_obj.append(dict(list({'_TechConf': mtc}.items())+list(techConf2ParamVals[mtc].items())))
     minimal_df = pd.DataFrame(minimal_df_obj)
     minimal_df.to_csv(os.path.join(outdir, "minimal_tech_confs.csv"), index=False)        
+    return minimal_missed
 #~ def process_minimal_config_set()
+
+def compute_and_store_total_increase(outdir, minimal_missed_muts, overlap_data_dict, non_overlap_obj):
+    total_muts = set()
+    for p in overlap_data_dict:
+        for lr in overlap_data_dict[p]:
+            total_muts |= overlap_data_dict[p][lr]
+        for lr in non_overlap_obj[p]:
+            total_muts |= non_overlap_obj[p][lr]
+    minimal_killed = total_muts - minimal_missed_muts
+    json_obj = {}
+    json_obj['Inc_Num_Mut_total_killed'] = len(total_muts)
+    json_obj['Inc_Num_Mut_Semu_Minimal_killed'] = len(minimal_killed)
+    dumpJson(json_obj, os.path.join(outdir, "Total_Increase_Data.json"))
+#~ def compute_and_store_total_increase()
 
 def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict):
             #x_label = "Winning Technique Configuration"
@@ -1080,34 +1127,42 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
         if not os.path.isdir(outdir):
             os.mkdir(outdir)
 
-        # APFDs Computation
-        ms_apfds, ms_by_time = get_ms_apfds(merged_df, msCol)
+        outdir_inner_bak = outdir
+        for use_fixed in [True, False]:
+            if use_fixed:
+                outdir = os.path.join(outdir_inner_bak, "fixed_at_"+str(customMaxtime))
+                # fix val Computation
+                ms_apfds, ms_by_time = get_ms_apfds(merged_df[merged_df[timeCol] == customMaxtime], msCol)
+            else:
+                outdir = os.path.join(outdir_inner_bak, "apfd")
+                # APFDs Computation
+                ms_apfds, ms_by_time = get_ms_apfds(merged_df, msCol)
 
-        # Get only SEMU df
-        only_semu_cfg_df = merged_df[~merged_df[techConfCol].isin(SPECIAL_TECHS)]
+            # Get only SEMU df
+            only_semu_cfg_df = merged_df[~merged_df[techConfCol].isin(SPECIAL_TECHS)]
 
-        # get some utils ...
-        techConf2ParamVals, techConfbyvalbyconf = get_techConfUtils(only_semu_cfg_df, SpecialTechs)
+            # get some utils ...
+            techConf2ParamVals, techConfbyvalbyconf = get_techConfUtils(only_semu_cfg_df, SpecialTechs)
 
-        #proj_agg_func = np.median
-        proj_agg_func = np.average
+            #proj_agg_func = np.median
+            proj_agg_func = np.average
 
-        # XXX Check the influence of each parameter. 
-        # TODO: do not aggregate and do statistical test
-        compute_n_plot_param_influence(techConfbyvalbyconf, outdir, \
-                                    SpecialTechs, n_suff, ms_apfds, proj_agg_func=None)
-        
-        # XXX Find best and worse confs
-        best_elems, worse_elems = best_worst_conf(merged_df, outdir, \
-                                    SpecialTechs, ms_by_time, n_suff, \
-                                    techConfbyvalbyconf, ms_apfds, proj_agg_func=None)
+            # XXX Check the influence of each parameter. 
+            # TODO: do not aggregate and do statistical test
+            compute_n_plot_param_influence(techConfbyvalbyconf, outdir, \
+                                        SpecialTechs, n_suff, ms_apfds, proj_agg_func=np.median)
+            
+            # XXX Find best and worse confs
+            best_elems, worse_elems = best_worst_conf(merged_df, outdir, \
+                                        SpecialTechs, ms_by_time, n_suff, \
+                                        techConfbyvalbyconf, ms_apfds, proj_agg_func=np.median)
 
-        # Select what to continue
-        sel_merged_df, selectedTimes_minutes = select_top_or_all(merged_df, \
-                                        customMaxtime, best_elems, worse_elems)
+            # Select what to continue
+            sel_merged_df = select_top_or_all(merged_df, \
+                                            customMaxtime, best_elems, worse_elems)
 
-        for time_snap in selectedTimes_minutes:
-            time_snap_df = merged_df[merged_df[timeCol] == time_snap]
+            time_snap = customMaxtime
+            time_snap_df = sel_merged_df[sel_merged_df[timeCol] == time_snap]
             if time_snap_df.empty:
                 continue
 
@@ -1115,8 +1170,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             sorted_techconf_by_ms, metric2techconf2values = \
                                 plot_extra_data(sel_merged_df, time_snap, \
                                         outdir, ms_apfds, msCol, targetCol,\
-                                        covMutsCol, numMutsCol, n_suff, \
-                                                        selectedTimes_minutes)
+                                        covMutsCol, numMutsCol, n_suff)
 
             # XXX Killed mutants overlap
             tech_conf_missed_muts, non_overlap_obj, \
@@ -1125,7 +1179,9 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                     projcommonreldir, time_snap, subsuming, \
                                                         sorted_techconf_by_ms)
 
-            process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals)
+            minimal_missed_muts = process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals)
+
+            compute_and_store_total_increase(outdir, minimal_missed_muts, overlap_data_dict, non_overlap_obj)
 
             plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict)
 
