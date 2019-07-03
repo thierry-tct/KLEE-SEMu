@@ -890,7 +890,7 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
             non_overlap_obj[proj] = {}
             overlap_data_dict[proj] = {}
             tech_conf_missed_muts[proj] = set()
-            overal_killed_muts[proj]
+            overal_killed_muts[proj] = set()
             visited = set()
             s_m_key = 'SUBSUMING_CLUSTERS' if subsuming else 'MUTANTS'
             for pair in fobj[s_m_key]["NON_OVERLAP_VENN"]:
