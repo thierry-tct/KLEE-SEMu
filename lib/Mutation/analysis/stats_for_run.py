@@ -679,7 +679,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                     selectData=['min', 'med', 'max'])
 
             emph2_plot_out_file = os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[1][emphasis[1].keys()[0]]['max'])))
-            inner_stattest(emphasis[0], emph2_plot_out_file+'.json')
+            inner_stattest(emphasis[1], emph2_plot_out_file+'.json')
             plotMerge.plot_Box_Grouped(emphasis[1], \
                                 emph2_plot_out_file, \
                                 colors_bw, \
