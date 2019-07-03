@@ -1,8 +1,22 @@
 
 # Library to compute the stats after run.py
 # Example
-# python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "5 15 30 60 120"
-# python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "120"
+## python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "5 15 30 60 120"
+#
+# TODO:
+# 1. Number of additional kills
+# 2. Overlap of per param and VS state of the art
+# 3. best Semu VS KLEE
+# 4. x axis labels, y axis labels 
+"""
+
+python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "120" \
+&& python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS-KILLABLE --maxtimes "120" --onlykillable \
+&& python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS_FUNCS --maxtimes "120" --usefunctions \
+&& python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS_FUNCS-KILLABLE --maxtimes "120" --usefunctions --onlykillable
+
+"""
+
 
 from __future__ import print_function
 import os
