@@ -924,8 +924,14 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
 
 def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=True):
     # write down the minimal config set to kill all muts
-    print("# Computing Minima config set...")
-    minimal_tech_confs, minimal_missed = get_minimal_conf_set(tech_conf_missed_muts, get_all=get_all)
+    print("# Computing Minimal config set...")
+    semu_only_tech_conf_missed_muts = {}
+    for proj in tech_conf_missed_muts:
+        for tc in tech_conf_missed_muts[proj]:
+            if tc not in SPECIAL_TECHS:
+                semu_only_tech_conf_missed_muts[proj][tc] = tech_conf_missed_muts[proj][tc]
+
+    minimal_tech_confs, minimal_missed = get_minimal_conf_set(semu_only_tech_conf_missed_muts, get_all=get_all)
     minimal_df_obj = []
     if get_all:
         assert "Get_all enabled is not yet supported"
@@ -935,7 +941,7 @@ def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals
             minimal_df_obj.append(dict(list({'_TechConf': mtc}.items())+list(techConf2ParamVals[mtc].items())))
         minimal_df = pd.DataFrame(minimal_df_obj)
         minimal_df.to_csv(os.path.join(outdir, "minimal_tech_confs.csv"), index=False)        
-    print("# Done computing Minima config set...")
+    print("# Done computing Minimal config set...")
     return minimal_missed
 #~ def process_minimal_config_set()
 
