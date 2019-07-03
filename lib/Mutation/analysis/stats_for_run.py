@@ -927,6 +927,7 @@ def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals
     print("# Computing Minimal config set...")
     semu_only_tech_conf_missed_muts = {}
     for proj in tech_conf_missed_muts:
+        semu_only_tech_conf_missed_muts[proj] = {}
         for tc in tech_conf_missed_muts[proj]:
             if tc not in SPECIAL_TECHS:
                 semu_only_tech_conf_missed_muts[proj][tc] = tech_conf_missed_muts[proj][tc]
