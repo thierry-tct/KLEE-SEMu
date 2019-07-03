@@ -218,9 +218,10 @@ def plotLines(x_y_lists_pair_dict, order, xlabel, ylabel, imagepath, colors, lin
     plt.close('all')
 #~ def plotLines()
 
-def get_minimal_conf_set(tech_conf_missed_muts):
+def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
     """ the input has this format: 
         {project: {tc: set()<missed muts>}}
+        :param get_all: decides whether to get all the minimal sets of a single one
     """
     flatten_tc_missed_muts = {}
     for proj, tc2mutset in list(tech_conf_missed_muts.items()):
@@ -284,21 +285,24 @@ def get_minimal_conf_set(tech_conf_missed_muts):
         selected_pos.add(min_pos)
         sel_missed &= flatten_tc_missed_muts[tmp[min_pos][0]] 
         
-    for ncomb in [len(selected_pos)]: #range(1,len(tmp)):
-        if len(clusters_list) > 0:
-            break
-        #print("# dbg: in loop 2", tmp, ncomb)
-        print ("# ncomb =", ncomb, "; num cluster for comb is", len(list(itertools.combinations(tmp, ncomb))))
-        for tc_comb in itertools.combinations(tmp, ncomb):
-            intersect = set(flatten_tc_missed_muts[tc_comb[0][0]])
-            for tc_list in tc_comb[1:]:
-                tc = tc_list[0]
-                intersect &= flatten_tc_missed_muts[tc]
-                if intersect == all_inter:
-                    clusters_list += list(tc_comb)
-        if len(clusters_list) == 0:
-            #assert False, "Must have something"
-            print ('> Warning: Project do not have minimal cluster: '+str(proj))
+    if not get_all:
+        clusters_list.append([tmp[i] for i in selected_pos])
+    else:
+        for ncomb in [len(selected_pos)]: #range(1,len(tmp)):
+            if len(clusters_list) > 0:
+                break
+            #print("# dbg: in loop 2", tmp, ncomb)
+            print ("# ncomb =", ncomb, "; num cluster for comb is", len(list(itertools.combinations(tmp, ncomb))))
+            for tc_comb in itertools.combinations(tmp, ncomb):
+                intersect = set(flatten_tc_missed_muts[tc_comb[0][0]])
+                for tc_list in tc_comb[1:]:
+                    tc = tc_list[0]
+                    intersect &= flatten_tc_missed_muts[tc]
+                    if intersect == all_inter:
+                        clusters_list.append(list(tc_comb))
+            if len(clusters_list) == 0:
+                #assert False, "Must have something"
+                print ('> Warning: Project do not have minimal cluster: '+str(proj))
 
     return clusters_list, all_inter 
 #~ def get_minimal_conf_set()
@@ -918,14 +922,20 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
     return tech_conf_missed_muts, non_overlap_obj, overlap_data_dict, tech_conf2position  
 #~ def get_overlap_data()
 
-def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals):
+def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=True):
     # write down the minimal config set to kill all muts
-    minimal_tech_confs, minimal_missed = get_minimal_conf_set(tech_conf_missed_muts)
+    print("# Computing Minima config set...")
+    minimal_tech_confs, minimal_missed = get_minimal_conf_set(tech_conf_missed_muts, get_all=get_all)
     minimal_df_obj = []
-    for mtc in minimal_tech_confs:
-        minimal_df_obj.append(dict(list({'_TechConf': mtc}.items())+list(techConf2ParamVals[mtc].items())))
-    minimal_df = pd.DataFrame(minimal_df_obj)
-    minimal_df.to_csv(os.path.join(outdir, "minimal_tech_confs.csv"), index=False)        
+    if get_all:
+        assert "Get_all enabled is not yet supported"
+    else:
+        for mtc_clust in minimal_tech_confs[0]:
+            mtc = mtc_clust[0]
+            minimal_df_obj.append(dict(list({'_TechConf': mtc}.items())+list(techConf2ParamVals[mtc].items())))
+        minimal_df = pd.DataFrame(minimal_df_obj)
+        minimal_df.to_csv(os.path.join(outdir, "minimal_tech_confs.csv"), index=False)        
+    print("# Done computing Minima config set...")
     return minimal_missed
 #~ def process_minimal_config_set()
 
@@ -1187,7 +1197,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                     projcommonreldir, time_snap, subsuming, \
                                                         sorted_techconf_by_ms)
 
-            minimal_missed_muts = process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals)
+            minimal_missed_muts = process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=False)
 
             compute_and_store_total_increase(outdir, minimal_missed_muts, overlap_data_dict, non_overlap_obj)
 
