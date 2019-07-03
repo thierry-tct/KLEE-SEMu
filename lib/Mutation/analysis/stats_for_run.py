@@ -878,6 +878,7 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
     overlap_data_dict = {}
     non_overlap_obj = {}
     tech_conf_missed_muts = {}
+    overal_killed_muts = {}
     for proj in proj2dir:
         fulldir = os.path.join(proj2dir[proj], projcommonreldir)
         full_overlap_file = os.path.join(fulldir, \
@@ -888,7 +889,8 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
             fobj = json.load(f)
             non_overlap_obj[proj] = {}
             overlap_data_dict[proj] = {}
-            tech_conf_missed_muts[proj] = {}
+            tech_conf_missed_muts[proj] = set()
+            overal_killed_muts[proj]
             visited = set()
             s_m_key = 'SUBSUMING_CLUSTERS' if subsuming else 'MUTANTS'
             for pair in fobj[s_m_key]["NON_OVERLAP_VENN"]:
@@ -900,12 +902,14 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
                 if left_right not in visited:
                     visited.add(left_right)
                     overlap_data_dict[proj][left_right] = fobj[s_m_key]["OVERLAP_VENN"][pair]
+                    overal_killed_muts[proj] |= set(fobj[s_m_key]["OVERLAP_VENN"][pair])
                     
                 if left_right not in non_overlap_obj[proj]:
                     non_overlap_obj[proj][left_right] = {v:0 for v in left_right}
                 for win in fobj[s_m_key]["NON_OVERLAP_VENN"][pair]:
                     non_overlap_obj[proj][left_right][win] += \
                                 len(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
+                    overal_killed_muts[proj] |= set(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
                     lose = set(left_right) - {win}
                     assert len(lose) == 1
                     lose = list(lose)[0]
@@ -919,7 +923,7 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
     tech_conf2position = {}
     for pos, tech_conf in enumerate(sorted_techconf_by_ms):
         tech_conf2position[tech_conf] = pos
-    return tech_conf_missed_muts, non_overlap_obj, overlap_data_dict, tech_conf2position  
+    return tech_conf_missed_muts, non_overlap_obj, overlap_data_dict, tech_conf2position, overal_killed_muts  
 #~ def get_overlap_data()
 
 def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=True):
@@ -946,13 +950,10 @@ def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals
     return minimal_missed
 #~ def process_minimal_config_set()
 
-def compute_and_store_total_increase(outdir, minimal_missed_muts, overlap_data_dict, non_overlap_obj):
+def compute_and_store_total_increase(outdir, minimal_missed_muts, overal_killed_muts):
     total_muts = set()
-    for p in overlap_data_dict:
-        for lr in overlap_data_dict[p]:
-            total_muts |= overlap_data_dict[p][lr]
-        for lr in non_overlap_obj[p]:
-            total_muts |= non_overlap_obj[p][lr]
+    for p in overal_killed_muts:
+        total_muts |= overal_killed_muts[p]
     minimal_killed = total_muts - minimal_missed_muts
     json_obj = {}
     json_obj['Inc_Num_Mut_total_killed'] = len(total_muts)
@@ -1199,14 +1200,14 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
             # XXX Killed mutants overlap
             tech_conf_missed_muts, non_overlap_obj, \
-                overlap_data_dict, tech_conf2position = \
+                overlap_data_dict, tech_conf2position, overal_killed_muts = \
                                     get_overlap_data(proj2dir, \
                                     projcommonreldir, time_snap, subsuming, \
                                                         sorted_techconf_by_ms)
 
             minimal_missed_muts = process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=False)
 
-            compute_and_store_total_increase(outdir, minimal_missed_muts, overlap_data_dict, non_overlap_obj)
+            compute_and_store_total_increase(outdir, minimal_missed_muts, overal_killed_muts)
 
             plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict)
 
