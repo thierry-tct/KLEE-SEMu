@@ -416,7 +416,7 @@ def loadData(proj2dir, use_func=False, projcommonreldir=None, \
         with open(full_initial_json) as fp:
             all_initial[proj] = json.load(fp)
 
-        return merged_df, all_initial
+    return merged_df, all_initial
 #~ loadData()
 
 def merge_initial(all_initial, outdir, use_func, has_subsuming_data=True):
