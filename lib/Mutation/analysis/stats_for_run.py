@@ -1180,6 +1180,7 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
             final_ms['ALL_TECHS'] = {}
             final_ms['ALL_TECHS']['MED'] = np.median([a+b+c for a,b,c in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])])
             final_ms['ALL_TECHS']['AVG'] = np.median([a+b+c for a,b,c in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])]) 
+    final_ms['INITIAL'] = {}
     final_ms['INITIAL']['MED'] = np.median([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
     final_ms['INITIAL']['AVG'] = np.median([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
     dumpJson(final_ms, image_file_final+'.res.json')
