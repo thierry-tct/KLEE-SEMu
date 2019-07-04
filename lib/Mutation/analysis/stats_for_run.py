@@ -1237,8 +1237,9 @@ def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_
         
         # sort
         klee_n_semu_by_proj[0], klee_n_semu_by_proj[1], \
-                                by_proj_overlap, x_vals = \
-                                                zip(*sorted(zip(klee_n_semu_by_proj[0], klee_n_semu_by_proj[1], by_proj_overlap, x_vals)))
+                                by_proj_overlap, x_vals = list(v for v in \
+                                                zip(*sorted(zip(klee_n_semu_by_proj[0], klee_n_semu_by_proj[1], by_proj_overlap, x_vals))))
+        
 
         ## plot
         x_label=None #'Programs'
