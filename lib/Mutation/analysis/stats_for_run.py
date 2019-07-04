@@ -7,7 +7,6 @@
 # 1. Number of additional kills
 # 2. Overlap of per param and VS state of the art
 # 3. best Semu VS KLEE
-# 4. x axis labels, y axis labels 
 """
 
 python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "120" \
@@ -28,6 +27,7 @@ import shutil
 import scipy.stats
 import numpy as np
 import itertools
+import copy
 
 import pandas as pd
 
@@ -115,74 +115,91 @@ def compute_apfd(in_x_list, in_y_list):
 ########################
 
 
-def make_twoside_plot(left_y_vals, right_y_vals, img_out_file=None, \
-                                    x_label="X", y_left_label="Y_LEFT", \
+def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None, \
+                                    x_label=None, y_left_label="Y_LEFT", \
                                     y_right_label="Y_RIGHT", separate=True,\
                                     left_stackbar_legends=None,\
                                     right_stackbar_legends=None):
 
-    if separate:
+    if left_y_vals is None or right_y_vals is None:
+        separate = True
         fig=plt.figure()
-        ax1 = plt.subplot(211)
-        ax2 = plt.subplot(212, sharex = ax1)
+        if left_y_vals is not None:
+            ax1 = fig
+        elif right_y_vals is not None:
+            ax2 = fig
+        else:
+            assert False, "Must specify one at least"
     else:
-        fig, ax1 = plt.subplots()
+        if separate:
+            fig=plt.figure()
+            ax1 = plt.subplot(211)
+            ax2 = plt.subplot(212, sharex = ax1)
+        else:
+            fig, ax1 = plt.subplots()
 
-    color = 'tab:blue'
-    ax1.set_xlabel(x_label)
+    if x_label is not None:
+        ax1.set_xlabel(x_label)
 
     flierprops = dict(marker='o', markersize=2, linestyle='none')
 
-    if separate:
-        ax1.set_ylabel(y_left_label)
-    else:
-        ax1.set_ylabel(y_left_label, color=color)
+    if left_y_vals is not None:
+        color = 'tab:blue'
 
-    if left_stackbar_legends is None:
-        bp1 = ax1.boxplot(left_y_vals, flierprops=flierprops)
-        for element in ['boxes', 'whiskers', 'fliers', \
-                                                'means', 'medians', 'caps']:
-            plt.setp(bp1[element], color=color)
-        ax1.tick_params(axis='y', labelcolor=color)
-    else:
-        bottoms = [np.array([0]*len(left_y_vals[0]))]
-        for v in left_y_vals:
-            bottoms.append(bottoms[-1] + np.array(v))
-        ind = np.arange(len(left_y_vals[0]))
-        p = [None] * len(left_stackbar_legends)
-        for i in range(len(left_stackbar_legends)):
-            p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i])
-        ax1.legend(p, left_stackbar_legends)
+        if separate:
+            ax1.set_ylabel(y_left_label)
+        else:
+            ax1.set_ylabel(y_left_label, color=color)
+
+        if left_stackbar_legends is None:
+            bp1 = ax1.boxplot(left_y_vals, flierprops=flierprops)
+            for element in ['boxes', 'whiskers', 'fliers', \
+                                                    'means', 'medians', 'caps']:
+                plt.setp(bp1[element], color=color)
+            ax1.tick_params(axis='y', labelcolor=color)
+        else:
+            bottoms = [np.array([0]*len(left_y_vals[0]))]
+            for v in left_y_vals:
+                bottoms.append(bottoms[-1] + np.array(v))
+            ind = np.arange(len(left_y_vals[0]))
+            p = [None] * len(left_stackbar_legends)
+            for i in range(len(left_stackbar_legends)):
+                p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i])
+            ax1.legend(p, left_stackbar_legends)
 
     if not separate:
         # instantiate a second axes that shares the same x-axis
         ax2 = ax1.twinx()  
 
-    color = 'tab:red'
+    if right_y_vals is not None:
+        color = 'tab:red'
 
-    if separate:
-        ax2.set_ylabel(y_right_label)  # we already handled the x-label with ax1
+        if separate:
+            ax2.set_ylabel(y_right_label)  # we already handled the x-label with ax1
+        else:
+            ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
+
+        if right_stackbar_legends is None:
+            bp2 = ax2.boxplot(right_y_vals, flierprops=flierprops)
+            for element in ['boxes', 'whiskers', 'fliers', \
+                                                    'means', 'medians', 'caps']:
+                plt.setp(bp2[element], color=color)
+            ax2.tick_params(axis='y', labelcolor=color)
+        else:
+            bottoms = [np.array([0]*len(right_y_vals[0]))]
+            for v in right_y_vals:
+                bottoms.append(bottoms[-1] + np.array(v))
+            ind = np.arange(len(right_y_vals[0]))
+            p = [None] * len(right_stackbar_legends)
+            for i in range(len(right_stackbar_legends)):
+                p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i])
+            ax2.legend(p, right_stackbar_legends)
+            #ax.margins(0.05)
+
+    if x_vals is None:
+        plt.xticks([])
     else:
-        ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
-
-    if right_stackbar_legends is None:
-        bp2 = ax2.boxplot(right_y_vals, flierprops=flierprops)
-        for element in ['boxes', 'whiskers', 'fliers', \
-                                                'means', 'medians', 'caps']:
-            plt.setp(bp2[element], color=color)
-        ax2.tick_params(axis='y', labelcolor=color)
-    else:
-        bottoms = [np.array([0]*len(right_y_vals[0]))]
-        for v in right_y_vals:
-            bottoms.append(bottoms[-1] + np.array(v))
-        ind = np.arange(len(right_y_vals[0]))
-        p = [None] * len(right_stackbar_legends)
-        for i in range(len(right_stackbar_legends)):
-            p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i])
-        ax2.legend(p, right_stackbar_legends)
-        #ax.margins(0.05)
-
-    plt.xticks([])
+        plt.xticks(x_vals, rotation=45)
 
     plt.tight_layout()
     if img_out_file is None:
@@ -387,6 +404,11 @@ linestyles += linestyles*3
 linewidths += linewidths*3
 #####~
 
+# Others
+semuBEST = 'semu-best'
+infectOnly = 'infect-only'
+######~
+
 
 def loadData(proj2dir, use_func=False, projcommonreldir=None, \
                                                         onlykillable=False):
@@ -587,20 +609,33 @@ def get_techConfUtils(only_semu_cfg_df, SpecialTechs):
 #~ def get_techConfUtils()
 
 def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
-                                                n_suff, ms_apfds, proj_agg_func=None):
+                                    n_suff, ms_apfds, proj_agg_func=None, \
+                                    bests_only=False, use_fixed=False, special_on_per_param=False):
+    y_repr = "" if use_fixed else "AVERAGE " # Over time Average
+
     for pc in techConfbyvalbyconf:
+        for_sota = False
         min_vals = {}
         max_vals = {}
         med_vals = {}
+        overal_best = None
+        overal_best_score = 0
         for val in techConfbyvalbyconf[pc]:
             sorted_by_apfd_tmp = sorted(techConfbyvalbyconf[pc][val], \
                     key=lambda x: proj_agg_func(getListAPFDSForTechConf(x, ms_apfds)))
             min_vals[val] = sorted_by_apfd_tmp[0]
             max_vals[val] = sorted_by_apfd_tmp[-1]
             med_vals[val] = sorted_by_apfd_tmp[len(sorted_by_apfd_tmp)/2]
+            if overal_best is None or proj_agg_func(getListAPFDSForTechConf(max_vals[val], ms_apfds)) > overal_best_score:
+                overal_best = str(val)
+                overal_best_score = proj_agg_func(getListAPFDSForTechConf(max_vals[val], ms_apfds))
+
         # plot
         if type(pc) in (list, tuple):
             plot_out_file = os.path.join(outdir, "perconf_apfd2_"+".".join(pc))
+            sota_pc = {"_postCheckContProba", "_mutantMaxFork"}
+            if set(pc) == sota_pc:
+                for_sota = True
         else:
             plot_out_file = os.path.join(outdir, "perconf_apfd_"+pc)
         data = {str(val): {"min": getListAPFDSForTechConf(min_vals[val], ms_apfds), \
@@ -629,38 +664,97 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                         for v_ind in gt_avg:
                             emphasis[1][val][mmm].append(data[val][mmm][v_ind])
 
-        for sp in SpecialTechs:
-            data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp, ms_apfds) \
+        if special_on_per_param:
+            for sp in SpecialTechs:
+                data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp, ms_apfds) \
                                                 for em in ['min', 'med','max']}
-        tmp_all_vals = []
-        for g in data:
-            for m in data[g]:
-                tmp_all_vals += data[g][m]
-        min_y = min(tmp_all_vals)
-        max_y = max(tmp_all_vals)
-        assert min_y >= 0 and min_y <= 100, "invalid min_y: "+str(min_y)
-        assert max_y >= 0 and max_y <= 100, "invalid max_y: "+str(max_y)
-        # Actual plot with data 
-        # TODO arange max_y, min_y and step_y
-        if max_y - min_y >= 10:
-            max_y = min(100, int(max_y) + 2) 
-            min_y = max(0, int(min_y) - 1)
-            step_y = (max_y - min_y) / 10
-        else:
-            step_y = 1
-            rem_tmp = 10 - (max_y - min_y) + 1
-            if 100 - max_y < rem_tmp/2:
-                min_y = int(min_y - (rem_tmp - (100 - max_y)))
-                max_y = 100
-            elif min_y < rem_tmp/2:
-                max_y = int(max_y + (rem_tmp - min_y)) 
-                min_y = 0
+
+        # BEST VS SOTA VS KLEE
+        info_best_sota_klee = None
+        if for_sota:
+            sota_val = "('0', '0.0')"
+            if sota_val in data:
+                best_sota_klee_data = {}
+                for sp in SpecialTechs:
+                    best_sota_klee_data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp, ms_apfds) \
+                                                    for em in ['min', 'med','max']}
+                best_sota_klee_data[infectOnly] = copy.deepcopy(data[sota_val])
+                best_sota_klee_data[semuBEST] = data[overal_best]
+
+                outfile_best_sota_klee = os.path.join(outdir, "bestVSsotaVSklee")
+                
+                info_best_sota_klee = {}
+                for lev, vals in [('max', max_vals), ('med', med_vals), ('min', min_vals)]:
+                    info_best_sota_klee[lev] = {}
+                    for sp, sp_name in list(SpecialTechs.items()):
+                        info_best_sota_klee[lev][sp_name] = {techConfCol: sp,
+                                                    'score': proj_agg_func(best_sota_klee_data[sp_name][lev])}
+                    for v in vals:
+                        v_str = str(v)
+                        if v_str == sota_val:
+                            info_best_sota_klee[lev][infectOnly] = {
+                                                    techConfCol: vals[v], 
+                                                    'score': proj_agg_func(best_sota_klee_data[infectOnly][lev])}
+                        elif v_str == overal_best:
+                            info_best_sota_klee[lev][semuBEST] = {
+                                                    techConfCol: vals[v], 
+                                                    'score': proj_agg_func(best_sota_klee_data[semuBEST][lev])}
+                dumpJson(info_best_sota_klee, outfile_best_sota_klee+'.info.json')
+
+                if bests_only:
+                    for tc in best_sota_klee_data:
+                        del best_sota_klee_data[tc]['med']
+                        del best_sota_klee_data[tc]['min']
+                        best_sota_klee_data[tc][''] = best_sota_klee_data[tc]['max']
+                        del best_sota_klee_data[tc]['max']
+                
+                # PLot
+                inner_stattest(best_sota_klee_data, outfile_best_sota_klee+'--statest.json')
+                median_vals = plotMerge.plot_Box_Grouped(best_sota_klee_data, outfile_best_sota_klee, colors_bw, \
+                                        y_repr+"MS"+n_suff+" (%)", yticks_range=get_yticks_range(best_sota_klee_data), \
+                                            selectData=['min', 'med', 'max'])
+                dumpJson(median_vals, outfile_best_sota_klee+'.medians.json')
+
+        if bests_only:
+            for tc in data:
+                del data[tc]['med']
+                del data[tc]['min']
+
+        def get_yticks_range(in_data):
+            tmp_all_vals = []
+            for g in in_data:
+                for m in in_data[g]:
+                    tmp_all_vals += in_data[g][m]
+            min_y = min(tmp_all_vals)
+            max_y = max(tmp_all_vals)
+            assert min_y >= 0 and min_y <= 100, "invalid min_y: "+str(min_y)
+            assert max_y >= 0 and max_y <= 100, "invalid max_y: "+str(max_y)
+
+            # TODO arange max_y, min_y and step_y
+            if max_y - min_y >= 10:
+                max_y = min(100, int(max_y) + 2) 
+                min_y = max(0, int(min_y) - 1)
+                step_y = (max_y - min_y) / 10
             else:
-                max_y = int(max_y + rem_tmp/2)
-                min_y = int(min_y - rem_tmp/2)
-            min_y = max(0, min_y)
-            max_y = min(100, max_y)
-        yticks_range = range(min_y, max_y+1, step_y)
+                step_y = 1
+                rem_tmp = 10 - (max_y - min_y) + 1
+                if 100 - max_y < rem_tmp/2:
+                    min_y = int(min_y - (rem_tmp - (100 - max_y)))
+                    max_y = 100
+                elif min_y < rem_tmp/2:
+                    max_y = int(max_y + (rem_tmp - min_y)) 
+                    min_y = 0
+                else:
+                    max_y = int(max_y + rem_tmp/2)
+                    min_y = int(min_y - rem_tmp/2)
+                min_y = max(0, min_y)
+                max_y = min(100, max_y)
+            yticks_range = range(min_y, max_y+1, step_y)
+            return yticks_range
+        #~ def get_yticks_range()
+
+        # Actual plot with data 
+        yticks_range = get_yticks_range(data)
 
         # stat test
         def inner_stattest(in_data, filename):
@@ -669,7 +763,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                 for pos2, g2 in enumerate(in_data):
                     if pos1 >= pos2:
                         continue
-                    tmp_stats = {v:{} for v in ['min', 'med', 'max']}
+                    tmp_stats = {v:{} for v in list(in_data[g1])}
                     for k in tmp_stats:
                         tmp_stats[k]['p_value'] = wilcoxon(in_data[g1][k], in_data[g2][k], isranksum=False)
                         tmp_stats[k]['A12'] = a12(in_data[g1][k], in_data[g2][k], pairwise=True)
@@ -678,27 +772,34 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
         #~ def inner_stattest()
 
         # plot
-        inner_stattest(data, plot_out_file+'.json')
-        plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
-                                "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
+        inner_stattest(data, plot_out_file+'--statest.json')
+        median_vals = plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
+                                y_repr+"MS"+n_suff+" (%)", yticks_range=yticks_range, \
                                     selectData=['min', 'med', 'max'])
+        dumpJson(median_vals, plot_out_file+'.medians.json')
+
+        # if case it is having state-of-the art's similar config, plot BEST VS SOTA(zero-propagation) VS KLEE
         
         if emphasis is not None:
             emph1_plot_out_file = os.path.join(outdir, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[0][emphasis[0].keys()[0]]['max'])))
-            inner_stattest(emphasis[0], emph1_plot_out_file+'.json')
-            plotMerge.plot_Box_Grouped(emphasis[0], \
+            inner_stattest(emphasis[0], emph1_plot_out_file+'--statest.json')
+            median_vals = plotMerge.plot_Box_Grouped(emphasis[0], \
                                 emph1_plot_out_file, \
                                 colors_bw, \
-                                "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
+                                y_repr+"MS"+n_suff+" (%)", yticks_range=yticks_range, \
                                     selectData=['min', 'med', 'max'])
+            dumpJson(median_vals, emph1_plot_out_file+'.medians.json')
 
             emph2_plot_out_file = os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[1][emphasis[1].keys()[0]]['max'])))
-            inner_stattest(emphasis[1], emph2_plot_out_file+'.json')
-            plotMerge.plot_Box_Grouped(emphasis[1], \
+            inner_stattest(emphasis[1], emph2_plot_out_file+'--statest.json')
+            median_vals = plotMerge.plot_Box_Grouped(emphasis[1], \
                                 emph2_plot_out_file, \
                                 colors_bw, \
-                                "AVERAGE MS"+n_suff+" (%)", yticks_range=yticks_range, \
+                                y_repr+"MS"+n_suff+" (%)", yticks_range=yticks_range, \
                                     selectData=['min', 'med', 'max'])
+            dumpJson(median_vals, emph2_plot_out_file+'.medians.json')
+
+    return info_best_sota_klee
 #~ def compute_n_plot_param_influence()
 
 def best_worst_conf(merged_df, outdir, SpecialTechs, ms_by_time, n_suff, \
@@ -840,7 +941,7 @@ def plot_extra_data(time_snap_df, time_snap, outdir, ms_apfds, msCol, \
             ms_inc_apfd_vals.append([ms_apfds[p][tech_conf] for p in ms_apfds])
         plot_img_out_file = os.path.join(outdir, "msapfdVSms-"+ \
                                                             str(time_snap))
-        make_twoside_plot(fix_vals, ms_inc_apfd_vals, plot_img_out_file, \
+        make_twoside_plot(fix_vals, ms_inc_apfd_vals, img_out_file=plot_img_out_file, \
                         x_label="Configuations", y_left_label=fixed_y, \
                                             y_right_label=ms_inc_apfd_y)
 
@@ -881,7 +982,7 @@ def plot_extra_data(time_snap_df, time_snap, outdir, ms_apfds, msCol, \
                 else:
                     assert False, "BUG, unreachable"
                     
-            make_twoside_plot(fix_vals, chang_vals, plot_img_out_file, \
+            make_twoside_plot(fix_vals, chang_vals, img_out_file=plot_img_out_file, \
                         x_label="Configuations", y_left_label=fixed_y, \
                                                     y_right_label=chang_y)
     return sorted_techconf_by_ms, metric2techconf2values  
@@ -968,47 +1069,72 @@ def compute_and_store_total_increase(outdir, minimal_missed_muts, minimal_add_ki
     dumpJson(json_obj, os.path.join(outdir, "Total_Increase_Data.json"))
 #~ def compute_and_store_total_increase()
 
-def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict):
-            #x_label = "Winning Technique Configuration"
-            #y_label = "Other Technique Configuration"
-            #hue = "special"
-            #num_x_wins = "# Mutants Killed more by X"
+def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee):
+    #x_label = "Winning Technique Configuration"
+    #y_label = "Other Technique Configuration"
+    #hue = "special"
+    #num_x_wins = "# Mutants Killed more by X"
 
-            # Plot klee conf overlap by proj
-            klee_n_semu_by_proj = [[], []]
-            by_proj_overlap = []
-            SEL_use_best_apfd = True # decide whether to use best APFD of maxes
-            for proj in non_overlap_obj:
-                klee_n_semu_by_proj[0].append(None)
-                klee_n_semu_by_proj[1].append(None)
-                by_proj_overlap.append(0)
-                if SEL_use_best_apfd:
-                    best_ = best_elems[0]
-                    for left_right in non_overlap_obj[proj]:
-                        if KLEE_KEY in left_right and best_ in left_right:
-                            klee_n_semu_by_proj[0][-1] = non_overlap_obj[proj][left_right][best_]
-                            klee_n_semu_by_proj[1][-1] = non_overlap_obj[proj][left_right][KLEE_KEY]
+    SEL_use_best_apfd = True # decide whether to use best APFD of maxes
+
+    if SEL_use_best_apfd:
+        rounds = [[(best_elems[0], semuBEST), (KLEE_KEY, 'klee')],
+                    [(best_elems[0], semuBEST), (info_best_sota_klee['max'][infectOnly][techConfCol], infectOnly)],
+                    [(info_best_sota_klee['max'][infectOnly][techConfCol], infectOnly), (KLEE_KEY, 'klee')]]
+    else:
+        rounds = [[(None, 'semu'), (KLEE_KEY, 'klee')]]
+
+    for principal, secondary in rounds:
+        princ_key, princ_name = principal
+        sec_key, sec_name = secondary
+
+        # Plot klee conf overlap by proj
+        klee_n_semu_by_proj = [[], []]
+        by_proj_overlap = []
+        x_vals = []
+        for proj in non_overlap_obj:
+            klee_n_semu_by_proj[0].append(None)
+            klee_n_semu_by_proj[1].append(None)
+            by_proj_overlap.append(0)
+            if SEL_use_best_apfd:
+                for left_right in non_overlap_obj[proj]:
+                    if sec_key in left_right and princ_key in left_right:
+                        klee_n_semu_by_proj[0][-1] = non_overlap_obj[proj][left_right][princ_key]
+                        klee_n_semu_by_proj[1][-1] = non_overlap_obj[proj][left_right][sec_key]
+                        by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
+                        x_vals.append(proj)
+                        break
+            else:
+                for left_right in non_overlap_obj[proj]:
+                    if sec_key in left_right:
+                        s_c_n_o = non_overlap_obj[proj][left_right][list(set(left_right)-{sec_key})[0]]
+                        k_n_o = non_overlap_obj[proj][left_right][sec_key]
+                        if klee_n_semu_by_proj[0][-1] is None or \
+                                s_c_n_o - k_n_o > klee_n_semu_by_proj[0][-1] - klee_n_semu_by_proj[1][-1]:
+                            klee_n_semu_by_proj[0][-1] = s_c_n_o
+                            klee_n_semu_by_proj[1][-1] = k_n_o
                             by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
-                            break
-                else:
-                    for left_right in non_overlap_obj[proj]:
-                        if KLEE_KEY in left_right:
-                            s_c_n_o = non_overlap_obj[proj][left_right][list(set(left_right)-{KLEE_KEY})[0]]
-                            k_n_o = non_overlap_obj[proj][left_right][KLEE_KEY]
-                            if klee_n_semu_by_proj[0][-1] is None or \
-                                    s_c_n_o - k_n_o > klee_n_semu_by_proj[0][-1] - klee_n_semu_by_proj[1][-1]:
-                                klee_n_semu_by_proj[0][-1] = s_c_n_o
-                                klee_n_semu_by_proj[1][-1] = k_n_o
-                                by_proj_overlap[-1] = overlap_data_dict[proj][left_right]
-                if klee_n_semu_by_proj[1] > klee_n_semu_by_proj[0]:
-                    print(">>>> Klee has higher non overlap that all semu for project", proj, "(", klee_n_semu_by_proj[1], "VS", klee_n_semu_by_proj[0], ")")
-            ## plot
-            make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
-                        os.path.join(outdir, "proj_overlap-"+str(time_snap)+"min"), \
-                        x_label="Programs", y_left_label="# Mutants", \
-                                        y_right_label="# Non Overlapping Mutants", \
-                                    left_stackbar_legends=['semu', 'klee', 'overlap'], \
-                                    right_stackbar_legends=['semu', 'klee'])
+                            x_vals.append(proj)
+            if klee_n_semu_by_proj[1] > klee_n_semu_by_proj[0]:
+                print(">>>> Klee has higher non overlap that all semu for project", proj, "(", klee_n_semu_by_proj[1], "VS", klee_n_semu_by_proj[0], ")")
+        #x_vals = None
+        ## plot
+        x_label=None #'Programs'
+        image_file = os.path.join(outdir, "proj_overlap-"+princ_name+'VS'+sec_name+str(time_snap)+"min")
+        #make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
+        make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], None, x_vals=x_vals, \
+                    img_out_file=image_file, \
+                    x_label=x_label, y_left_label="# Killed Mutants", \
+                                    y_right_label="# Non Overlapping Mutants", \
+                                left_stackbar_legends=[princ_name, sec_name, 'overlap'], \
+                                right_stackbar_legends=[princ_name, sec_name])
+        # save data as json
+        json_obj = {}
+        tmp = klee_n_semu_by_proj+[by_proj_overlap]
+        for pos, proj in enumerate(x_vals):
+            json_obj[proj] = {princ_name: tmp[0][pos], sec_name: tmp[1][pos],\
+                                'OVERLAP': tmp[2][pos]}
+        dumpJson(json_obj, image_file+'.data.json')
 #~ def plot_overlap_1()
 
 def plot_overlap_2(outdir, non_overlap_obj, SpecialTechs, tech_conf2position, \
@@ -1054,7 +1180,7 @@ def plot_overlap_2(outdir, non_overlap_obj, SpecialTechs, tech_conf2position, \
     return killed_muts_overlap
 #~ def plot_overlap_2()
 
-def plot_overlap_3(outdir, msCol, proj_agg_func2_name,time_snap, \
+def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
                     killed_muts_overlap, sorted_techconf_by_ms, \
                         metric2techconf2values, tech_conf2position, \
                                         proj_agg_func2, overlap_data_dict):
@@ -1071,6 +1197,9 @@ def plot_overlap_3(outdir, msCol, proj_agg_func2_name,time_snap, \
     sb_legend = ['semu', 'klee']
     chang_vals2 = [[], []]
     overlap_vals = []
+    x_vals = None
+    if set(best_elems) == set(sorted_techconf_by_ms):
+        x_vals = []
     klee = SPECIAL_TECHS[KLEE_KEY]
     klee_related_df = killed_muts_overlap[killed_muts_overlap[hue].isin(\
                                             [klee+'_wins', klee+'_loses'])]
@@ -1092,7 +1221,7 @@ def plot_overlap_3(outdir, msCol, proj_agg_func2_name,time_snap, \
         assert len(tmp_v) != 0
         chang_vals2[1].append(tmp_v[0])
 
-    make_twoside_plot(fix_vals2, chang_vals2, image_out2, \
+    make_twoside_plot(fix_vals2, chang_vals2, img_out_file=image_out2, \
                 x_label="Configuations", y_left_label=fixed_y, \
                                             y_right_label=chang_y2, \
                                 right_stackbar_legends=sb_legend)
@@ -1100,8 +1229,9 @@ def plot_overlap_3(outdir, msCol, proj_agg_func2_name,time_snap, \
     image_out3 = os.path.join(outdir, \
                             "semu_klee-overlap_all-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
     overlap_non_vals = chang_vals2 + [overlap_vals] 
-    make_twoside_plot(overlap_non_vals, chang_vals2, image_out3, \
-                x_label="Configuations", y_left_label="# Mutants", \
+    #make_twoside_plot(overlap_non_vals, chang_vals2, img_out_file=image_out3, \
+    make_twoside_plot(overlap_non_vals, None, img_out_file=image_out3, \
+                x_label="Configuations", y_left_label="# Killed Mutants", \
                                             y_right_label=chang_y2, \
                             left_stackbar_legends=sb_legend+['overlap'], \
                             right_stackbar_legends=sb_legend)
@@ -1181,9 +1311,9 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             proj_agg_func = np.average
 
             # XXX Check the influence of each parameter. 
-            # TODO: do not aggregate and do statistical test
-            compute_n_plot_param_influence(techConfbyvalbyconf, outdir, \
-                                        SpecialTechs, n_suff, ms_apfds, proj_agg_func=np.median)
+            info_best_sota_klee = compute_n_plot_param_influence(techConfbyvalbyconf, outdir, \
+                                        SpecialTechs, n_suff, ms_apfds, proj_agg_func=np.median, \
+                                        bests_only=False, use_fixed=use_fixed)
             
             # XXX Find best and worse confs
             best_elems, worse_elems = best_worst_conf(merged_df, outdir, \
@@ -1217,7 +1347,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
             #compute_and_store_total_increase(outdir, minimal_missed_muts, minimal_add_killed)
 
-            plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict)
+            plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee)
 
                             
             for proj_agg_func2, proj_agg_func2_name in [(np.average, "average"), (np.median, "median")]:
@@ -1225,7 +1355,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                 SpecialTechs, tech_conf2position, \
                                 proj_agg_func2, proj_agg_func2_name, time_snap)
 
-                plot_overlap_3(outdir, msCol, proj_agg_func2_name,time_snap, \
+                plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
                             killed_muts_overlap, sorted_techconf_by_ms, \
                                 metric2techconf2values, tech_conf2position, \
                                     proj_agg_func2, overlap_data_dict)
