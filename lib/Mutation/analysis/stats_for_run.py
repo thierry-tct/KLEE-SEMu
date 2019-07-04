@@ -200,8 +200,9 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
         plt.xticks([])
     else:
         locs, labels = plt.xticks()
-        assert len(locs) == len(x_vals), "labels mismatch"
-        plt.xticks(locs, x_vals, rotation=45)
+        #assert len(locs) == len(x_vals), "labels mismatch: {} VS {}.".format(len(locs), len(x_vals))
+        print("labels mismatch: {} VS {}.".format(len(locs), len(x_vals)))
+        plt.xticks(locs, x_vals, rotation=45, ha='right')
 
     plt.tight_layout()
     if img_out_file is None:
