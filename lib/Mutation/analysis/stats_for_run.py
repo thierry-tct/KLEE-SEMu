@@ -1069,6 +1069,7 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
                                     all_initial, merged_initial_ms_json_obj, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff='', use_fixed=False):
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
+    print(tech_conf_missed_muts)
     tmp_elem = list(tech_conf_missed_muts[list(tech_conf_missed_muts)[0]])[0]
     tmp_elem_df = time_snap_df[time_snap_df[techConfCol] == tmp_elem]
 
@@ -1469,6 +1470,11 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             add_total_cand_muts_by_proj, add_total_killed_muts_by_proj = \
                      compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_missed_muts, ordered_minimal_set, time_snap_df,
                                                 all_initial, merged_initial_ms_json_obj, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, n_suff, use_fixed)
+
+            mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_total_killed_muts_by_proj, \
+                                    tech_conf_missed_muts, info_best_sota_klee, \
+                                    all_initial, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
+                                    n_suff=n_suff, use_fixed=use_fixed)
 
             plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee)
 
