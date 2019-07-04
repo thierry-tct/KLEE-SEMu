@@ -1019,14 +1019,16 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
                     
                 if left_right not in non_overlap_obj[proj]:
                     non_overlap_obj[proj][left_right] = {v:0 for v in left_right}
+                
+                for tmp_tc in left_right:
+                    if tmp_tc not in tech_conf_missed_muts[proj]:
+                        tech_conf_missed_muts[proj][tmp_tc] = set()
                 for win in fobj[s_m_key]["NON_OVERLAP_VENN"][pair]:
                     non_overlap_obj[proj][left_right][win] += \
                                 len(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
                     lose = set(left_right) - {win}
                     assert len(lose) == 1
                     lose = list(lose)[0]
-                    if lose not in tech_conf_missed_muts[proj]:
-                        tech_conf_missed_muts[proj][lose] = set()
                     tech_conf_missed_muts[proj][lose] |= set(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
     all_tech_confs = {v for p in non_overlap_obj[non_overlap_obj.keys()[0]] for v in p}
     # We only use top 5 and KLEE
@@ -1089,9 +1091,9 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
     def compute_num_killed(tc_list):
         res_per_proj = {}
         for proj, d in list(tech_conf_missed_muts.items()):
-            missed = set(tech_conf_missed_muts[proj][tc_list[0]])
+            missed = set(d[tc_list[0]])
             for tc in tc_list[1:]:
-                missed &= set(tech_conf_missed_muts[proj][tc])
+                missed &= set(d[tc])
             res_per_proj[proj] = add_total_killed_muts_by_proj[proj] - len(missed)
         return res_per_proj
     #~ def compute_num_killed()
@@ -1184,7 +1186,7 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
     dumpJson(final_ms, image_file_final+'.res.json')
 #~def mutation_scores_best_sota_klee()
 
-def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee):
+def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee, add_total_cand_muts_by_proj):
     #x_label = "Winning Technique Configuration"
     #y_label = "Other Technique Configuration"
     #hue = "special"
@@ -1240,21 +1242,28 @@ def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_
 
         ## plot
         x_label=None #'Programs'
-        image_file = os.path.join(outdir, "proj_overlap-"+princ_name+'VS'+sec_name+str(time_snap)+"min")
-        #make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
-        make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], None, x_vals=x_vals, \
-                    img_out_file=image_file, \
-                    x_label=x_label, y_left_label="# Killed Mutants", \
-                                    y_right_label="# Non Overlapping Mutants", \
-                                left_stackbar_legends=[princ_name, sec_name, 'overlap'], \
-                                right_stackbar_legends=[princ_name, sec_name])
-        # save data as json
-        json_obj = {}
-        tmp = klee_n_semu_by_proj+[by_proj_overlap]
-        for pos, proj in enumerate(x_vals):
-            json_obj[proj] = {princ_name: tmp[0][pos], sec_name: tmp[1][pos],\
-                                'OVERLAP': tmp[2][pos]}
-        dumpJson(json_obj, image_file+'.data.json')
+        for suffix, ylabel_name in [('number', "# Killed Mutants"), ('proportion', "Proportion Killed Mutants")]:
+            tri_lists = klee_n_semu_by_proj+[by_proj_overlap]
+            if suffix == 'proportion':
+                for ll in tri_lists:
+                    for i in range(len(ll)):
+                        ll[i] = ll[i] * 1.0 / add_total_cand_muts_by_proj[x_vals[i]]
+                        
+            image_file = os.path.join(outdir, "proj_overlap-"+princ_name+'VS'+sec_name+str(time_snap)+"min."+suffix)
+            #make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
+            make_twoside_plot(tri_lists, None, x_vals=x_vals, \
+                        img_out_file=image_file, \
+                        x_label=x_label, y_left_label=ylabel_name, \
+                                        y_right_label="# Non Overlapping Mutants", \
+                                    left_stackbar_legends=[princ_name, sec_name, 'overlap'], \
+                                    right_stackbar_legends=[princ_name, sec_name])
+            # save data as json
+            json_obj = {}
+            tmp = tri_lists
+            for pos, proj in enumerate(x_vals):
+                json_obj[proj] = {princ_name: tmp[0][pos], sec_name: tmp[1][pos],\
+                                    'OVERLAP': tmp[2][pos]}
+            dumpJson(json_obj, image_file+'.data.json')
 #~ def plot_overlap_1()
 
 def plot_overlap_2(outdir, non_overlap_obj, SpecialTechs, tech_conf2position, \
@@ -1478,7 +1487,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                     all_initial, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff=n_suff, use_fixed=use_fixed)
 
-            plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee)
+            plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee, add_total_cand_muts_by_proj)
 
                             
             for proj_agg_func2, proj_agg_func2_name in [(np.average, "average"), (np.median, "median")]:
