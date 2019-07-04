@@ -1071,7 +1071,7 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
                                     all_initial, merged_initial_ms_json_obj, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff='', use_fixed=False):
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
-    tmp_elem = list(tech_conf_missed_muts[list(time_snap_df[PROJECT_ID_COL])[0]])[0]
+    tmp_elem = list(time_snap_df[techConfCol])[0]
     tmp_elem_df = time_snap_df[time_snap_df[techConfCol] == tmp_elem]
 
     add_total_cand_muts_by_proj = {}
