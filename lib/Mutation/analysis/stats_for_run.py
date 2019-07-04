@@ -199,10 +199,10 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
     if x_vals is None:
         plt.xticks([])
     else:
-        locs, labels = plt.xticks()
+        #locs, labels = plt.xticks()
         #assert len(locs) == len(x_vals), "labels mismatch: {} VS {}.".format(len(locs), len(x_vals))
-        print("labels mismatch: {} VS {}.".format(len(locs), len(x_vals)))
-        plt.xticks(locs, x_vals, rotation=45, ha='right')
+        #print("labels mismatch: {} VS {}.".format(len(locs), len(x_vals)))
+        plt.xticks(np.arange(len(x_vals)), x_vals, rotation=45, ha='right')
 
     plt.tight_layout()
     if img_out_file is None:
@@ -1121,7 +1121,12 @@ def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_
                             x_vals.append(proj)
             if klee_n_semu_by_proj[1] > klee_n_semu_by_proj[0]:
                 print(">>>> Klee has higher non overlap that all semu for project", proj, "(", klee_n_semu_by_proj[1], "VS", klee_n_semu_by_proj[0], ")")
-        #x_vals = None
+        
+        # sort
+        klee_n_semu_by_proj[0], klee_n_semu_by_proj[1], \
+                                by_proj_overlap, x_vals = \
+                                                zip(*sorted(zip(klee_n_semu_by_proj[0], klee_n_semu_by_proj[1], by_proj_overlap, x_vals)))
+
         ## plot
         x_label=None #'Programs'
         image_file = os.path.join(outdir, "proj_overlap-"+princ_name+'VS'+sec_name+str(time_snap)+"min")
