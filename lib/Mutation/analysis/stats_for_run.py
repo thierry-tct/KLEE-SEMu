@@ -199,7 +199,9 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
     if x_vals is None:
         plt.xticks([])
     else:
-        plt.xticks(x_vals, rotation=45)
+        locs, labels = plt.xticks()
+        assert len(locs) == len(x_vals), "labels mismatch"
+        plt.xticks(locs, x_vals, rotation=45)
 
     plt.tight_layout()
     if img_out_file is None:
@@ -1047,6 +1049,7 @@ def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals
             if tc not in SPECIAL_TECHS:
                 semu_only_tech_conf_missed_muts[proj][tc] = tech_conf_missed_muts[proj][tc]
 
+    # TODO: add computing per proj and overal increase of minimal conf and all (including KLEE). Use time_snap_df and pick a conf
     minimal_tech_confs, minimal_missed = get_minimal_conf_set(semu_only_tech_conf_missed_muts, get_all=get_all)
     minimal_df_obj = []
     if get_all:
@@ -1342,7 +1345,6 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                     projcommonreldir, time_snap, subsuming, \
                                                         sorted_techconf_by_ms)
 
-            # TODO: add computing per proj and overal increase of minimal conf and all (including KLEE). Use time_snap_df and pick a conf
             minimal_num_missed_muts = process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=False)
 
             #compute_and_store_total_increase(outdir, minimal_missed_muts, minimal_add_killed)
