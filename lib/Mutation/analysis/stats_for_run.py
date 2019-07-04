@@ -1100,10 +1100,12 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
     bp_data_final = []
     for i in range(1, len(ordered_minimal_set)+1):
         killed_per_proj = compute_num_killed(ordered_minimal_set[:i])
-        bp_data.append([killed_per_proj[p] * 100.0 / add_total_cand_muts_by_proj[p] for p in killed_per_proj])
+        bp_data.append([(0 if add_total_cand_muts_by_proj[p] == 0 else killed_per_proj[p] * 100.0 / add_total_cand_muts_by_proj[p]) \
+                                                                                                        for p in killed_per_proj])
         bp_data_final.append([(all_initial[p][initialKillMutsKey] + killed_per_proj[p]) * 100.0 / all_initial[p][initialNumMutsKey] \
                                                                                                             for p in killed_per_proj])
-    bp_data.append([add_total_killed_muts_by_proj[p] * 100.0 / add_total_cand_muts_by_proj[p] for p in add_total_killed_muts_by_proj])
+    bp_data.append([(0 if add_total_cand_muts_by_proj[p] == 0 else add_total_killed_muts_by_proj[p] * 100.0 / add_total_cand_muts_by_proj[p]) \
+                                                                                                for p in add_total_killed_muts_by_proj])
     bp_data_final.append([(all_initial[p][initialKillMutsKey] + add_total_killed_muts_by_proj[p]) * 100.0 / all_initial[p][initialNumMutsKey] \
                                                                                                 for p in add_total_killed_muts_by_proj])
 
@@ -1154,8 +1156,8 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
         techperf_miss_final = [[], [], []]
         x_vals = []
         for proj in nkilled_by_proj:
-            techperf_miss[0].append(nkilled_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
-            techperf_miss[1].append(nmiss_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
+            techperf_miss[0].append(0 if add_total_cand_muts_by_proj[proj] == 0 else nkilled_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
+            techperf_miss[1].append(0 if add_total_cand_muts_by_proj[proj] == 0 else nmiss_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
             techperf_miss_final[1].append(nkilled_by_proj[proj] * 100.0 / all_initial[proj][initialNumMutsKey])
             techperf_miss_final[2].append(nmiss_by_proj[proj] * 100.0 / all_initial[proj][initialNumMutsKey])
             techperf_miss_final[0].append(all_initial[proj][initialKillMutsKey] * 100.0 / all_initial[proj][initialNumMutsKey])
@@ -1244,7 +1246,8 @@ def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_
             if suffix == 'proportion':
                 for ll in tri_lists:
                     for i in range(len(ll)):
-                        ll[i] = ll[i] * 1.0 / add_total_cand_muts_by_proj[x_vals[i]]
+                        if add_total_cand_muts_by_proj[x_vals[i]] != 0:
+                            ll[i] = ll[i] * 1.0 / add_total_cand_muts_by_proj[x_vals[i]]
                         
             image_file = os.path.join(outdir, "proj_overlap-"+princ_name+'VS'+sec_name+str(time_snap)+"min."+suffix)
             #make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
