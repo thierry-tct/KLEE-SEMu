@@ -123,11 +123,11 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
 
     if left_y_vals is None or right_y_vals is None:
         separate = True
-        fig=plt.figure()
+        fig, ax = plt.subplots()
         if left_y_vals is not None:
-            ax1 = fig
+            ax1 = ax
         elif right_y_vals is not None:
-            ax2 = fig
+            ax2 = ax
         else:
             assert False, "Must specify one at least"
     else:
