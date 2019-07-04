@@ -4,9 +4,7 @@
 ## python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "5 15 30 60 120"
 #
 # TODO:
-# 1. Number of additional kills
-# 2. Overlap of per param and VS state of the art
-# 3. best Semu VS KLEE
+# 1. Use proportion in overlap
 """
 
 python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "120" \
@@ -297,14 +295,14 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
             print("#> Klee or concrete, managed to kill {} extra mutants".format(len(all_inter)))
     
     # Use greedy Algorithm to find the smallest combination
-    selected_pos = set()
+    selected_pos = []
     min_pos = 0
     min_size = len(flatten_tc_missed_muts[tmp[0][0]])
     for i in range(1,len(tmp)):
         if len(flatten_tc_missed_muts[tmp[i][0]]) < min_size:
             min_size = len(flatten_tc_missed_muts[tmp[i][0]])
             min_pos = i
-    selected_pos.add(min_pos)
+    selected_pos.append(min_pos)
     sel_missed = set(flatten_tc_missed_muts[tmp[min_pos][0]])
     while sel_missed != all_inter:
         min_size = len(sel_missed)
@@ -316,7 +314,7 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
                 min_size = len(flatten_tc_missed_muts[tmp[i][0]] & sel_missed)
                 min_pos = i
         assert min_pos is not None, "Bug: Should have stopped the while loop. "+str(sel_missed)+str(all_inter)
-        selected_pos.add(min_pos)
+        selected_pos.append(min_pos)
         sel_missed &= flatten_tc_missed_muts[tmp[min_pos][0]] 
         
     if not get_all:
@@ -1053,25 +1051,135 @@ def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals
     # TODO: add computing per proj and overal increase of minimal conf and all (including KLEE). Use time_snap_df and pick a conf
     minimal_tech_confs, minimal_missed = get_minimal_conf_set(semu_only_tech_conf_missed_muts, get_all=get_all)
     minimal_df_obj = []
+    ordered_minimal_conf = []
     if get_all:
         assert "Get_all enabled is not yet supported"
     else:
         for mtc_clust in minimal_tech_confs[0]:
             mtc = mtc_clust[0]
+            ordered_minimal_conf.append(mtc)
             minimal_df_obj.append(dict(list({'_TechConf': mtc}.items())+list(techConf2ParamVals[mtc].items())))
         minimal_df = pd.DataFrame(minimal_df_obj)
         minimal_df.to_csv(os.path.join(outdir, "minimal_tech_confs.csv"), index=False)        
     print("# Done computing Minimal config set...")
-    return minimal_missed
+    return minimal_missed, ordered_minimal_conf
 #~ def process_minimal_config_set()
 
-def compute_and_store_total_increase(outdir, minimal_missed_muts, minimal_add_killed):
-    total_muts = set(minimal_add_killed) | set(minimal_missed_muts)
+def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_missed_muts, ordered_minimal_set, time_snap_df,\
+                                    all_initial, merged_initial_ms_json_obj, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
+                                    n_suff='', use_fixed=False):
+    y_repr = "" if use_fixed else "AVERAGE " # Over time Average
+    tmp_elem = list(tech_conf_missed_muts[list(tech_conf_missed_muts)[0]])[0]
+    tmp_elem_df = time_snap_df[time_snap_df[techConfCol] == tmp_elem]
+
+    add_total_cand_muts_by_proj = {}
+    add_total_killed_muts_by_proj = {}
+    for _, row in tmp_elem_df.iterrows():
+        proj = row[PROJECT_ID_COL]
+        add_total_killed_muts_by_proj[proj] = row[killMutsCol] + len(tech_conf_missed_muts[proj][ordered_minimal_set[0]])
+        add_total_cand_muts_by_proj[proj] = row[numMutsCol]
+
+    klee_killed_by_proj = {}
+    for proj, tot_k in list(add_total_killed_muts_by_proj.items()):
+        klee_killed_by_proj[proj] = tot_k - len(tech_conf_missed_muts[proj][KLEE_KEY])
+
+    def compute_num_killed(tc_list):
+        res_per_proj = {}
+        for proj, d in list(tech_conf_missed_muts.items()):
+            missed = set(tech_conf_missed_muts[proj][tc_list[0]])
+            for tc in tc_list[1:]:
+                missed &= set(tech_conf_missed_muts[proj][tc])
+            res_per_proj[proj] = add_total_killed_muts_by_proj[proj] - len(missed)
+        return res_per_proj
+    #~ def compute_num_killed()
+
+    # Plot evolution of minimal
+    bp_data = []
+    bp_data_final = []
+    for i in range(1, len(ordered_minimal_set)+1):
+        killed_per_proj = compute_num_killed(ordered_minimal_set[:i])
+        bp_data.append([killed_per_proj[p] * 100.0 / add_total_cand_muts_by_proj[p] for p in killed_per_proj])
+        bp_data_final.append([(all_initial[p][initialKillMutsKey] + killed_per_proj[p]) * 100.0 / all_initial[p][initialNumMutsKey] \
+                                                                                                            for p in killed_per_proj])
+    bp_data.append([add_total_killed_muts_by_proj[p] * 100.0 / add_total_cand_muts_by_proj[p] for p in add_total_killed_muts_by_proj])
+    bp_data_final.append([(all_initial[p][initialKillMutsKey] + add_total_killed_muts_by_proj[p]) * 100.0 / all_initial[p][initialNumMutsKey] \
+                                                                                                for p in add_total_killed_muts_by_proj])
+
+    image_file = os.path.join(outdir, "minimal_config_evolution-additional")
+    image_file_final = os.path.join(outdir, "minimal_config_evolution-final")
+
+    make_twoside_plot(bp_data, None, img_out_file=image_file, x_vals=list(range(1, len(bp_data)+1))+['all'], \
+                x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)")
+    make_twoside_plot(bp_data_final, None, img_out_file=image_file_final, x_vals=list(range(1, len(bp_data)+1))+['all'], \
+                x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)")
+
+    # Stove Overal data
     json_obj = {}
-    json_obj['Inc_Num_Mut_total_killed'] = len(total_muts)
-    json_obj['Inc_Num_Mut_Semu_Minimal_killed'] = len(minimal_add_killed)
+    json_obj['Inc_Num_Mut_total_killed'] = sum([nk for _, nk in list(add_total_killed_muts_by_proj.items())])
+    json_obj['Inc_Num_Mut_total_candidate'] = sum([nk for _, nk in list(add_total_cand_muts_by_proj.items())])
+    json_obj['Inc_MS_total'] = 100.0 * json_obj['Inc_Num_Mut_total_killed'] / json_obj['Inc_Num_Mut_total_candidate']
+    json_obj['Inc_Num_Mut_Semu_Minimal_killed'] = json_obj['Inc_Num_Mut_total_killed'] - minimal_num_missed_muts
+    json_obj['Inc_MS_Semu_minimal'] = 100.0 * json_obj['Inc_Num_Mut_Semu_Minimal_killed'] / json_obj['Inc_Num_Mut_total_candidate']
+    json_obj['Final_MS_total'] = 100.0 * \
+                            (merged_initial_ms_json_obj[initialKillMutsKey] + json_obj['Inc_Num_Mut_total_killed']) / \
+                                merged_initial_ms_json_obj[initialNumMutsKey]
+    json_obj['Final_MS_Semu_minimal'] = 100.0 * \
+                            (merged_initial_ms_json_obj[initialKillMutsKey] + json_obj['Inc_Num_Mut_Semu_Minimal_killed']) / \
+                                merged_initial_ms_json_obj[initialNumMutsKey]
+    json_obj['Initial_MS_total'] = 100.0 * merged_initial_ms_json_obj[initialKillMutsKey] / merged_initial_ms_json_obj[initialNumMutsKey]
     dumpJson(json_obj, os.path.join(outdir, "Total_Increase_Data.json"))
+
+    return add_total_cand_muts_by_proj, add_total_killed_muts_by_proj
 #~ def compute_and_store_total_increase()
+
+def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_total_killed_muts_by_proj, \
+                                    tech_conf_missed_muts, info_best_sota_klee, \
+                                    all_initial, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
+                                    n_suff='', use_fixed=False):
+    y_repr = "" if use_fixed else "AVERAGE " # Over time Average
+
+    final_ms = {}
+    for key, name in [(KLEE_KEY, 'klee'), \
+                        (info_best_sota_klee['max'][infectOnly][techConfCol], infectOnly),\
+                        (info_best_sota_klee['max'][semuBEST][techConfCol], semuBEST)]:
+        nkilled_by_proj = {}
+        nmiss_by_proj = {}
+        for proj in tech_conf_missed_muts:
+            n_miss = len(tech_conf_missed_muts[proj][key])
+            nkilled_by_proj[proj] = add_total_killed_muts_by_proj[proj] - n_miss
+            nmiss_by_proj[proj] = n_miss
+        techperf_miss = [[], []]
+        techperf_miss_final = [[], [], []]
+        x_vals = []
+        for proj in nkilled_by_proj:
+            techperf_miss[0].append(nkilled_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
+            techperf_miss[1].append(nmiss_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
+            techperf_miss_final[1].append(nkilled_by_proj[proj] * 100.0 / all_initial[proj][initialNumMutsKey])
+            techperf_miss_final[2].append(nmiss_by_proj[proj] * 100.0 / all_initial[proj][initialNumMutsKey])
+            techperf_miss_final[0].append(all_initial[proj][initialKillMutsKey] * 100.0 / all_initial[proj][initialNumMutsKey])
+            x_vals.append(proj)
+        x_label=None #'Programs'
+        image_file = os.path.join(outdir, "selected_techs_MS-additional")
+        image_file_final = os.path.join(outdir, "selected_techs_MS-final")
+        make_twoside_plot(techperf_miss, None, x_vals=x_vals, \
+                    img_out_file=image_file, \
+                    x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
+                                left_stackbar_legends=[name, 'missed'])
+        make_twoside_plot(techperf_miss_final, None, x_vals=x_vals, \
+                    img_out_file=image_file_final, \
+                    x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
+                                left_stackbar_legends=['initial' ,name, 'missed'])
+        final_ms[name] = {}
+        final_ms[name]['MED'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
+        final_ms[name]['AVG'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
+        if 'ALL_TECHS' not in final_ms:
+            final_ms['ALL_TECHS'] = {}
+            final_ms['ALL_TECHS']['MED'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])])
+            final_ms['ALL_TECHS']['AVG'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])])
+    final_ms['INITIAL']['MED'] = np.median([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
+    final_ms['INITIAL']['AVG'] = np.median([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
+    dumpJson(final_ms, image_file_final+'.res.json')
+#~def mutation_scores_best_sota_klee()
 
 def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee):
     #x_label = "Winning Technique Configuration"
@@ -1282,6 +1390,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             targetCol = "#SubsTargetedClusters"
             covMutsCol = "#SubsCoveredClusters"
             killMutsCol = "#SubsKilledClusters"
+            initialKillMutsKey = "Initial#SubsumingKilledMutants"
+            initialNumMutsKey = "Initial#SubsumingMutants"
             n_suff = '*'
         else:
             outdir = os.path.join(outdir_bak, "traditionalMS")
@@ -1290,6 +1400,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             targetCol = "#Targeted"
             covMutsCol = "#Covered"
             killMutsCol = "#Killed"
+            initialKillMutsKey = "Initial#KilledMutants"
+            initialNumMutsKey = "Initial#Mutants"
             n_suff = ''
         
         if not os.path.isdir(outdir):
@@ -1351,9 +1463,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                     projcommonreldir, time_snap, subsuming, \
                                                         sorted_techconf_by_ms)
 
-            minimal_num_missed_muts = process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=False)
+            minimal_num_missed_muts, ordered_minimal_set = \
+                                        process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=False)
 
-            #compute_and_store_total_increase(outdir, minimal_missed_muts, minimal_add_killed)
+            add_total_cand_muts_by_proj, add_total_killed_muts_by_proj = \
+                     compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_missed_muts, ordered_minimal_set, time_snap_df,
+                                                all_initial, merged_initial_ms_json_obj, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, n_suff, use_fixed)
 
             plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee)
 
