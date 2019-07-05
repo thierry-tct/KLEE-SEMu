@@ -121,7 +121,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
 
     if left_y_vals is None or right_y_vals is None:
         separate = True
-        fig, ax = plt.subplots(figsize=(16,10))
+        fig, ax = plt.subplots(figsize=(13,8))
         if left_y_vals is not None:
             ax1 = ax
         elif right_y_vals is not None:
@@ -263,7 +263,7 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
         for tc, mutset in list(tc2mutset.items()):
             if tc not in flatten_tc_missed_muts:
                 flatten_tc_missed_muts[tc] = set()
-            flatten_tc_missed_muts[tc] |= set([os.path.join(proj, str(m)) for m in mutset])
+            flatten_tc_missed_muts[tc] |= set(["#".join([proj, str(m)]) for m in mutset])
 
     visited = set()
     clusters_list = []
@@ -297,13 +297,30 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
         if len(all_inter) > 0:
             print("#> Klee or concrete, managed to kill {} extra mutants".format(len(all_inter)))
     
+    def greedy_eval(mutset):
+        use_median = True
+        if use_median:
+            nmuts_by_proj = {}
+            for m in mutset:
+                proj, raw_m = m.split('#')
+                if proj not in nmuts_by_proj:
+                    nmuts_by_proj[proj] = 0
+                nmuts_by_proj[proj] += 1
+            res = np.median([v for _,v in list(nmuts_by_proj.items())])
+            res = (res, len(mutset))
+        else:
+            res = len(mutset)
+        return res
+    #~ def greedy_eval()
+
     # Use greedy Algorithm to find the smallest combination
     selected_pos = []
     min_pos = 0
     min_size = len(flatten_tc_missed_muts[tmp[0][0]])
     for i in range(1,len(tmp)):
-        if len(flatten_tc_missed_muts[tmp[i][0]]) < min_size:
-            min_size = len(flatten_tc_missed_muts[tmp[i][0]])
+        tmp = greedy_eval(flatten_tc_missed_muts[tmp[i][0]])
+        if tmp < min_size:
+            min_size = tmp
             min_pos = i
     selected_pos.append(min_pos)
     sel_missed = set(flatten_tc_missed_muts[tmp[min_pos][0]])
@@ -313,8 +330,9 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
         for i in range(len(tmp)):
             if i in selected_pos:
                 continue
-            if len(flatten_tc_missed_muts[tmp[i][0]] & sel_missed) < min_size:
-                min_size = len(flatten_tc_missed_muts[tmp[i][0]] & sel_missed)
+            tmp = greedy_eval(flatten_tc_missed_muts[tmp[i][0]] & sel_missed)
+            if tmp < min_size:
+                min_size = tmp
                 min_pos = i
         assert min_pos is not None, "Bug: Should have stopped the while loop. "+str(sel_missed)+str(all_inter)
         selected_pos.append(min_pos)
@@ -1170,6 +1188,15 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
             techperf_miss_final[2].append(nmiss_by_proj[proj] * 100.0 / all_initial[proj][initialNumMutsKey])
             techperf_miss_final[0].append(all_initial[proj][initialKillMutsKey] * 100.0 / all_initial[proj][initialNumMutsKey])
             x_vals.append(proj)
+
+        # sort
+        x_vals_final = copy.deepcopy(x_vals)
+        techperf_miss[0], techperf_miss[1], x_vals = [list(v) for v in \
+                                                zip(*sorted(zip(techperf_miss[0], techperf_miss[1], x_vals)))]
+        techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2], x_vals_final = [list(v) for v in \
+                                            zip(*sorted(zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2], x_vals)))]
+
+
         x_label=None #'Programs'
         image_file = os.path.join(outdir, "selected_techs_MS-additional")
         image_file_final = os.path.join(outdir, "selected_techs_MS-final")
@@ -1177,7 +1204,7 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
                     img_out_file=image_file, \
                     x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
                                 left_stackbar_legends=[name, 'missed'])
-        make_twoside_plot(techperf_miss_final, None, x_vals=x_vals, \
+        make_twoside_plot(techperf_miss_final, None, x_vals=x_vals_final, \
                     img_out_file=image_file_final, \
                     x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
                                 left_stackbar_legends=['initial' ,name, 'missed'])
