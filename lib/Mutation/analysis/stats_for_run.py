@@ -706,7 +706,9 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                                     'score': proj_agg_func(best_sota_klee_data[semuBEST][lev])}
                 dumpJson(info_best_sota_klee, outfile_best_sota_klee+'.info.json')
 
+                bsk_sel_dat = ['min', 'med', 'max']
                 if specific_cmp_best_only:
+                    bsk_sel_dat = ['']
                     for tc in best_sota_klee_data:
                         del best_sota_klee_data[tc]['med']
                         del best_sota_klee_data[tc]['min']
@@ -717,10 +719,12 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                 inner_stattest(best_sota_klee_data, outfile_best_sota_klee+'--statest.json')
                 median_vals = plotMerge.plot_Box_Grouped(best_sota_klee_data, outfile_best_sota_klee, colors_bw, \
                                         y_repr+"MS"+n_suff+" (%)", yticks_range=get_yticks_range(best_sota_klee_data), \
-                                            selectData=['min', 'med', 'max'])
+                                            selectData=bsk_sel_dat)
                 dumpJson(median_vals, outfile_best_sota_klee+'.medians.json')
 
+        selected_data = ['min', 'med', 'max']
         if bests_only:
+            selected_data = ['max']
             for tc in data:
                 del data[tc]['med']
                 del data[tc]['min']
@@ -780,7 +784,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
         inner_stattest(data, plot_out_file+'--statest.json')
         median_vals = plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
                                 y_repr+"MS"+n_suff+" (%)", yticks_range=yticks_range, \
-                                    selectData=['min', 'med', 'max'])
+                                    selectData=selected_data)
         dumpJson(median_vals, plot_out_file+'.medians.json')
 
         # if case it is having state-of-the art's similar config, plot BEST VS SOTA(zero-propagation) VS KLEE
@@ -792,7 +796,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                 emph1_plot_out_file, \
                                 colors_bw, \
                                 y_repr+"MS"+n_suff+" (%)", yticks_range=yticks_range, \
-                                    selectData=['min', 'med', 'max'])
+                                    selectData=selected_data)
             dumpJson(median_vals, emph1_plot_out_file+'.medians.json')
 
             emph2_plot_out_file = os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[1][emphasis[1].keys()[0]]['max'])))
@@ -801,7 +805,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                 emph2_plot_out_file, \
                                 colors_bw, \
                                 y_repr+"MS"+n_suff+" (%)", yticks_range=yticks_range, \
-                                    selectData=['min', 'med', 'max'])
+                                    selectData=selected_data)
             dumpJson(median_vals, emph2_plot_out_file+'.medians.json')
 
     return info_best_sota_klee
