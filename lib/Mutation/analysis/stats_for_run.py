@@ -117,11 +117,11 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                                     x_label=None, y_left_label="Y_LEFT", \
                                     y_right_label="Y_RIGHT", separate=True,\
                                     left_stackbar_legends=None,\
-                                    right_stackbar_legends=None):
+                                    right_stackbar_legends=None, show_grid=True):
 
     if left_y_vals is None or right_y_vals is None:
         separate = True
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(16,10))
         if left_y_vals is not None:
             ax1 = ax
         elif right_y_vals is not None:
@@ -201,6 +201,9 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
         #assert len(locs) == len(x_vals), "labels mismatch: {} VS {}.".format(len(locs), len(x_vals))
         #print("labels mismatch: {} VS {}.".format(len(locs), len(x_vals)))
         plt.xticks(np.arange(len(x_vals)), x_vals, rotation=45, ha='right')
+    
+    if not show_grid:
+        plt.rcParams["axes.grid"] = False
 
     plt.tight_layout()
     if img_out_file is None:
@@ -611,7 +614,8 @@ def get_techConfUtils(only_semu_cfg_df, SpecialTechs):
 
 def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                     n_suff, ms_apfds, proj_agg_func=None, \
-                                    bests_only=False, use_fixed=False, special_on_per_param=False):
+                                    bests_only=False, use_fixed=False, special_on_per_param=False,\
+                                    specific_cmp_best_only=True):
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
 
     for pc in techConfbyvalbyconf:
@@ -702,7 +706,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                                     'score': proj_agg_func(best_sota_klee_data[semuBEST][lev])}
                 dumpJson(info_best_sota_klee, outfile_best_sota_klee+'.info.json')
 
-                if bests_only:
+                if specific_cmp_best_only:
                     for tc in best_sota_klee_data:
                         del best_sota_klee_data[tc]['med']
                         del best_sota_klee_data[tc]['min']
@@ -1078,7 +1082,7 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
     add_total_killed_muts_by_proj = {}
     for _, row in tmp_elem_df.iterrows():
         proj = row[PROJECT_ID_COL]
-        add_total_killed_muts_by_proj[proj] = row[killMutsCol] + len(tech_conf_missed_muts[proj][ordered_minimal_set[0]])
+        add_total_killed_muts_by_proj[proj] = row[killMutsCol] + len(tech_conf_missed_muts[proj][tmp_elem])
         add_total_cand_muts_by_proj[proj] = row[numMutsCol]
 
     klee_killed_by_proj = {}
@@ -1113,9 +1117,9 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
     image_file_final = os.path.join(outdir, "minimal_config_evolution-final")
 
     make_twoside_plot(bp_data, None, img_out_file=image_file, x_vals=list(range(1, len(bp_data)+1))+['all'], \
-                x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)")
+                x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)", show_grid=False)
     make_twoside_plot(bp_data_final, None, img_out_file=image_file_final, x_vals=list(range(1, len(bp_data)+1))+['all'], \
-                x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)")
+                x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)", show_grid=False)
 
     # Stove Overal data
     json_obj = {}
@@ -1175,14 +1179,14 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
                                 left_stackbar_legends=['initial' ,name, 'missed'])
         final_ms[name] = {}
         final_ms[name]['MED'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
-        final_ms[name]['AVG'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
+        final_ms[name]['AVG'] = np.average([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
         if 'ALL_TECHS' not in final_ms:
             final_ms['ALL_TECHS'] = {}
             final_ms['ALL_TECHS']['MED'] = np.median([a+b+c for a,b,c in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])])
-            final_ms['ALL_TECHS']['AVG'] = np.median([a+b+c for a,b,c in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])]) 
+            final_ms['ALL_TECHS']['AVG'] = np.average([a+b+c for a,b,c in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])]) 
     final_ms['INITIAL'] = {}
     final_ms['INITIAL']['MED'] = np.median([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
-    final_ms['INITIAL']['AVG'] = np.median([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
+    final_ms['INITIAL']['AVG'] = np.average([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
     dumpJson(final_ms, image_file_final+'.res.json')
 #~def mutation_scores_best_sota_klee()
 
