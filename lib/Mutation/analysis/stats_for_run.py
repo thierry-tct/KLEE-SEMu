@@ -318,9 +318,9 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
     min_pos = 0
     min_size = len(flatten_tc_missed_muts[tmp[0][0]])
     for i in range(1,len(tmp)):
-        tmp = greedy_eval(flatten_tc_missed_muts[tmp[i][0]])
-        if tmp < min_size:
-            min_size = tmp
+        attempt_size = greedy_eval(flatten_tc_missed_muts[tmp[i][0]])
+        if attempt_size < min_size:
+            min_size = attempt_size
             min_pos = i
     selected_pos.append(min_pos)
     sel_missed = set(flatten_tc_missed_muts[tmp[min_pos][0]])
@@ -330,9 +330,9 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
         for i in range(len(tmp)):
             if i in selected_pos:
                 continue
-            tmp = greedy_eval(flatten_tc_missed_muts[tmp[i][0]] & sel_missed)
-            if tmp < min_size:
-                min_size = tmp
+            attempt_size = greedy_eval(flatten_tc_missed_muts[tmp[i][0]] & sel_missed)
+            if attempt_size < min_size:
+                min_size = attempt_size
                 min_pos = i
         assert min_pos is not None, "Bug: Should have stopped the while loop. "+str(sel_missed)+str(all_inter)
         selected_pos.append(min_pos)
