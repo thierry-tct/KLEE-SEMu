@@ -325,7 +325,7 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
     selected_pos.append(min_pos)
     sel_missed = set(flatten_tc_missed_muts[tmp[min_pos][0]])
     while sel_missed != all_inter:
-        min_size = len(sel_missed)
+        min_size = greedy_eval(sel_missed)
         min_pos = None
         for i in range(len(tmp)):
             if i in selected_pos:
