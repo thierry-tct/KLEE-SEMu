@@ -684,7 +684,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                     best_sota_klee_data[SpecialTechs[sp]] = {em:getListAPFDSForTechConf(sp, ms_apfds) \
                                                     for em in ['min', 'med','max']}
                 best_sota_klee_data[infectOnly] = copy.deepcopy(data[sota_val])
-                best_sota_klee_data[semuBEST] = data[overal_best]
+                best_sota_klee_data[semuBEST] = copy.deepcopy(data[overal_best])
 
                 outfile_best_sota_klee = os.path.join(outdir, "bestVSsotaVSklee")
                 
