@@ -1241,6 +1241,51 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
     dumpJson(final_ms, image_file_final+'.res.json')
 #~def mutation_scores_best_sota_klee()
 
+def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee):
+    time_snap_df = merged_df[merged_df[timeCol] == time_snap]
+
+    # get the data
+    total_tests = {}
+    killing_tests = {}
+    killing_over_all = {}
+    nmut_per_test = {}
+    order = [semuBEST, infectOnly, 'klee']
+    for tech in order:
+        total_tests[tech] = {}
+        killing_tests[tech] = {}
+        killing_over_all[tech] = {}
+        nmut_per_test[tech] = {}
+        raw_name = info_best_sota_klee['max'][tech][techConfCol]
+        tech_df = time_snap_df[time_snap_df[techConfCol] == raw_name]
+        for _,row in tech_df:
+            total_tests[tech][row[PROJECT_ID_COL]] = row[numGenTestsCol]
+            
+    # stat test
+    def inner_stattest2(obj_dict, filename):
+        statstest_obj = {}
+        for pos1,t1 in enumerate(obj_dict):
+            for pos2, t2 in enumerate(obj_dict):
+                if pos1 >= pos2:
+                    continue
+                tmp_stats = {}
+                tmp_stats['p_value'] = wilcoxon(obj_dict[t1], obj_dict[t2], isranksum=False)
+                tmp_stats['A12'] = a12(obj_dict[t1], obj_dict[t2], pairwise=True)
+                statstest_obj[str((t1, t2))] = tmp_stats
+        dumpJson(statstest_obj, filename)
+    #~ def inner_stattest2()
+
+    # plot
+    ## total
+    imagefile = os.path.join(outdir, 'totalGenTests_best_sota_klee')
+    plotobj = {t:[] for t in total_tests}
+    for t in plotobj:
+        for proj in total_tests[t].keys():
+            plotobj[t].append(total_tests[t][proj])
+    medians = plotMerge.plotBoxes(plotobj, order, imagefile, colors_bw, ylabel="# Generated Tests", yticks_range=range(0,101,10))
+    inner_stattest2(plotobj, imagefile+'--statest.json')
+    dumpJson(medians, imagefile+'.medians.json')
+#~ def plot_gentest_killing()
+
 def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee, add_total_cand_muts_by_proj):
     #x_label = "Winning Technique Configuration"
     #y_label = "Other Technique Configuration"
@@ -1545,6 +1590,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                     tech_conf_missed_muts, info_best_sota_klee, \
                                     all_initial, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff=n_suff, use_fixed=use_fixed)
+
+            plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee)
 
             plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee, add_total_cand_muts_by_proj)
 
