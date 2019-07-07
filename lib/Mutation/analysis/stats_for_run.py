@@ -4,7 +4,9 @@
 ## python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "5 15 30 60 120"
 #
 # TODO:
-# 1. Use proportion in overlap
+# 1. Miimal test suite that improve MS and MS*
+# 2. Fix intersection in minimal
+# a) Highlight on the slide what is our contribution
 """
 
 python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "120" \
@@ -297,19 +299,19 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
         if len(all_inter) > 0:
             print("#> Klee or concrete, managed to kill {} extra mutants".format(len(all_inter)))
     
-    def greedy_eval(mutset):
+    def greedy_eval(in_mutset):
         use_median = True
         if use_median:
             nmuts_by_proj = {}
-            for m in mutset:
+            for m in in_mutset:
                 proj, raw_m = m.split('#')
                 if proj not in nmuts_by_proj:
                     nmuts_by_proj[proj] = 0
                 nmuts_by_proj[proj] += 1
             res = np.median([v for _,v in list(nmuts_by_proj.items())])
-            res = (res, len(mutset))
+            res = (res, len(in_mutset))
         else:
-            res = len(mutset)
+            res = len(in_mutset)
         return res
     #~ def greedy_eval()
 
