@@ -122,21 +122,49 @@ def TestsKilling(mutant, dataAll, X_index_string=SM_index_string):
     return list(tests)
 #~ def TestsKilling()
 
-def getKillableMutants(matrixFile, testset=None, testkillinglist=None):
+def getKillableMutants(matrixFile, testset=None, testkillinglist=None, minimal_testkillinglist=None):
     M = loadMatrix(matrixFile, None, SM_index_string)
     basetests = testset if testset is not None else set(M[SM_index_string])
     killablesMuts = []
     testskiling = set()
+    test2killedmuts = {}
     for mid in  set(M) - {SM_index_string}:
         tmp_kill_tests = basetests & set(TestsKilling(mid, M))
         if len(tmp_kill_tests) > 0:
             killablesMuts.append(mid)
             testskiling |= tmp_kill_tests
+            for tc in tmp_kill_tests:
+                if tc not in test2killedmuts:
+                    test2killedmuts[tc] = set()
+                test2killedmuts[tc].add(mid)
 
     if testkillinglist is not None:
         assert type(testkillinglist) == list
         assert len(testkillinglist) == 0
         testkillinglist.extend(list(testskiling))
+    
+    if minimal_testkillinglist is not None:
+        minimal_testkilling = set()
+        # use greedy algorithm
+        all_muts = set()
+        for tc in test2killedmuts:
+            all_muts |= test2killedmuts[tc]
+        mut_killed = set()
+        visited = set()
+        while mut_killed != all_muts:
+            cand = None
+            for tc in test2killedmuts.keys():
+                if tc in minimal_testkilling:
+                    continue
+                if cand is None:
+                    cand = tc
+                else:
+                    if len(mut_killed | test2killedmuts[tc]) > len(mut_killed | test2killedmuts[cand]):
+                        cand = tc
+            assert cand is not None, "Bug"
+            minimal_testkilling.add(cand)
+            mut_killed |= test2killedmuts[cand]
+        minimal_testkillinglist.extend(list(minimal_testkilling))
 
     return killablesMuts
 #~ def getKillableMutants()

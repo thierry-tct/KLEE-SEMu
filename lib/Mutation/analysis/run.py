@@ -2662,8 +2662,10 @@ def main():
 
                                 filt_testsOfThis = set([os.path.join(KLEE_TESTGEN_SCRIPT_TESTS+"-out", "klee-out-0", kt) for kt in filt_testsOfThis])
                                 testsKillingOfThis = []
+                                minimal_testsKillingOfThis = []
                                 if len(filt_testsOfThis) > 0:
-                                    newKilled = set(filt_mutants) & set(matrixHardness.getKillableMutants(sm_file, filt_testsOfThis, testkillinglist=testsKillingOfThis))
+                                    newKilled = set(filt_mutants) & set(matrixHardness.getKillableMutants(sm_file, \
+                                                filt_testsOfThis, testkillinglist=testsKillingOfThis, minimal_testkillinglist=minimal_testsKillingOfThis))
                                     newCovered = set(filt_mutants) & set(matrixHardness.getListCoveredMutants(mcov_file, filt_testsOfThis))
                                     nnewFailing = len(set(matrixHardness.getFaultyTests(pf_file, filt_testsOfThis)))
                                 else:
@@ -2705,6 +2707,7 @@ def main():
                                                 "#Killed": nnewKilled, 
                                                 "#GenTests":len(filt_testsOfThis), 
                                                 "#GenTestsKilling":len(testsKillingOfThis), 
+                                                "#MinimalGenTestsKilling":len(minimal_testsKillingOfThis), 
                                                 "#FailingTests":nnewFailing, 
                                                 "MS-INC":(nnewKilled * 100.0 / filt_nMutants), 
                                                 "#AggregatedTestGen": nGenTests_,

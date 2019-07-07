@@ -4,7 +4,7 @@
 ## python ~/mytools/klee-semu/src/lib/Mutation/analysis/stats_for_run.py -i SEMU_EXECUTION -o RESULTS --maxtimes "5 15 30 60 120"
 #
 # TODO:
-# 1. Miimal test suite that improve MS and MS*
+# 1. Minimal test suite that improve MS and MS*
 # 2. Fix intersection in minimal
 # a) Highlight on the slide what is our contribution
 """
@@ -119,8 +119,10 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                                     x_label=None, y_left_label="Y_LEFT", \
                                     y_right_label="Y_RIGHT", separate=True,\
                                     left_stackbar_legends=None,\
-                                    right_stackbar_legends=None, show_grid=True):
+                                    right_stackbar_legends=None, show_grid=True,
+                                    left_color_list=None, right_color_list=None):
 
+    fontsize = 16
     if left_y_vals is None or right_y_vals is None:
         separate = True
         fig, ax = plt.subplots(figsize=(13,8))
@@ -139,15 +141,15 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
             fig, ax1 = plt.subplots()
 
     if x_label is not None:
-        ax1.set_xlabel(x_label)
+        ax1.set_xlabel(x_label, fontsize=fontsize)
 
     flierprops = dict(marker='o', markersize=2, linestyle='none')
 
     if left_y_vals is not None:
-        color = 'tab:blue'
+        color = 'tab:blue' if right_y_vals is not None else 'tab:black'
 
         if separate:
-            ax1.set_ylabel(y_left_label)
+            ax1.set_ylabel(y_left_label, fontsize=fontsize)
         else:
             ax1.set_ylabel(y_left_label, color=color)
 
@@ -164,18 +166,21 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
             ind = np.arange(len(left_y_vals[0]))
             p = [None] * len(left_stackbar_legends)
             for i in range(len(left_stackbar_legends)):
-                p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i])
-            ax1.legend(p, left_stackbar_legends)
+                if left_color_list is not None:
+                    p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i])
+                else:
+                    p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], color=left_color_list[i])
+            ax1.legend(p, left_stackbar_legends, fontsize=fontsize)
 
     if not separate:
         # instantiate a second axes that shares the same x-axis
         ax2 = ax1.twinx()  
 
     if right_y_vals is not None:
-        color = 'tab:red'
+        color = 'tab:red' if left_y_vals is not None else 'tab:black'
 
         if separate:
-            ax2.set_ylabel(y_right_label)  # we already handled the x-label with ax1
+            ax2.set_ylabel(y_right_label, fontsize=fontsize)  # we already handled the x-label with ax1
         else:
             ax2.set_ylabel(y_right_label, color=color)  # we already handled the x-label with ax1
 
@@ -192,8 +197,11 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
             ind = np.arange(len(right_y_vals[0]))
             p = [None] * len(right_stackbar_legends)
             for i in range(len(right_stackbar_legends)):
-                p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i])
-            ax2.legend(p, right_stackbar_legends)
+                if right_color_list is not None:
+                    p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i])
+                else:
+                    p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], color=right_color_list[i])
+            ax2.legend(p, right_stackbar_legends, fontsize=fontsize)
             #ax.margins(0.05)
 
     if x_vals is None:
@@ -202,7 +210,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
         #locs, labels = plt.xticks()
         #assert len(locs) == len(x_vals), "labels mismatch: {} VS {}.".format(len(locs), len(x_vals))
         #print("labels mismatch: {} VS {}.".format(len(locs), len(x_vals)))
-        plt.xticks(np.arange(len(x_vals)), x_vals, rotation=45, ha='right')
+        plt.xticks(np.arange(len(x_vals)), x_vals, rotation=45, ha='right', fontsize=fontsize-8)
     
     if not show_grid:
         plt.rcParams["axes.grid"] = False
@@ -432,6 +440,15 @@ linewidths += linewidths*3
 semuBEST = 'semu-best'
 infectOnly = 'infect-only'
 ######~
+
+goodViewColors = {
+    semuBEST: (0.0, 0.0, 1.0, 0.6), #'blue',
+    infectOnly: (0.0, 1.0, 0.0, 0.6), #'green',
+    'klee': (0.6, 0.6, 0.6, 0.6), #'darkgrey',
+    'overlap': (1.0, 1.0, 0.0, 0.6), #'yellow',
+    'missed': (1.0, 0.0, 0.0, 0.6), #'red',
+    'initial': (0.0, 0.0, 0.0, 0.6), #'black',
+}
 
 
 def loadData(proj2dir, use_func=False, projcommonreldir=None, \
@@ -1142,7 +1159,7 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
 
     make_twoside_plot(bp_data, None, img_out_file=image_file, x_vals=list(range(1, len(bp_data)+1))+['all'], \
                 x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)", show_grid=False)
-    make_twoside_plot(bp_data_final, None, img_out_file=image_file_final, x_vals=list(range(1, len(bp_data)+1))+['all'], \
+    make_twoside_plot(bp_data_final, None, img_out_file=image_file_final, x_vals=list(range(1, len(bp_data_final)+1))+['all'], \
                 x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)", show_grid=False)
 
     # Stove Overal data
@@ -1205,11 +1222,12 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
         make_twoside_plot(techperf_miss, None, x_vals=x_vals, \
                     img_out_file=image_file, \
                     x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
-                                left_stackbar_legends=[name, 'missed'])
+                                left_stackbar_legends=[name, 'missed'], left_color_list=[goodViewColors[name], goodViewColors['missed']])
         make_twoside_plot(techperf_miss_final, None, x_vals=x_vals_final, \
                     img_out_file=image_file_final, \
                     x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
-                                left_stackbar_legends=['initial' ,name, 'missed'])
+                                left_stackbar_legends=['initial' ,name, 'missed'], \
+                                left_color_list=[goodViewColors['initial'], goodViewColors[name], goodViewColors['missed']])
         final_ms[name] = {}
         final_ms[name]['MED'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
         final_ms[name]['AVG'] = np.average([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
@@ -1272,22 +1290,24 @@ def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_
             if klee_n_semu_by_proj[1] > klee_n_semu_by_proj[0]:
                 print(">>>> Klee has higher non overlap that all semu for project", proj, "(", klee_n_semu_by_proj[1], "VS", klee_n_semu_by_proj[0], ")")
         
-        # sort
-        klee_n_semu_by_proj[0], klee_n_semu_by_proj[1], \
-                                by_proj_overlap, x_vals = [list(v) for v in \
-                                                zip(*sorted(zip(klee_n_semu_by_proj[0], klee_n_semu_by_proj[1], by_proj_overlap, x_vals)))]
-        
 
         ## plot
+        x_vals_bak = x_vals
         x_label=None #'Programs'
         for suffix, ylabel_name in [('number', "# Killed Mutants"), ('proportion', "Proportion Killed Mutants")]:
             tri_lists = klee_n_semu_by_proj+[by_proj_overlap]
+            x_vals = list(x_vals_bak)
+
             if suffix == 'proportion':
                 for ll in tri_lists:
                     for i in range(len(ll)):
                         if add_total_cand_muts_by_proj[x_vals[i]] != 0:
                             ll[i] = ll[i] * 1.0 / add_total_cand_muts_by_proj[x_vals[i]]
                         
+            # sort
+            tri_lists[0], tri_lists[1], tri_lists[2], x_vals = [list(v) for v in \
+                                                zip(*sorted(zip(tri_lists[0], tri_lists[1], tri_lists[2], x_vals)))]
+        
             image_file = os.path.join(outdir, "proj_overlap-"+princ_name+'VS'+sec_name+str(time_snap)+"min."+suffix)
             #make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
             make_twoside_plot(tri_lists, None, x_vals=x_vals, \
@@ -1295,7 +1315,7 @@ def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_
                         x_label=x_label, y_left_label=ylabel_name, \
                                         y_right_label="# Non Overlapping Mutants", \
                                     left_stackbar_legends=[princ_name, sec_name, 'overlap'], \
-                                    right_stackbar_legends=[princ_name, sec_name])
+                                    left_color_list=[goodViewColors[princ_name], goodViewColors[sec_name], goodViewColors['overlap']])
             # save data as json
             json_obj = {}
             tmp = tri_lists
