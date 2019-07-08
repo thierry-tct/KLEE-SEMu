@@ -1219,7 +1219,7 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
         techperf_miss[0], techperf_miss[1], x_vals = [list(v) for v in \
                                                 zip(*sorted(zip(techperf_miss[0], techperf_miss[1], x_vals)))]
         techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2], x_vals_final = [list(v) for v in \
-                                            zip(*sorted(zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2], x_vals)))]
+                                            zip(*sorted(zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2], x_vals_final)))]
 
 
         x_label=None #'Programs'
