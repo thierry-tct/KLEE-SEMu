@@ -146,7 +146,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
     flierprops = dict(marker='o', markersize=2, linestyle='none')
 
     if left_y_vals is not None:
-        color = 'tab:blue' if right_y_vals is not None else 'tab:black'
+        color = 'tab:blue' if right_y_vals is not None else (0.0,0.0,0.0)
 
         if separate:
             ax1.set_ylabel(y_left_label, fontsize=fontsize)
@@ -166,7 +166,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
             ind = np.arange(len(left_y_vals[0]))
             p = [None] * len(left_stackbar_legends)
             for i in range(len(left_stackbar_legends)):
-                if left_color_list is not None:
+                if left_color_list is None:
                     p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i])
                 else:
                     p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], color=left_color_list[i])
@@ -177,7 +177,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
         ax2 = ax1.twinx()  
 
     if right_y_vals is not None:
-        color = 'tab:red' if left_y_vals is not None else 'tab:black'
+        color = 'tab:red' if left_y_vals is not None else  (0.0,0.0,0.0)
 
         if separate:
             ax2.set_ylabel(y_right_label, fontsize=fontsize)  # we already handled the x-label with ax1
@@ -197,7 +197,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
             ind = np.arange(len(right_y_vals[0]))
             p = [None] * len(right_stackbar_legends)
             for i in range(len(right_stackbar_legends)):
-                if right_color_list is not None:
+                if right_color_list is None:
                     p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i])
                 else:
                     p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], color=right_color_list[i])
@@ -269,7 +269,9 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
         :param get_all: decides whether to get all the minimal sets of a single one
     """
     flatten_tc_missed_muts = {}
+    proj_list = []
     for proj, tc2mutset in list(tech_conf_missed_muts.items()):
+        proj_list.append(proj)
         for tc, mutset in list(tc2mutset.items()):
             if tc not in flatten_tc_missed_muts:
                 flatten_tc_missed_muts[tc] = set()
@@ -309,8 +311,9 @@ def get_minimal_conf_set(tech_conf_missed_muts, get_all=True):
     
     def greedy_eval(in_mutset):
         use_median = True
+        #use_median = False
         if use_median:
-            nmuts_by_proj = {}
+            nmuts_by_proj = {proj:0 for proj in proj_list}
             for m in in_mutset:
                 proj, raw_m = m.split('#')
                 if proj not in nmuts_by_proj:
@@ -1035,11 +1038,14 @@ def plot_extra_data(time_snap_df, time_snap, outdir, ms_apfds, msCol, \
 #~ plot_extra_data()
 
 def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
-                                                        sorted_techconf_by_ms):
+                                                        sorted_techconf_by_ms, all_initial):
     overlap_data_dict = {}
     non_overlap_obj = {}
     tech_conf_missed_muts = {}
     for proj in proj2dir:
+        # consider the filterings in loadData
+        if proj not in all_initial:
+            continue
         fulldir = os.path.join(proj2dir[proj], projcommonreldir)
         full_overlap_file = os.path.join(fulldir, \
                     "Techs-relation.json-"+str(int(time_snap))+"min.json")
@@ -1257,7 +1263,7 @@ def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sot
         nmut_per_test[tech] = {}
         raw_name = info_best_sota_klee['max'][tech][techConfCol]
         tech_df = time_snap_df[time_snap_df[techConfCol] == raw_name]
-        for _,row in tech_df:
+        for _,row in tech_df.iterrows():
             total_tests[tech][row[PROJECT_ID_COL]] = row[numGenTestsCol]
             
     # stat test
@@ -1577,7 +1583,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 overlap_data_dict, tech_conf2position = \
                                     get_overlap_data(proj2dir, \
                                     projcommonreldir, time_snap, subsuming, \
-                                                        sorted_techconf_by_ms)
+                                                        sorted_techconf_by_ms, all_initial)
 
             minimal_num_missed_muts, ordered_minimal_set = \
                                         process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=False)
