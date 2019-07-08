@@ -446,9 +446,9 @@ infectOnly = 'infect-only'
 
 goodViewColors = {
     semuBEST: (0.0, 0.0, 1.0, 0.6), #'blue',
-    infectOnly: (0.0, 1.0, 0.0, 0.6), #'green',
-    'klee': (0.6, 0.6, 0.6, 0.6), #'darkgrey',
-    'overlap': (1.0, 1.0, 0.0, 0.6), #'yellow',
+    infectOnly: (0.0, 0.39, 0.0, 0.6), #'green',
+    'klee': (0.6, 0.3, 0.0, 0.6), #'maron',
+    'overlap': (0.62, 0.62, 0.62), #'grey',
     'missed': (1.0, 0.0, 0.0, 0.6), #'red',
     'initial': (0.0, 0.0, 0.0, 0.6), #'black',
 }
