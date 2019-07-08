@@ -216,6 +216,8 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
         plt.rcParams["axes.grid"] = False
 
     plt.tight_layout()
+    plt.axis('tight')
+
     if img_out_file is None:
         plt.show()
     else:
@@ -448,7 +450,7 @@ goodViewColors = {
     semuBEST: (0.0, 0.0, 1.0, 0.6), #'blue',
     infectOnly: (0.0, 0.39, 0.0, 0.6), #'green',
     'klee': (0.6, 0.3, 0.0, 0.6), #'maron',
-    'overlap': (0.62, 0.62, 0.62), #'grey',
+    'overlap': (0.2, 0.2, 0.2), #'grey',
     'missed': (1.0, 0.0, 0.0, 0.6), #'red',
     'initial': (0.0, 0.0, 0.0, 0.6), #'black',
 }
@@ -1287,7 +1289,7 @@ def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sot
     for t in plotobj:
         for proj in total_tests[t].keys():
             plotobj[t].append(total_tests[t][proj])
-    medians = plotMerge.plotBoxes(plotobj, order, imagefile, colors_bw, ylabel="# Generated Tests", yticks_range=range(0,101,10))
+    medians = plotMerge.plotBoxes(plotobj, order, imagefile, colors_bw, ylabel="# Generated Tests" , yticks_range=None)#range(0,101,10))
     inner_stattest2(plotobj, imagefile+'--statest.json')
     dumpJson(medians, imagefile+'.medians.json')
 #~ def plot_gentest_killing()
