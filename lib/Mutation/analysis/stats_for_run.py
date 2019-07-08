@@ -217,6 +217,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
 
     plt.tight_layout()
     plt.axis('tight')
+    plt.autoscale()
 
     if img_out_file is None:
         plt.show()
@@ -450,7 +451,7 @@ goodViewColors = {
     semuBEST: (0.0, 0.0, 1.0, 0.6), #'blue',
     infectOnly: (0.0, 0.39, 0.0, 0.6), #'green',
     'klee': (0.6, 0.3, 0.0, 0.6), #'maron',
-    'overlap': (0.2, 0.2, 0.2), #'grey',
+    'overlap': (0.2, 0.2, 0.2, 0.6), #'grey',
     'missed': (1.0, 0.0, 0.0, 0.6), #'red',
     'initial': (0.0, 0.0, 0.0, 0.6), #'black',
 }
