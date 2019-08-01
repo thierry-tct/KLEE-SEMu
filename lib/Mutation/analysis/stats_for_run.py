@@ -218,7 +218,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
         #locs, labels = plt.xticks()
         #assert len(locs) == len(x_vals), "labels mismatch: {} VS {}.".format(len(locs), len(x_vals))
         #print("labels mismatch: {} VS {}.".format(len(locs), len(x_vals)))
-        plt.xticks(np.arange(len(x_vals)), x_vals, rotation=45, ha='right', fontsize=fontsize-8)
+        plt.xticks(np.arange(len(x_vals)), x_vals, rotation=45, ha='right', fontsize=fontsize-4)
     
     if not show_grid:
         plt.rcParams["axes.grid"] = False
