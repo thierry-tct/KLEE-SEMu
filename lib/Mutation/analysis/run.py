@@ -2116,7 +2116,7 @@ def main():
             dumpJson(stripRootTest2Dir(outDir, test2zestidirMap), test2zestidirMapFile)
 
             # Compress zestioutdir and delete the directory, keeping only the tar.gz file
-	    os.system(" ".join(["chmod -R 777", zestioutdir]))
+            os.system(" ".join(["chmod -R 777", zestioutdir]))
             errmsg = magma_common_fs.compressDir(zestioutdir, zestioutdir_targz, remove_in_directory=True)
             if errmsg is not None:
                 error_exit(errmsg)
