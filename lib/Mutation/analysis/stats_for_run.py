@@ -174,6 +174,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                     else:
                         p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], color=left_color_list[i])
             ax1.legend(p, left_stackbar_legends, fontsize=fontsize)
+            plt.xlim([0,ind.size])
 
     if not separate:
         # instantiate a second axes that shares the same x-axis
@@ -209,6 +210,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                         p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], color=right_color_list[i])
             ax2.legend(p, right_stackbar_legends, fontsize=fontsize)
             #ax.margins(0.05)
+            plt.xlim([0,ind.size])
 
     if x_vals is None:
         plt.xticks([])
