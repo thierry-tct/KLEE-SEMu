@@ -508,6 +508,9 @@ def loadData(proj2dir, use_func=False, projcommonreldir=None, \
         with open(full_initial_json) as fp:
             all_initial[proj] = json.load(fp)
 
+    merged_df['_precondLength'].replace(-1,'MD2MS',inplace=True)
+    merged_df['_precondLength'].replace(-2,'MD2MSC',inplace=True)
+
     return merged_df, all_initial
 #~ loadData()
 
