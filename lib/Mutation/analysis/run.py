@@ -2812,7 +2812,7 @@ def main():
                     funcs_res_df = pd.DataFrame(funcs_out_df_parts)
                     ordered_df_cols = ["TimeSnapshot(min)", "Tech-Config", 
                                         "#SubsMutantsClusters", "#SubsTargetedClusters", "#SubsCoveredClusters", "#SubsKilledClusters", "MS_SUBSUMING-INC", \
-                                        "#Mutants", "#Targeted", "#Covered", "#Killed", "#GenTests", "#GenTestsKilling", "#FailingTests", "MS-INC", \
+                                        "#Mutants", "#Targeted", "#Covered", "#Killed", "#GenTests", "#GenTestsKilling", "#MinimalGenTestsKilling", "#FailingTests", "MS-INC", \
                                         "#AggregatedTestGen", "#SeedDuplicatedGenTests", \
                                         "StateComparisonTime(s)", "#MutStatesForkedFromOriginal", "#MutStatesEqWithOrigAtMutPoint"]
                     funcs_ordered_df_cols = ["FunctionName"]+ordered_df_cols
