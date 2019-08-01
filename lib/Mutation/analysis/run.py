@@ -1933,7 +1933,7 @@ def main():
     parser.add_argument("--semucontinueunfinishedtunings", action="store_true", help="enable reusing previous semu execution and computation result (if available). Useful when execution fail for some tunings and we do not want to reexecute other completed tunings")
     parser.add_argument("--disable_subsuming_mutants", action="store_true", help="Disable considering subsuming mutants in reporting")
 
-    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(1, 240, 1)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
+    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(5, 240, 5)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
 
     args = parser.parse_args()
 
@@ -2544,6 +2544,10 @@ def main():
             # TODO: considere separate executions and Fault detection in Analysis
             if ANALYSE_TASK in toExecute:
                 time_snapshots_minutes_list = [int(math.ceil(float(v))) for v in args.semuanalysistimesnapshots_min.strip().split()]
+                if len(time_snapshots_minutes_list) > 0:
+                    time_snap_period = time_snapshots_minutes_list[1] - time_snapshots_minutes_list[0]
+                else:
+                    time_snap_period = 1
                 max_time_minutes = int(math.ceil(float(args.semutimeout)/60.0))
                 time_snapshots_minutes_list.append(max_time_minutes) # semutimeout is in seconds
                 time_snapshots_minutes_list = sorted(list(set(time_snapshots_minutes_list)))
@@ -2617,7 +2621,7 @@ def main():
                         for semuTuning in semuTuningList:
                             nameprefix = semuTuning['name']
                             cons_kt_df = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-tests_by_ellapsedtime.csv"))
-                            cons_kt_df = cons_kt_df[cons_kt_df['ellapsedTime(s)'] <= time_snapshot_minute * 60.0]
+                            cons_kt_df = cons_kt_df[cons_kt_df['ellapsedTime(s)'] < (time_snapshot_minute + time_snap_period) * 60.0]
                             testsOfThis = cons_kt_df['ktest']
                             test2mutsDS = loadJson(os.path.join(mfi_ktests_dir, nameprefix+"-mutant_ktests_mapping.json"))
                             #test2mutsDS = {kt: test2mutsDS[kt] for kt in test2mutsDS if kt in testsOfThis}
@@ -2625,7 +2629,7 @@ def main():
                             targeted_mutants = set()
                             for kt in test2mutsDS:
                                 for mutant_,ellapsedtime in test2mutsDS[kt]:
-                                    if float(ellapsedtime) <= time_snapshot_minute * 60.0:
+                                    if float(ellapsedtime) < (time_snapshot_minute + time_snap_period) * 60.0:
                                         targeted_mutants.add(mutant_)
                                         if mutant_ not in mutants2ktests:
                                             mutants2ktests[mutant_] = []
@@ -2687,7 +2691,7 @@ def main():
                                 semu_info_numMutstatesForkedFromOrig = '-'
                                 semu_info_numMutstatesEqWithOrigAtMutPoint = '-'
                                 for index, row in semu_info_df.iterrows():
-                                    if float(row["ellapsedTime(s)"]) <= time_snapshot_minute * 60.0 :
+                                    if float(row["ellapsedTime(s)"]) < (time_snapshot_minute + time_snap_period) * 60.0 :
                                         semu_info_stateCmpTime = float(row["stateCompareTime(s)"])
                                         semu_info_numMutstatesForkedFromOrig = int(row["#MutStatesForkedFromOriginal"])
                                         semu_info_numMutstatesEqWithOrigAtMutPoint = int(row["#MutStatesEqWithOrigAtMutPoint"])

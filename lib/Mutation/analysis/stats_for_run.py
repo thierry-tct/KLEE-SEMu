@@ -169,7 +169,10 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                 if left_color_list is None:
                     p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i])
                 else:
-                    p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], color=left_color_list[i])
+                    if type(left_color_list[i]) == str:
+                        p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], hatch=left_color_list[i])
+                    else:
+                        p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], color=left_color_list[i])
             ax1.legend(p, left_stackbar_legends, fontsize=fontsize)
 
     if not separate:
@@ -200,7 +203,10 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                 if right_color_list is None:
                     p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i])
                 else:
-                    p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], color=right_color_list[i])
+                    if type(right_color_list[i]) == str:
+                        p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], hatch=right_color_list[i])
+                    else:
+                        p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], color=right_color_list[i])
             ax2.legend(p, right_stackbar_legends, fontsize=fontsize)
             #ax.margins(0.05)
 
@@ -406,14 +412,15 @@ config_columns = ["_precondLength","_mutantMaxFork",
                     "_mutantContStrategy", "_maxTestsGenPerMut", 
                     "_disableStateDiffInTestgen"
                 ]
+cnm_accronym = True
 conf_name_mapping = {
-    "_precondLength": "precond_len", 
-    "_mutantMaxFork": "max_depth", 
-    "_disableStateDiffInTestgen": "no_state_diff", 
-    "_maxTestsGenPerMut": "mutant_max_tests", 
-    "_postCheckContProba": "continue_prop", 
-    "_genTestForDircardedFrom": "disc_gentest_from", 
-    "_mutantContStrategy": "continue_strategy", 
+    "_precondLength": 'PL' if cnm_accronym else "precond_len", 
+    "_mutantMaxFork": 'CW' if cnm_accronym else "max_depth", 
+    "_disableStateDiffInTestgen": 'NSD' if cnm_accronym else "no_state_diff", 
+    "_maxTestsGenPerMut": 'NTPM' if cnm_accronym else "mutant_max_tests", 
+    "_postCheckContProba": 'PP' if cnm_accronym else "continue_prop", 
+    "_genTestForDircardedFrom": 'MPD' if cnm_accronym else "disc_gentest_from", 
+    "_mutantContStrategy": 'PSS' if cnm_accronym else "continue_strategy", 
 }
 other_cols = ["_testGenOnlyCriticalDiffs" ]
 
@@ -444,15 +451,15 @@ linewidths += linewidths*3
 
 # Others
 semuBEST = 'semu-best'
-infectOnly = 'infect-only'
+infectOnly = 'no-propagation'
 ######~
 
 goodViewColors = {
-    semuBEST: (0.0, 0.0, 1.0, 0.6), #'blue',
-    infectOnly: (0.0, 0.39, 0.0, 0.6), #'green',
-    'klee': (0.6, 0.3, 0.0, 0.6), #'maron',
+    semuBEST: '//', #(0.0, 0.0, 1.0, 0.6), #'blue',
+    infectOnly: '\\', #(0.0, 0.39, 0.0, 0.6), #'green',
+    'klee': '.', #(0.6, 0.3, 0.0, 0.6), #'maron',
     'overlap': (0.2, 0.2, 0.2, 0.6), #'grey',
-    'missed': (1.0, 0.0, 0.0, 0.6), #'red',
+    'missed': (1.0, 1.0, 1.0, 0.6), #(1.0, 0.0, 0.0, 0.6), #'red',
     'initial': (0.0, 0.0, 0.0, 0.6), #'black',
 }
 
@@ -1226,8 +1233,8 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
 
 
         x_label=None #'Programs'
-        image_file = os.path.join(outdir, "selected_techs_MS-additional")
-        image_file_final = os.path.join(outdir, "selected_techs_MS-final")
+        image_file = os.path.join(outdir, "selected_techs_MS-additional-"+name)
+        image_file_final = os.path.join(outdir, "selected_techs_MS-final-"+name)
         make_twoside_plot(techperf_miss, None, x_vals=x_vals, \
                     img_out_file=image_file, \
                     x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
