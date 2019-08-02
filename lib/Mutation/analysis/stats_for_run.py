@@ -460,7 +460,7 @@ infectOnly = 'no-propagation'
 ######~
 
 goodViewColors = {
-    semuBEST: '//', #(0.0, 0.0, 1.0, 0.6), #'blue',
+    semuBEST: 'x', #(0.0, 0.0, 1.0, 0.6), #'blue',
     infectOnly: '\\', #(0.0, 0.39, 0.0, 0.6), #'green',
     'klee': '.', #(0.6, 0.3, 0.0, 0.6), #'maron',
     'overlap': (0.2, 0.2, 0.2, 0.6), #'grey',
