@@ -170,11 +170,12 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                     p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i])
                 else:
                     if type(left_color_list[i]) == str:
-                        p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], hatch=left_color_list[i])
+                        p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], hatch=left_color_list[i], color='white', edgecolor='back')
                     else:
                         p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], color=left_color_list[i])
             ax1.legend(p, left_stackbar_legends, fontsize=fontsize)
-            plt.xlim([0,ind.size])
+            #plt.xlim([0,ind.size])
+            ax1.set_xlim([0,ind.size])
 
     if not separate:
         # instantiate a second axes that shares the same x-axis
@@ -205,12 +206,13 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                     p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i])
                 else:
                     if type(right_color_list[i]) == str:
-                        p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], hatch=right_color_list[i])
+                        p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], hatch=right_color_list[i], color='white', edgecolor='back')
                     else:
                         p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], color=right_color_list[i])
             ax2.legend(p, right_stackbar_legends, fontsize=fontsize)
             #ax.margins(0.05)
-            plt.xlim([0,ind.size])
+            #plt.xlim([0,ind.size])
+            ax2.set_xlim([0,ind.size])
 
     if x_vals is None:
         plt.xticks([])
@@ -430,6 +432,7 @@ numFailTestsCol = "#FailingTests"
 techConfCol = "Tech-Config"
 stateCompTimeCol = "StateComparisonTime(s)"
 numGenTestsCol = "#GenTests"
+minGenTestsKillingCol  = "#MinimalGenTestsKilling"
 numForkedMutStatesCol = "#MutStatesForkedFromOriginal"
 mutPointNoDifCol = "#MutStatesEqWithOrigAtMutPoint"
 
@@ -673,6 +676,10 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                     specific_cmp_best_only=True):
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
 
+    influence_folder = 'param_influence'
+    if not os.path.isdir(os.path.join(outdir, influence_folder)):
+        os.mkdir(os.path.join(outdir, influence_folder))
+
     for pc in techConfbyvalbyconf:
         for_sota = False
         min_vals = {}
@@ -692,12 +699,12 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
 
         # plot
         if type(pc) in (list, tuple):
-            plot_out_file = os.path.join(outdir, "perconf_apfd2_"+".".join(pc))
+            plot_out_file = os.path.join(outdir, influence_folder, "perconf_apfd2_"+".".join(pc))
             sota_pc = {"_postCheckContProba", "_mutantMaxFork"}
             if set(pc) == sota_pc:
                 for_sota = True
         else:
-            plot_out_file = os.path.join(outdir, "perconf_apfd_"+pc)
+            plot_out_file = os.path.join(outdir, influence_folder, "perconf_apfd_"+pc)
         data = {str(val): {"min": getListAPFDSForTechConf(min_vals[val], ms_apfds), \
                         "med": getListAPFDSForTechConf(med_vals[val], ms_apfds), \
                         "max": getListAPFDSForTechConf(max_vals[val], ms_apfds)} \
@@ -845,7 +852,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
         # if case it is having state-of-the art's similar config, plot BEST VS SOTA(zero-propagation) VS KLEE
         
         if emphasis is not None:
-            emph1_plot_out_file = os.path.join(outdir, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[0][emphasis[0].keys()[0]]['max'])))
+            emph1_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[0][emphasis[0].keys()[0]]['max'])))
             inner_stattest(emphasis[0], emph1_plot_out_file+'--statest.json')
             median_vals = plotMerge.plot_Box_Grouped(emphasis[0], \
                                 emph1_plot_out_file, \
@@ -854,7 +861,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                     selectData=selected_data)
             dumpJson(median_vals, emph1_plot_out_file+'.medians.json')
 
-            emph2_plot_out_file = os.path.join(outdir, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[1][emphasis[1].keys()[0]]['max'])))
+            emph2_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[1][emphasis[1].keys()[0]]['max'])))
             inner_stattest(emphasis[1], emph2_plot_out_file+'--statest.json')
             median_vals = plotMerge.plot_Box_Grouped(emphasis[1], \
                                 emph2_plot_out_file, \
@@ -1267,12 +1274,14 @@ def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sot
 
     # get the data
     total_tests = {}
+    minimal_tests = {}
     killing_tests = {}
     killing_over_all = {}
     nmut_per_test = {}
     order = [semuBEST, infectOnly, 'klee']
     for tech in order:
         total_tests[tech] = {}
+        minimal_tests[tech] = {}
         killing_tests[tech] = {}
         killing_over_all[tech] = {}
         nmut_per_test[tech] = {}
@@ -1280,6 +1289,7 @@ def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sot
         tech_df = time_snap_df[time_snap_df[techConfCol] == raw_name]
         for _,row in tech_df.iterrows():
             total_tests[tech][row[PROJECT_ID_COL]] = row[numGenTestsCol]
+            minimal_tests[tech][row[PROJECT_ID_COL]] = row[minGenTestsKillingCol]
             
     # stat test
     def inner_stattest2(obj_dict, filename):
@@ -1303,6 +1313,15 @@ def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sot
         for proj in total_tests[t].keys():
             plotobj[t].append(total_tests[t][proj])
     medians = plotMerge.plotBoxes(plotobj, order, imagefile, colors_bw, ylabel="# Generated Tests" , yticks_range=None)#range(0,101,10))
+    inner_stattest2(plotobj, imagefile+'--statest.json')
+    dumpJson(medians, imagefile+'.medians.json')
+    ## minkilling
+    imagefile = os.path.join(outdir, 'minGenTestsKilling_best_sota_klee')
+    plotobj = {t:[] for t in minimal_tests}
+    for t in plotobj:
+        for proj in minimal_tests[t].keys():
+            plotobj[t].append(minimal_tests[t][proj])
+    medians = plotMerge.plotBoxes(plotobj, order, imagefile, colors_bw, ylabel="# Generated Minimal Tests" , yticks_range=None)#range(0,101,10))
     inner_stattest2(plotobj, imagefile+'--statest.json')
     dumpJson(medians, imagefile+'.medians.json')
 #~ def plot_gentest_killing()
