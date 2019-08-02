@@ -172,7 +172,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                     if type(left_color_list[i]) == str:
                         p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], hatch=left_color_list[i], color='white', edgecolor='black')
                     else:
-                        p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], color=left_color_list[i])
+                        p[i] = ax1.bar(ind, left_y_vals[i], bottom=bottoms[i], color=left_color_list[i], edgecolor='black')
             ax1.legend(p, left_stackbar_legends, fontsize=fontsize)
             #plt.xlim([0,ind.size])
             ax1.set_xlim([0,ind.size])
@@ -208,7 +208,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                     if type(right_color_list[i]) == str:
                         p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], hatch=right_color_list[i], color='white', edgecolor='black')
                     else:
-                        p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], color=right_color_list[i])
+                        p[i] = ax2.bar(ind, right_y_vals[i], bottom=bottoms[i], color=right_color_list[i], edgecolor='black')
             ax2.legend(p, right_stackbar_legends, fontsize=fontsize)
             #ax.margins(0.05)
             #plt.xlim([0,ind.size])
