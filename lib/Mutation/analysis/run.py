@@ -45,6 +45,7 @@ SEMU_CONCOLIC_WRAPPER = "wrapper-call-semu-concolic.in"
 ZESTI_CONCOLIC_WRAPPER = "wrapper-call-zesti-concolic.in"
 MY_SCANF = None
 mutantInfoFile = "mutantsInfos.json"
+mart_log_info_file = 'info'
 fdupesDuplicatesFile = "fdupes_duplicates.json"
 
 KLEE_TESTGEN_SCRIPT_TESTS = "MFI_KLEE_TOPDIR_TEST_TEMPLATE.sh"
@@ -2234,10 +2235,19 @@ def main():
     candidateMutantsFile = None
     groundConsideredMutant_covtests = None
     list_groundConsideredMutant_covtests = []
+    pre_tce_number_of_mutants = None
+    testgen_mode_initial_tests_set = None
     testgen_mode_initial_numtests = None
     testgen_mode_initial_muts = None
     testgen_mode_initial_killmuts = None
     if matrix is not None:
+        if os.path.isfile(os.path.join(martOut, mart_log_info_file)):
+            with open(os.path.join(martOut, mart_log_info_file)) as f:
+                for line in f:
+                    if line.startswith("# Number of Mutants:"):
+                        pre_tce_number_of_mutants = int(re.search(r'\d+', line).group())
+                        break
+
         groundConsideredMutant_covtests = matrixHardness.getCoveredMutants(coverage, os.path.join(martOut, mutantInfoFile), os.path.join(martOut, fdupesDuplicatesFile), testTresh_str = covTestThresh)
 
         if executionMode == FilterHardToKill:
@@ -2248,7 +2258,8 @@ def main():
             ground_KilledMutants = set(matrixHardness.getKillableMutants(matrix, testset=set(testSamples[testSamples.keys()[0]]))) 
             toremoveMuts = ground_KilledMutants
 
-            testgen_mode_initial_numtests = len(testSamples[testSamples.keys()[0]])
+            testgen_mode_initial_tests_set = list(testSamples[testSamples.keys()[0]])
+            testgen_mode_initial_numtests = len(testgen_mode_initial_tests_set)
             testgen_mode_initial_muts = list(groundConsideredMutant_covtests)
             testgen_mode_initial_killmuts = list(toremoveMuts)
             
@@ -2607,7 +2618,7 @@ def main():
                     # get subsuming mutants
                     subsuming_mutants_clusters = None
                     if not args.disable_subsuming_mutants:
-                        subsuming_mutants_clusters = get_subsuming_mutants(matrix, sm_file, gen_on_killed_sm)
+                        subsuming_mutants_clusters = list(get_subsuming_mutants(matrix, sm_file, gen_on_killed_sm))
 
                     out_df_parts = []
                     funcs_out_df_parts = []
@@ -2782,8 +2793,11 @@ def main():
 
                     initial_json_obj = { \
                                 "Initial#Mutants": len(testgen_mode_initial_muts), \
+                                "PreTCE#Mutants": pre_tce_number_of_mutants, \
                                 "Initial#KilledMutants": len(testgen_mode_initial_killmuts), \
                                 "Inintial#Tests": testgen_mode_initial_numtests, \
+                                "Inintial#DevTests": len([v for v in testgen_mode_initial_tests_set if '/Dev-out-' in v]), \
+                                "Inintial#GenTests": len([v for v in testgen_mode_initial_tests_set if '/klee-out-' in v]), \
                                 "Initial-MS": ((len(testgen_mode_initial_killmuts)) * 100.0 / len(testgen_mode_initial_muts)), \
                                 "TestSampleMode": args.testSampleMode, \
                                 "MaxTestGen-Time(min)": max_time_minutes, \
@@ -2791,10 +2805,14 @@ def main():
                                 } 
                     # subsuming
                     if subsuming_mutants_clusters is not None:
-                        initial_json_obj["Initial#SubsumingMutants"] = len(subs_clusters_of(subsuming_mutants_clusters, testgen_mode_initial_muts))
-                        initial_json_obj["Initial#SubsumingKilledMutants"] = len(subs_clusters_of(subsuming_mutants_clusters, testgen_mode_initial_killmuts))
+                        initial_json_obj["Initial#SubsumingClusters"] = len(subs_clusters_of(subsuming_mutants_clusters, testgen_mode_initial_muts))
+                        initial_json_obj["Initial#SubsumingKilledClusters"] = len(subs_clusters_of(subsuming_mutants_clusters, testgen_mode_initial_killmuts))
+                        initial_json_obj["Initial#SubsumingMutants"] = len(get_mutants_of_subs_clust(subsuming_mutants_clusters, \
+                                                                                    subs_clusters_of(subsuming_mutants_clusters, testgen_mode_initial_muts)))
+                        initial_json_obj["Initial#SubsumingKilledMutants"] = len(get_mutants_of_subs_clust(subsuming_mutants_clusters,\
+                                                                                    subs_clusters_of(subsuming_mutants_clusters, testgen_mode_initial_killmuts)))
                         initial_json_obj["Initial-MS_Subsuming"] = \
-                                                            initial_json_obj["Initial#SubsumingKilledMutants"] * 100.0 / initial_json_obj["Initial#SubsumingMutants"]
+                                                            initial_json_obj["Initial#SubsumingKilledClusters"] * 100.0 / initial_json_obj["Initial#SubsumingClusters"]
 
                     for mlist_list, mlist_key in [(testgen_mode_initial_muts, "Initial#Mutants"), \
                                                 (testgen_mode_initial_killmuts, "Initial#KilledMutants")]:
@@ -2868,6 +2886,14 @@ def subs_clusters_of(subs_clusters, killed_mutants):
             clusters_of.append(c_id)
     return clusters_of
 #~ def subs_clusters_of()
+
+def get_mutants_of_subs_clust(subs_clusters, clust_id_list):
+    muts = set()
+    for c_id, c in enumerate(subs_clusters):
+        if c_id in clust_id_list:
+            muts |= set(c)
+    return muts
+#~ def get_mutants_of_subs_clust()
 
 def subsuming_ms(subs_clusters, killed_mutants):
     return 100.0 * len(subs_clusters_of(subs_clusters, killed_mutants)) / len(subs_clusters)

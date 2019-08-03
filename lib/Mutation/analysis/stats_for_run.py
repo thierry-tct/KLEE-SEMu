@@ -525,26 +525,24 @@ def merge_initial(all_initial, outdir, use_func, has_subsuming_data=True):
     merged_json_obj["Projects"] = list(all_initial) 
     merged_json_obj["#Projects"] = len(all_initial) 
     if has_subsuming_data:
-        merged_json_obj["Initial#SubsumingMutants"] = \
-                sum([int(all_initial[v]["Initial#SubsumingMutants"]) \
+        for key_ in ["Initial#SubsumingMutants", "Initial#SubsumingKilledMutants",\
+                "Initial#SubsumingClusters", "Initial#SubsumingKilledClusters"]:
+            merged_json_obj[key_] = sum([int(all_initial[v][key_]) \
                                                         for v in all_initial])
-        merged_json_obj["Initial#SubsumingKilledMutants"] = \
-                sum([int(all_initial[v]["Initial#SubsumingKilledMutants"]) \
+        merged_json_obj["Initial-MS_Subsuming(AVG)"] = \
+                np.average([float(all_initial[v]["Initial-MS_Subsuming"]) \
                                                         for v in all_initial])
-        merged_json_obj["Initial-MS_Subsuming"] = \
-                sum([float(all_initial[v]["Initial-MS_Subsuming"]) \
-                                    for v in all_initial]) / len(all_initial)
+        merged_json_obj["Initial-MS_Subsuming(MED)"] = \
+                np.median([float(all_initial[v]["Initial-MS_Subsuming"]) \
+                                                        for v in all_initial])
 
-    merged_json_obj["Initial#Mutants"] = \
-            sum([int(all_initial[v]["Initial#Mutants"]) for v in all_initial])
-    merged_json_obj["Initial#KilledMutants"] = \
-            sum([int(all_initial[v]["Initial#KilledMutants"]) \
-                                                        for v in all_initial])
-    merged_json_obj["Inintial#Tests"] = \
-            sum([int(all_initial[v]["Inintial#Tests"]) for v in all_initial])
-    merged_json_obj["Initial-MS"] = \
-            sum([float(all_initial[v]["Initial-MS"]) \
-                                    for v in all_initial]) / len(all_initial)
+    for key_ in ["Initial#Mutants", "Initial#KilledMutants", "Inintial#Tests",\
+                "PreTCE#Mutants", "Inintial#DevTests", "Inintial#GenTests"]:
+        merged_json_obj[key_] = sum([int(all_initial[v][key_]) for v in all_initial])
+    merged_json_obj["Initial-MS(AVG)"] = \
+            np.average([float(all_initial[v]["Initial-MS"]) for v in all_initial])
+    merged_json_obj["Initial-MS(MED)"] = \
+            np.median([float(all_initial[v]["Initial-MS"]) for v in all_initial])
     merged_json_obj["TestSampleMode"] = \
                         all_initial[all_initial.keys()[0]]["TestSampleMode"]
     merged_json_obj["MaxTestGen-Time(min)"] = \
@@ -701,7 +699,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
 
         # plot
         if type(pc) in (list, tuple):
-            plot_out_file = os.path.join(outdir, influence_folder, "perconf_apfd2_"+".".join(pc))
+            plot_out_file = os.path.join(outdir, influence_folder, "perconf_apfd2_"+"_".join(pc))
             sota_pc = {"_postCheckContProba", "_mutantMaxFork"}
             if set(pc) == sota_pc:
                 for_sota = True
@@ -854,7 +852,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
         # if case it is having state-of-the art's similar config, plot BEST VS SOTA(zero-propagation) VS KLEE
         
         if emphasis is not None:
-            emph1_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_1."+str(len(emphasis[0][emphasis[0].keys()[0]]['max'])))
+            emph1_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_1__"+str(len(emphasis[0][emphasis[0].keys()[0]]['max'])))
             inner_stattest(emphasis[0], emph1_plot_out_file+'--statest.json')
             median_vals = plotMerge.plot_Box_Grouped(emphasis[0], \
                                 emph1_plot_out_file, \
@@ -863,7 +861,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                     selectData=selected_data)
             dumpJson(median_vals, emph1_plot_out_file+'.medians.json')
 
-            emph2_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_2."+str(len(emphasis[1][emphasis[1].keys()[0]]['max'])))
+            emph2_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_2__"+str(len(emphasis[1][emphasis[1].keys()[0]]['max'])))
             inner_stattest(emphasis[1], emph2_plot_out_file+'--statest.json')
             median_vals = plotMerge.plot_Box_Grouped(emphasis[1], \
                                 emph2_plot_out_file, \
@@ -1395,7 +1393,7 @@ def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_
             tri_lists[0], tri_lists[1], tri_lists[2], x_vals = [list(v) for v in \
                                                 zip(*sorted(zip(tri_lists[0], tri_lists[1], tri_lists[2], x_vals)))]
         
-            image_file = os.path.join(outdir, "proj_overlap-"+princ_name+'VS'+sec_name+str(time_snap)+"min."+suffix)
+            image_file = os.path.join(outdir, "proj_overlap-"+princ_name+'VS'+sec_name+str(int(time_snap))+"min__"+suffix)
             #make_twoside_plot(klee_n_semu_by_proj+[by_proj_overlap], klee_n_semu_by_proj, \
             make_twoside_plot(tri_lists, None, x_vals=x_vals, \
                         img_out_file=image_file, \
@@ -1439,7 +1437,7 @@ def plot_overlap_2(outdir, non_overlap_obj, SpecialTechs, tech_conf2position, \
                         num_x_wins: proj_agg_func2([non_overlap_obj[p][left_right][left] for p in non_overlap_obj]), 
                         })
     killed_muts_overlap = pd.DataFrame(df_obj)
-    image_out = os.path.join(outdir, "overlap-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
+    image_out = os.path.join(outdir, "overlap-"+proj_agg_func2_name+"-"+str(int(time_snap))+"min")
     # plot
     sns.set_style("white", \
                         {'axes.linewidth': 1.25, 'axes.edgecolor':'black'})
@@ -1465,7 +1463,7 @@ def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
     num_x_wins = "# Mutants Killed more by X"
     # plot overlap against pure klee
     image_out2 = os.path.join(outdir, \
-                            "semu_klee-nonoverlap-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
+                            "semu_klee-nonoverlap-"+proj_agg_func2_name+"-"+str(int(time_snap))+"min")
     fixed_y = msCol
     chang_y2 = "# Non Overlapping Mutants"
     fix_vals2 = []
@@ -1502,7 +1500,7 @@ def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
                                 right_stackbar_legends=sb_legend)
     # overlap and non overlap
     image_out3 = os.path.join(outdir, \
-                            "semu_klee-overlap_all-"+proj_agg_func2_name+"-"+str(time_snap)+"min")
+                            "semu_klee-overlap_all-"+proj_agg_func2_name+"-"+str(int(time_snap))+"min")
     overlap_non_vals = chang_vals2 + [overlap_vals] 
     #make_twoside_plot(overlap_non_vals, chang_vals2, img_out_file=image_out3, \
     make_twoside_plot(overlap_non_vals, None, img_out_file=image_out3, \
@@ -1548,8 +1546,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             targetCol = "#SubsTargetedClusters"
             covMutsCol = "#SubsCoveredClusters"
             killMutsCol = "#SubsKilledClusters"
-            initialKillMutsKey = "Initial#SubsumingKilledMutants"
-            initialNumMutsKey = "Initial#SubsumingMutants"
+            initialKillMutsKey = "Initial#SubsumingKilledClusters"
+            initialNumMutsKey = "Initial#SubsumingClusters"
             n_suff = '*'
         else:
             outdir = os.path.join(outdir_bak, "traditionalMS")
