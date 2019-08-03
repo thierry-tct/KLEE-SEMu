@@ -686,7 +686,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
         max_vals = {}
         med_vals = {}
         overal_best = None
-        overal_best_score = 0
+        overal_best_score = proj_agg_func([0])
         for val in techConfbyvalbyconf[pc]:
             sorted_by_apfd_tmp = sorted(techConfbyvalbyconf[pc][val], \
                     key=lambda x: proj_agg_func(getListAPFDSForTechConf(x, ms_apfds)))
@@ -1121,7 +1121,7 @@ def process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals
         semu_only_tech_conf_missed_muts[proj] = {}
         for tc in tech_conf_missed_muts[proj]:
             if tc not in SPECIAL_TECHS:
-                semu_only_tech_conf_missed_muts[proj][tc] = tech_conf_missed_muts[proj][tc]
+                semu_only_tech_conf_missed_muts[proj][tc] = copy.deepcopy(tech_conf_missed_muts[proj][tc])
 
     # TODO: add computing per proj and overal increase of minimal conf and all (including KLEE). Use time_snap_df and pick a conf
     minimal_tech_confs, minimal_missed = get_minimal_conf_set(semu_only_tech_conf_missed_muts, get_all=get_all)
@@ -1145,14 +1145,25 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
                                     n_suff='', use_fixed=False):
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
     tmp_elem = list(time_snap_df[techConfCol])[0]
+    nonklee_tmp_elem = tmp_elem if tmp_elem != KLEE_KEY else list(time_snap_df[techConfCol])[1]
     tmp_elem_df = time_snap_df[time_snap_df[techConfCol] == tmp_elem]
 
     add_total_cand_muts_by_proj = {}
     add_total_killed_muts_by_proj = {}
+    add_nonklee_killed_muts_by_proj = {}
     for _, row in tmp_elem_df.iterrows():
         proj = row[PROJECT_ID_COL]
         add_total_killed_muts_by_proj[proj] = row[killMutsCol] + len(tech_conf_missed_muts[proj][tmp_elem])
         add_total_cand_muts_by_proj[proj] = row[numMutsCol]
+
+        nonklee_missed = set(tech_conf_missed_muts[proj][nonklee_tmp_elem])
+        for e in list(time_snap_df[techConfCol]):
+            if e != KLEE_KEY:
+                nonklee_missed &= set(tech_conf_missed_muts[proj][e])
+            else:
+                nonklee_missed -= set(tech_conf_missed_muts[proj][e])
+        add_nonklee_killed_muts_by_proj[proj] = add_total_killed_muts_by_proj[proj] - len(nonklee_missed)
+
 
     klee_killed_by_proj = {}
     for proj, tot_k in list(add_total_killed_muts_by_proj.items()):
@@ -1192,6 +1203,7 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
 
     # Stove Overal data
     json_obj = {}
+    json_obj['Inc_Num_Mut_nonklee_killed'] = sum([nk for _, nk in list(add_nonklee_killed_muts_by_proj.items())])
     json_obj['Inc_Num_Mut_total_killed'] = sum([nk for _, nk in list(add_total_killed_muts_by_proj.items())])
     json_obj['Inc_Num_Mut_total_candidate'] = sum([nk for _, nk in list(add_total_cand_muts_by_proj.items())])
     json_obj['Inc_MS_total'] = 100.0 * json_obj['Inc_Num_Mut_total_killed'] / json_obj['Inc_Num_Mut_total_candidate']
@@ -1206,10 +1218,11 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
     json_obj['Initial_MS_total'] = 100.0 * merged_initial_ms_json_obj[initialKillMutsKey] / merged_initial_ms_json_obj[initialNumMutsKey]
     dumpJson(json_obj, os.path.join(outdir, "Total_Increase_Data.json"))
 
-    return add_total_cand_muts_by_proj, add_total_killed_muts_by_proj
+    return add_total_cand_muts_by_proj, add_total_killed_muts_by_proj, add_nonklee_killed_muts_by_proj
 #~ def compute_and_store_total_increase()
 
 def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_total_killed_muts_by_proj, \
+                                    add_nonklee_killed_muts_by_proj, \
                                     tech_conf_missed_muts, info_best_sota_klee, \
                                     all_initial, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff='', use_fixed=False):
@@ -1221,13 +1234,18 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
                         (info_best_sota_klee['max'][semuBEST][techConfCol], semuBEST)]:
         nkilled_by_proj = {}
         nmiss_by_proj = {}
+        npartial_miss_by_proj = {}
         for proj in tech_conf_missed_muts:
             n_miss = len(tech_conf_missed_muts[proj][key])
             nkilled_by_proj[proj] = add_total_killed_muts_by_proj[proj] - n_miss
             nmiss_by_proj[proj] = n_miss
+            npartial_miss_by_proj[proj] = add_nonklee_killed_muts_by_proj[proj] - nkilled_by_proj[proj]
         techperf_miss = [[], []]
         techperf_miss_final = [[], [], []]
+        techperf_partial_miss = [[], []]
+        techperf_partial_miss_final = [[], [], []]
         x_vals = []
+        x_partial_vals = []
         for proj in nkilled_by_proj:
             techperf_miss[0].append(0 if add_total_cand_muts_by_proj[proj] == 0 else nkilled_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
             techperf_miss[1].append(0 if add_total_cand_muts_by_proj[proj] == 0 else nmiss_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
@@ -1235,6 +1253,13 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
             techperf_miss_final[2].append(nmiss_by_proj[proj] * 100.0 / all_initial[proj][initialNumMutsKey])
             techperf_miss_final[0].append(all_initial[proj][initialKillMutsKey] * 100.0 / all_initial[proj][initialNumMutsKey])
             x_vals.append(proj)
+            
+            techperf_partial_miss[0].append(0 if add_total_cand_muts_by_proj[proj] == 0 else nkilled_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
+            techperf_partial_miss[1].append(0 if add_total_cand_muts_by_proj[proj] == 0 else npartial_miss_by_proj[proj] * 100.0 / add_total_cand_muts_by_proj[proj])
+            techperf_partial_miss_final[1].append(nkilled_by_proj[proj] * 100.0 / all_initial[proj][initialNumMutsKey])
+            techperf_partial_miss_final[2].append(npartial_miss_by_proj[proj] * 100.0 / all_initial[proj][initialNumMutsKey])
+            techperf_partial_miss_final[0].append(all_initial[proj][initialKillMutsKey] * 100.0 / all_initial[proj][initialNumMutsKey])
+            x_partial_vals.append(proj)
 
         # sort
         x_vals_final = copy.deepcopy(x_vals)
@@ -1243,6 +1268,13 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
         techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2], x_vals_final = [list(v) for v in \
                                             zip(*sorted(zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2], x_vals_final)))]
 
+        # sort partial
+        x_partial_vals_final = copy.deepcopy(x_partial_vals)
+        techperf_partial_miss[0], techperf_partial_miss[1], x_partial_vals = [list(v) for v in \
+                                                zip(*sorted(zip(techperf_partial_miss[0], techperf_partial_miss[1], x_partial_vals)))]
+        techperf_partial_miss_final[0], techperf_partial_miss_final[1], techperf_partial_miss_final[2], x_partial_vals_final = \
+                                        [list(v) for v in zip(*sorted(zip(techperf_partial_miss_final[0], techperf_partial_miss_final[1], \
+                                                                                     techperf_partial_miss_final[2], x_partial_vals_final)))]
 
         x_label=None #'Programs'
         image_file = os.path.join(outdir, "selected_techs_MS-additional-"+name)
@@ -1256,6 +1288,20 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
                     x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
                                 left_stackbar_legends=['initial' ,name, 'missed'], \
                                 left_color_list=[goodViewColors['initial'], goodViewColors[name], goodViewColors['missed']])
+
+        if name == semuBEST:
+            image_file_p = os.path.join(outdir, "selected_techs_MS_partial-additional-"+name)
+            image_file_p_final = os.path.join(outdir, "selected_partial_techs_MS-final-"+name)
+            make_twoside_plot(techperf_partial_miss, None, x_vals=x_partial_vals, \
+                        img_out_file=image_file_p, \
+                        x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
+                                    left_stackbar_legends=[name, 'missed'], left_color_list=[goodViewColors[name], goodViewColors['missed']])
+            make_twoside_plot(techperf_partial_miss_final, None, x_vals=x_partial_vals_final, \
+                        img_out_file=image_file_p_final, \
+                        x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
+                                    left_stackbar_legends=['initial' ,name, 'missed'], \
+                                    left_color_list=[goodViewColors['initial'], goodViewColors[name], goodViewColors['missed']])
+        
         final_ms[name] = {}
         final_ms[name]['MED'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
         final_ms[name]['AVG'] = np.average([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
@@ -1586,16 +1632,18 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
             #proj_agg_func = np.median
             proj_agg_func = np.average
+    
+            bw_proj_agg_func = lambda x: (np.median(x), np.average(x))
 
             # XXX Check the influence of each parameter. 
             info_best_sota_klee = compute_n_plot_param_influence(techConfbyvalbyconf, outdir, \
-                                        SpecialTechs, n_suff, ms_apfds, proj_agg_func=np.median, \
+                                        SpecialTechs, n_suff, ms_apfds, proj_agg_func=bw_proj_agg_func, \
                                         bests_only=False, use_fixed=use_fixed)
             
             # XXX Find best and worse confs
             best_elems, worse_elems = best_worst_conf(merged_df, outdir, \
                                         SpecialTechs, ms_by_time, n_suff, \
-                                        techConfbyvalbyconf, ms_apfds, proj_agg_func=np.median)
+                                        techConfbyvalbyconf, ms_apfds, proj_agg_func=bw_proj_agg_func)
 
             # Select what to continue
             sel_merged_df = select_top_or_all(merged_df, \
@@ -1622,11 +1670,12 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             minimal_num_missed_muts, ordered_minimal_set = \
                                         process_minimal_config_set(outdir, tech_conf_missed_muts, techConf2ParamVals, get_all=False)
 
-            add_total_cand_muts_by_proj, add_total_killed_muts_by_proj = \
+            add_total_cand_muts_by_proj, add_total_killed_muts_by_proj, add_nonklee_killed_muts_by_proj = \
                      compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_missed_muts, ordered_minimal_set, time_snap_df,
                                                 all_initial, merged_initial_ms_json_obj, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, n_suff, use_fixed)
 
             mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_total_killed_muts_by_proj, \
+                                    add_nonklee_killed_muts_by_proj, \
                                     tech_conf_missed_muts, info_best_sota_klee, \
                                     all_initial, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff=n_suff, use_fixed=use_fixed)
