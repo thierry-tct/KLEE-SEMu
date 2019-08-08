@@ -1563,8 +1563,8 @@ def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
 #~ def plot_overlap_3()
 
 def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
-    techlist = sorted(killed_muts_obj.keys())
-    proglist = sorted(mintests_obj.keys())
+    techlist = sorted(list(killed_muts_obj.keys()))
+    proglist = sorted(list(mintests_obj[list(mintests_obj.keys())[0]].keys()))
     outfile = os.path.join(outdir, 'killedmuts_tests_table.tex')
     data = '\\begin{table}[!t]'
     data += '\n' + '\\centering'
