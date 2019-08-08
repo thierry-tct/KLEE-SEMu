@@ -1229,6 +1229,7 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
 
     final_ms = {}
+    nkilled_by_tech_by_proj = {}
     for key, name in [(KLEE_KEY, 'klee'), \
                         (info_best_sota_klee['max'][infectOnly][techConfCol], infectOnly),\
                         (info_best_sota_klee['max'][semuBEST][techConfCol], semuBEST)]:
@@ -1240,6 +1241,7 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
             nkilled_by_proj[proj] = add_total_killed_muts_by_proj[proj] - n_miss
             nmiss_by_proj[proj] = n_miss
             npartial_miss_by_proj[proj] = add_nonklee_killed_muts_by_proj[proj] - nkilled_by_proj[proj]
+        nkilled_by_tech_by_proj[name] = dict(nkilled_by_proj)
         techperf_miss = [[], []]
         techperf_miss_final = [[], [], []]
         techperf_partial_miss = [[], []]
@@ -1313,6 +1315,8 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
     final_ms['INITIAL']['MED'] = np.median([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
     final_ms['INITIAL']['AVG'] = np.average([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
     dumpJson(final_ms, image_file_final+'.res.json')
+
+    return nkilled_by_tech_by_proj
 #~def mutation_scores_best_sota_klee()
 
 def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee):
@@ -1370,6 +1374,8 @@ def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sot
     medians = plotMerge.plotBoxes(plotobj, order, imagefile, colors_bw, ylabel="# Generated Minimal Tests" , yticks_range=None)#range(0,101,10))
     inner_stattest2(plotobj, imagefile+'--statest.json')
     dumpJson(medians, imagefile+'.medians.json')
+
+    return total_tests, minimal_tests
 #~ def plot_gentest_killing()
 
 def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee, add_total_cand_muts_by_proj):
@@ -1556,6 +1562,34 @@ def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
                             right_stackbar_legends=sb_legend)
 #~ def plot_overlap_3()
 
+def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
+    techlist = []
+    proglist = []
+    outfile = os.path.join(outdir, 'killedmuts_tests_table.tex')
+    data = '\\begin{table}[!t]'
+    data += '\n' + '\\  centering'
+    data += '\n' + '\\label{tab:testsgen_kilmuts}'
+    data += '\n' + '\\caption{Test generated and mutants killed}'
+    data += '\n' + '\\begin{tabular}{c | c | c | c | c | c | c }'
+    data += '\n' + '\\hline'
+    data += '\n' + ' & '.join(['\\multirow{2}{*}{\\bf Subjects}'] + ['\\multicolumn{2}{*}{'+tech+'}' for tech in techlist])
+    data += '\n' + '\\hline'
+    data += '\n' + ' & ' + ' & '.join(['#Gen. Tests & #Killed Muts.'] * 3)
+    data += '\n' + '\\hline'
+    for proj in proglist:
+        tmp = []
+        for i in range(3):
+            tmp += [mintests_obj[techlist[i]][proj], killed_muts_obj[techlist[i]][proj]]
+        data += " & ".join([proj] + tmp)
+        data += '\n' + '\\hline'
+    
+    data += '\n' + '\\end{tabular}\n'
+    data += '\n' + '\\end{table}\n'
+    
+    with open(outfile, 'w') as f:
+        f.write(data)
+#~ def get_table_muts_tests()
+
 #### CONTROLLER ####
 def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 projcommonreldir=None, onlykillable=False, no_concrete=False):
@@ -1674,16 +1708,17 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                      compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_missed_muts, ordered_minimal_set, time_snap_df,
                                                 all_initial, merged_initial_ms_json_obj, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, n_suff, use_fixed)
 
-            mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_total_killed_muts_by_proj, \
+            nkilled_by_tech_by_proj = mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_total_killed_muts_by_proj, \
                                     add_nonklee_killed_muts_by_proj, \
                                     tech_conf_missed_muts, info_best_sota_klee, \
                                     all_initial, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff=n_suff, use_fixed=use_fixed)
 
-            plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee)
+            total_tests, minimal_tests = plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee)
+
+            get_table_muts_tests(outdir, nkilled_by_tech_by_proj, minimal_tests)
 
             plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee, add_total_cand_muts_by_proj)
-
                             
             for proj_agg_func2, proj_agg_func2_name in [(np.average, "average"), (np.median, "median")]:
                 killed_muts_overlap = plot_overlap_2(outdir, non_overlap_obj, \
