@@ -1572,16 +1572,17 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
     data += '\n' + '\\caption{Test generated and mutants killed}'
     data += '\n' + '\\begin{tabular}{c  c  c  c  c  c  c }'
     data += '\n' + '\\hline'
-    data += '\n' + ' & '.join(['\\multirow{2}{*}{\\bf Subjects}'] + ['\\multicolumn{2}{*}{'+tech+'}' for tech in techlist])
-    data += '\n' + '\\hline'
-    data += '\n' + ' & ' + ' & '.join(['#Gen. Tests & #Killed Muts.'] * 3)
-    data += '\n' + '\\hline'
+    data += '\n' + ' & '.join(['\\multirow{2}{*}{\\bf Subjects}'] + ['\\multicolumn{2}{*}{\\bf '+tech+'}' for tech in techlist]) + '\\\\'
+    data += '\n' + '\\cline{2-7}'
+    data += '\n' + ' & ' + ' & '.join(['{\bf \\#Gen. Tests} & {\bf \\#Killed Muts.}'] * 3) + '\\\\'
+    data += '\n' + '\\hline \\hine'
     for proj in proglist:
         tmp = []
         for i in range(3):
             tmp += [str(mintests_obj[techlist[i]][proj]), str(killed_muts_obj[techlist[i]][proj])]
-        data += '\n' + " & ".join([proj] + tmp)
-        data += '\n' + '\\hline'
+        data += '\n' + " & ".join([proj] + tmp) + '\\\\'
+        #data += '\n' + '\\hline'
+    data += '\n' + '\\hline'
     
     data += '\n' + '\\end{tabular}'
     data += '\n' + '\\end{table}'
