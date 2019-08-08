@@ -1572,7 +1572,7 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
     data += '\n' + '\\caption{Test generated and mutants killed}'
     data += '\n' + '\\begin{tabular}{l  c  c  c  c  c  c }'
     data += '\n' + '\\hline'
-    data += '\n' + ' & '.join(['\\multirow{2}{*}{\\bf \\footnotesize Subjects}'] + \
+    data += '\n' + ' & '.join(['\\multirow{3}{*}{\\bf \\footnotesize Subjects}'] + \
                                 ['\\multicolumn{2}{c}{\\bf \\footnotesize '+tech+'}' for tech in techlist]) + '\\\\'
     data += '\n' + '\\cline{2-7}'
     #data += '\n' + ' & ' + ' & '.join(['{\\bf \\#Gen. Tests} & {\\bf \\#Killed Muts.}'] * 3) + '\\\\'
