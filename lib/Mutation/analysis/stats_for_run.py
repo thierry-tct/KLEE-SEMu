@@ -1570,12 +1570,15 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
     data += '\n' + '\\centering'
     data += '\n' + '\\label{tab:testsgen_kilmuts}'
     data += '\n' + '\\caption{Test generated and mutants killed}'
-    data += '\n' + '\\begin{tabular}{c  c  c  c  c  c  c }'
+    data += '\n' + '\\begin{tabular}{l  c  c  c  c  c  c }'
     data += '\n' + '\\hline'
-    data += '\n' + ' & '.join(['\\multirow{2}{*}{\\bf Subjects}'] + ['\\multicolumn{2}{*}{\\bf '+tech+'}' for tech in techlist]) + '\\\\'
+    data += '\n' + ' & '.join(['\\multirow{2}{*}{\\bf \\footnotesize Subjects}'] + \
+                                ['\\multicolumn{2}{c}{\\bf \\footnotesize '+tech+'}' for tech in techlist]) + '\\\\'
     data += '\n' + '\\cline{2-7}'
-    data += '\n' + ' & ' + ' & '.join(['{\\bf \\#Gen. Tests} & {\\bf \\#Killed Muts.}'] * 3) + '\\\\'
-    data += '\n' + '\\hline \\hine'
+    #data += '\n' + ' & ' + ' & '.join(['{\\bf \\#Gen. Tests} & {\\bf \\#Killed Muts.}'] * 3) + '\\\\'
+    data += '\n' + ' & ' + ' & '.join(['{\\bf \\#Gen.} & {\\bf \\#Killed}'] * 3) + '\\\\'
+    data += '\n' + ' & ' + ' & '.join(['{\\bf Tests} & {\\bf Mutants}'] * 3) + '\\\\'
+    data += '\n' + '\\hline \\hline'
     for proj in proglist:
         tmp = []
         for i in range(3):
