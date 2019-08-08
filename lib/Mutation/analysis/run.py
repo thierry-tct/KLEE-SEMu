@@ -1934,7 +1934,7 @@ def main():
     parser.add_argument("--semucontinueunfinishedtunings", action="store_true", help="enable reusing previous semu execution and computation result (if available). Useful when execution fail for some tunings and we do not want to reexecute other completed tunings")
     parser.add_argument("--disable_subsuming_mutants", action="store_true", help="Disable considering subsuming mutants in reporting")
 
-    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(235, 241, 5)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
+    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(230, 241, 10)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
 
     args = parser.parse_args()
 
@@ -2840,7 +2840,7 @@ def main():
                     res_df = pd.DataFrame(out_df_parts)
                     funcs_res_df = pd.DataFrame(funcs_out_df_parts)
                     ordered_df_cols = ["TimeSnapshot(min)", "Tech-Config", 
-                                        "#SubsMutantsClusters", "#SubsTargetedClusters", "#SubsCoveredClusters", "#SubsKilledClusters", "MS_SUBSUMING-INC", \
+                                        "#SubsMutantsClusters", "#SubsTargetedClusters", "#SubsCoveredClusters", "#SubsKilledClusters", "#SubsumingMinimalGenTestsKilling", "MS_SUBSUMING-INC", \
                                         "#Mutants", "#Targeted", "#Covered", "#Killed", "#GenTests", "#GenTestsKilling", "#MinimalGenTestsKilling", "#FailingTests", "MS-INC", \
                                         "#AggregatedTestGen", "#SeedDuplicatedGenTests", \
                                         "StateComparisonTime(s)", "#MutStatesForkedFromOriginal", "#MutStatesEqWithOrigAtMutPoint"]
