@@ -2696,10 +2696,10 @@ def main():
                                     subsuming_newCovered_clust = subs_clusters_of(subsuming_mutants_clusters, newCovered)
                                     nsubsuming_newKilled_clust = len(subsuming_newKilled_clust)
                                     nsubsuming_newCovered_clust = len(subsuming_newCovered_clust)
-                                    subs_muts = get_mutants_of_subs_clust(subsuming_mutants_clusters, list(subsuming_newKilled_clust))
+                                    tmp_subs_muts = get_mutants_of_subs_clust(subsuming_mutants_clusters, list(subsuming_newKilled_clust))
                                     subsuming_minimal_testsKillingOfThis = []
-                                    _ = matrixHardness.getKillableMutants(sm_file, filt_testsOfThis, mutantset=newKilled, \
-                                                            testkillinglist=[], minimal_testkillinglist=subsuming_minimal_testsKillingOfThis)
+                                    _ = matrixHardness.getKillableMutants(sm_file, filt_testsOfThis, mutantset=tmp_subs_muts, \
+                                                            minimal_testkillinglist=subsuming_minimal_testsKillingOfThis)
                                     newCovered = set(filt_mutants) & set(matrixHardness.getListCoveredMutants(mcov_file, filt_testsOfThis))
 
 
