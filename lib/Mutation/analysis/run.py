@@ -2744,7 +2744,7 @@ def main():
                                     tmp_data["#SubsTargetedClusters"] = len(subsuming_filt_targeted_mutants_clust)
                                     tmp_data["#SubsCoveredClusters"] = nsubsuming_newCovered_clust 
                                     tmp_data["#SubsKilledClusters"] = nsubsuming_newKilled_clust
-                                    tmp_data["#SubsumingMinimalGenTestsKilling"] = len(subsuming_minimal_testsKillingOfThis), 
+                                    tmp_data["#SubsumingMinimalGenTestsKilling"] = len(subsuming_minimal_testsKillingOfThis)
                                     if subsuming_filt_nMutants_clust != 0:
                                         tmp_data["MS_SUBSUMING-INC"] = (nsubsuming_newKilled_clust * 100.0 / subsuming_filt_nMutants_clust)
                                     else:
