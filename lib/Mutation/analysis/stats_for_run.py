@@ -432,7 +432,6 @@ numFailTestsCol = "#FailingTests"
 techConfCol = "Tech-Config"
 stateCompTimeCol = "StateComparisonTime(s)"
 numGenTestsCol = "#GenTests"
-minGenTestsKillingCol  = "#MinimalGenTestsKilling"
 numForkedMutStatesCol = "#MutStatesForkedFromOriginal"
 mutPointNoDifCol = "#MutStatesEqWithOrigAtMutPoint"
 
@@ -1319,7 +1318,7 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
     return nkilled_by_tech_by_proj
 #~def mutation_scores_best_sota_klee()
 
-def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee):
+def plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee, minGenTestsKillingCol):
     time_snap_df = merged_df[merged_df[timeCol] == time_snap]
 
     # get the data
@@ -1639,6 +1638,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             killMutsCol = "#SubsKilledClusters"
             initialKillMutsKey = "Initial#SubsumingKilledClusters"
             initialNumMutsKey = "Initial#SubsumingClusters"
+            minGenTestsKillingCol  = "#SubsumingMinimalGenTestsKilling"
             n_suff = '*'
         else:
             outdir = os.path.join(outdir_bak, "traditionalMS")
@@ -1649,6 +1649,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             killMutsCol = "#Killed"
             initialKillMutsKey = "Initial#KilledMutants"
             initialNumMutsKey = "Initial#Mutants"
+            minGenTestsKillingCol  = "#MinimalGenTestsKilling"
             n_suff = ''
         
         if not os.path.isdir(outdir):
@@ -1725,7 +1726,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                     all_initial, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff=n_suff, use_fixed=use_fixed)
 
-            total_tests, minimal_tests = plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee)
+            total_tests, minimal_tests = plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee, minGenTestsKillingCol)
 
             get_table_muts_tests(outdir, nkilled_by_tech_by_proj, minimal_tests)
 

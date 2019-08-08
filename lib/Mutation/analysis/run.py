@@ -1934,7 +1934,7 @@ def main():
     parser.add_argument("--semucontinueunfinishedtunings", action="store_true", help="enable reusing previous semu execution and computation result (if available). Useful when execution fail for some tunings and we do not want to reexecute other completed tunings")
     parser.add_argument("--disable_subsuming_mutants", action="store_true", help="Disable considering subsuming mutants in reporting")
 
-    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(5, 240, 5)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
+    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(235, 241, 5)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
 
     args = parser.parse_args()
 
@@ -2696,6 +2696,12 @@ def main():
                                     subsuming_newCovered_clust = subs_clusters_of(subsuming_mutants_clusters, newCovered)
                                     nsubsuming_newKilled_clust = len(subsuming_newKilled_clust)
                                     nsubsuming_newCovered_clust = len(subsuming_newCovered_clust)
+                                    subs_muts = get_mutants_of_subs_clust(subsuming_mutants_clusters, list(subsuming_newKilled_clust))
+                                    subsuming_minimal_testsKillingOfThis = []
+                                    _ = matrixHardness.getKillableMutants(sm_file, filt_testsOfThis, mutantset=newKilled, \
+                                                            testkillinglist=[], minimal_testkillinglist=subsuming_minimal_testsKillingOfThis)
+                                    newCovered = set(filt_mutants) & set(matrixHardness.getListCoveredMutants(mcov_file, filt_testsOfThis))
+
 
                                 semu_info_df = pd.read_csv(os.path.join(mfi_ktests_dir, nameprefix+"-semu_execution_info.csv"))
                                 semu_info_stateCmpTime = '-'
@@ -2738,6 +2744,7 @@ def main():
                                     tmp_data["#SubsTargetedClusters"] = len(subsuming_filt_targeted_mutants_clust)
                                     tmp_data["#SubsCoveredClusters"] = nsubsuming_newCovered_clust 
                                     tmp_data["#SubsKilledClusters"] = nsubsuming_newKilled_clust
+                                    tmp_data["#SubsumingMinimalGenTestsKilling"] = len(subsuming_minimal_testsKillingOfThis), 
                                     if subsuming_filt_nMutants_clust != 0:
                                         tmp_data["MS_SUBSUMING-INC"] = (nsubsuming_newKilled_clust * 100.0 / subsuming_filt_nMutants_clust)
                                     else:
