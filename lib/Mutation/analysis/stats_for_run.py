@@ -1579,7 +1579,7 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
     for proj in proglist:
         tmp = []
         for i in range(3):
-            tmp += [mintests_obj[techlist[i]][proj], killed_muts_obj[techlist[i]][proj]]
+            tmp += [str(mintests_obj[techlist[i]][proj]), str(killed_muts_obj[techlist[i]][proj])]
         data += " & ".join([proj] + tmp)
         data += '\n' + '\\hline'
     
