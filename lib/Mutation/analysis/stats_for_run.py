@@ -1602,6 +1602,13 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     # load the data
     loaded_merged_df, all_initial = loadData(proj2dir, use_func, \
                                                 projcommonreldir, onlykillable)
+    _, tmp_all_initial = loadData(proj2dir, True, \
+                                                projcommonreldir, onlykillable)
+    with open(os.path.join(outdir,'infos'), 'w') as f:
+        nfuncs = 0
+        for p in tmp_all_initial:
+            nfuncs += len(tmp_all_initial[p]["By-Functions"])
+        f.write('Number of functions: '+str(nfuncs))
 
     # Compute merged initial
     merged_initial_ms_json_obj = merge_initial(all_initial, outdir, use_func, \
