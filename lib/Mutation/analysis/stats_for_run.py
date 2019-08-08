@@ -1574,7 +1574,7 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
     data += '\n' + '\\hline'
     data += '\n' + ' & '.join(['\\multirow{2}{*}{\\bf Subjects}'] + ['\\multicolumn{2}{*}{\\bf '+tech+'}' for tech in techlist]) + '\\\\'
     data += '\n' + '\\cline{2-7}'
-    data += '\n' + ' & ' + ' & '.join(['{\bf \\#Gen. Tests} & {\bf \\#Killed Muts.}'] * 3) + '\\\\'
+    data += '\n' + ' & ' + ' & '.join(['{\\bf \\#Gen. Tests} & {\\bf \\#Killed Muts.}'] * 3) + '\\\\'
     data += '\n' + '\\hline \\hine'
     for proj in proglist:
         tmp = []
