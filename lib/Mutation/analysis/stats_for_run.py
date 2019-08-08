@@ -1563,14 +1563,14 @@ def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
 #~ def plot_overlap_3()
 
 def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
-    techlist = []
-    proglist = []
+    techlist = sorted(killed_muts_obj.keys())
+    proglist = sorted(mintests_obj.keys())
     outfile = os.path.join(outdir, 'killedmuts_tests_table.tex')
     data = '\\begin{table}[!t]'
-    data += '\n' + '\\  centering'
+    data += '\n' + '\\centering'
     data += '\n' + '\\label{tab:testsgen_kilmuts}'
     data += '\n' + '\\caption{Test generated and mutants killed}'
-    data += '\n' + '\\begin{tabular}{c | c | c | c | c | c | c }'
+    data += '\n' + '\\begin{tabular}{c  c  c  c  c  c  c }'
     data += '\n' + '\\hline'
     data += '\n' + ' & '.join(['\\multirow{2}{*}{\\bf Subjects}'] + ['\\multicolumn{2}{*}{'+tech+'}' for tech in techlist])
     data += '\n' + '\\hline'
@@ -1583,8 +1583,8 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
         data += " & ".join([proj] + tmp)
         data += '\n' + '\\hline'
     
-    data += '\n' + '\\end{tabular}\n'
-    data += '\n' + '\\end{table}\n'
+    data += '\n' + '\\end{tabular}'
+    data += '\n' + '\\end{table}'
     
     with open(outfile, 'w') as f:
         f.write(data)
