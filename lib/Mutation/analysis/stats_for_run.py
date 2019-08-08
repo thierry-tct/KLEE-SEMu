@@ -781,7 +781,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                 inner_stattest(best_sota_klee_data, outfile_best_sota_klee+'--statest.json')
                 median_vals = plotMerge.plot_Box_Grouped(best_sota_klee_data, outfile_best_sota_klee, colors_bw, \
                                         y_repr+"MS"+n_suff+" (%)", yticks_range=get_yticks_range(best_sota_klee_data), \
-                                            selectData=bsk_sel_dat)
+                                        selectData=bsk_sel_dat, selectGroups=sorted(list(best_sota_klee_data), reverse=True))
                 dumpJson(median_vals, outfile_best_sota_klee+'.medians.json')
 
         selected_data = ['min', 'med', 'max']
@@ -1563,7 +1563,7 @@ def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
 #~ def plot_overlap_3()
 
 def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
-    techlist = sorted(list(killed_muts_obj.keys()))
+    techlist = sorted(list(killed_muts_obj.keys()), reverse=True)
     proglist = sorted(list(mintests_obj[list(mintests_obj.keys())[0]].keys()))
     outfile = os.path.join(outdir, 'killedmuts_tests_table.tex')
     data = '\\begin{table}[!t]'
