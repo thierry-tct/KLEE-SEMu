@@ -1588,8 +1588,8 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
         data += '\n' + " & ".join([proj] + tmp) + '\\\\'
         #data += '\n' + '\\hline'
     data += '\n' + '\\hline'
-    data += '\n' + " & ".join(['{ \bf Total }']+[str(sum(x)) for x in columns]) + '\\\\'
-    data += '\n' + " & ".join(['{ \bf Median }']+['{:10.1f}'.format(np.median(x)) for x in columns]) + '\\\\'
+    data += '\n' + " & ".join(['{\\bf Total}']+[str(sum(x)) for x in columns]) + '\\\\'
+    data += '\n' + " & ".join(['{\\bf Median}']+['{:10.1f}'.format(np.median(x)) for x in columns]) + '\\\\'
     data += '\n' + '\\hline'
     
     data += '\n' + '\\end{tabular}'
