@@ -1578,12 +1578,18 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
     data += '\n' + ' & ' + ' & '.join(['{\\bf \\footnotesize \\#Gen.} & {\\bf \\footnotesize \\#Killed}'] * 3) + '\\\\'
     data += '\n' + ' & ' + ' & '.join(['{\\bf \\footnotesize Tests} & {\\bf \\footnotesize Mutants}'] * 3) + '\\\\'
     data += '\n' + '\\hline \\hline'
+    columns = [[] for i in range(2*len(techlist))]
     for proj in proglist:
         tmp = []
         for i in range(3):
             tmp += [str(mintests_obj[techlist[i]][proj]), str(killed_muts_obj[techlist[i]][proj])]
+            columns[2*i].append(mintests_obj[techlist[i]][proj])
+            columns[2*i+1].append(killed_muts_obj[techlist[i]][proj])
         data += '\n' + " & ".join([proj] + tmp) + '\\\\'
         #data += '\n' + '\\hline'
+    data += '\n' + '\\hline'
+    data += '\n' + " & ".join(['{ \bf Total }']+[sum(x) for x in columns]) + '\\\\'
+    data += '\n' + " & ".join(['{ \bf Median }']+[np.median(x) for x in columns]) + '\\\\'
     data += '\n' + '\\hline'
     
     data += '\n' + '\\end{tabular}'
