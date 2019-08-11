@@ -1583,7 +1583,8 @@ def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
                             right_stackbar_legends=sb_legend)
 #~ def plot_overlap_3()
 
-def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj, all_initial):
+def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj, nkilled_by_tech_by_proj,\
+                                    add_total_cand_muts_by_proj, add_total_killed_muts_by_proj):
     techlist = sorted(list(killed_muts_obj.keys()), reverse=True)
     proglist = sorted(list(mintests_obj[list(mintests_obj.keys())[0]].keys()))
     outfile = os.path.join(outdir, 'killedmuts_tests_table.tex')
@@ -1622,7 +1623,23 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj, all_initial):
 
     # plot scatters
     # get the data used in computation for complementatiry to get scatter plot data. Then make boxplot of esch tech MS*
-    #plotLines(plotobj, sorted(plotobj.keys()), "time(min)", "MS"+n_suff, bw_image, colors, linestyles, linewidths, fontsize)
+    outfile_scat1 = os.path.join(outdir, 'scatter_semu_VS_sota_cand')
+    plot_obj1 = {semuBEST: ([], []), infectOnly: ([], [])}
+    for tech in plot_obj1:
+        for p in add_total_cand_muts_by_proj:
+            plot_obj1[tech][0].append(add_total_cand_muts_by_proj[p])
+            plot_obj1[tech][1].append(nkilled_by_tech_by_proj[p])
+    plotLines(plot_obj1, sorted(list(plot_obj1.keys()), reverse=True), "# Targeted Mutants", "# Killed Reference Mutants", outfile_scat1,\
+                        colors[:2], ['X', 'o'], linewidths, fontsize, scatter=True)
+
+    outfile_scat2 = os.path.join(outdir, 'scatter_semu_VS_sota_killablecand')
+    plot_obj2 = {semuBEST: ([], []), infectOnly: ([], [])}
+    for tech in plot_obj2:
+        for p in add_total_killed_muts_by_proj:
+            plot_obj2[tech][0].append(add_total_killed_muts_by_proj[p])
+            plot_obj2[tech][1].append(nkilled_by_tech_by_proj[p])
+    plotLines(plot_obj2, sorted(list(plot_obj2.keys()), reverse=True), "# Targeted Mutants", "# Killed Reference Mutants", outfile_scat2,\
+                        colors[:2], ['X', 'o'], linewidths, fontsize, scatter=True)
 #~ def get_table_muts_tests()
 
 #### CONTROLLER ####
@@ -1773,7 +1790,8 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
             total_tests, minimal_tests = plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee, minGenTestsKillingCol)
 
-            get_table_muts_tests(outdir, nkilled_by_tech_by_proj, minimal_tests, all_initial)
+            get_table_muts_tests(outdir, nkilled_by_tech_by_proj, minimal_tests, nkilled_by_tech_by_proj, add_total_cand_muts_by_proj,\
+                                                                                                add_total_killed_muts_by_proj)
 
             plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee, add_total_cand_muts_by_proj)
                             
