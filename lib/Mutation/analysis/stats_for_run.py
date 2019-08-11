@@ -1642,6 +1642,16 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj, nkilled_by_tech_
                         colors[:2], ['X', 'o'], linewidths, fontsize, scatter=True)
 #~ def get_table_muts_tests()
 
+def all_semu_techconf_boxplot(outdir, ms_Col, tmp_sorted_techconf_by_ms, tmp_metric2techconf2values):
+    medians = []
+    for techconf in tmp_sorted_techconf_by_ms:
+        if techconf in SPECIAL_TECHS:
+            continue
+        medians.append(np.median(tmp_metric2techconf2values[ms_Col][techconf]))
+    # Next, draw
+    
+#~ def all_semu_techconf_boxplot()
+
 #### CONTROLLER ####
 def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                 projcommonreldir=None, onlykillable=False, no_concrete=False):
@@ -1752,6 +1762,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             best_elems, worse_elems = best_worst_conf(merged_df, outdir, \
                                         SpecialTechs, ms_by_time, n_suff, \
                                         techConfbyvalbyconf, ms_apfds, proj_agg_func=bw_proj_agg_func)
+                                    
 
             # Select what to continue
             sel_merged_df = select_top_or_all(merged_df, \
@@ -1761,6 +1772,14 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             time_snap_df = sel_merged_df[sel_merged_df[timeCol] == time_snap]
             if time_snap_df.empty:
                 continue
+
+            # XXX strange boxplot
+            tmp_sorted_techconf_by_ms, tmp_metric2techconf2values = \
+                                plot_extra_data(merged_df, time_snap, \
+                                        outdir, ms_apfds, msCol, targetCol,\
+                                        covMutsCol, numMutsCol, n_suff)
+            all_semu_techconf_boxplot(outdir, msCol, tmp_sorted_techconf_by_ms, tmp_metric2techconf2values)
+
 
             # XXX compare MS with compareState time, %targeted, #testgen, WM%
             sorted_techconf_by_ms, metric2techconf2values = \
