@@ -122,7 +122,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                                     right_stackbar_legends=None, show_grid=True,
                                     left_color_list=None, right_color_list=None):
 
-    fontsize = 16
+    fontsize = 18
     if left_y_vals is None or right_y_vals is None:
         separate = True
         fig, ax = plt.subplots(figsize=(13,8))
@@ -236,7 +236,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
     plt.close('all')
 #~ def make_twoside_plot()
 
-def plotLines(x_y_lists_pair_dict, order, xlabel, ylabel, imagepath, colors, linestyles, linewidths, fontsize):
+def plotLines(x_y_lists_pair_dict, order, xlabel, ylabel, imagepath, colors, linestyles, linewidths, fontsize, scatter=False):
     # get median
     plt.figure(figsize=(13, 9))
     plt.gcf().subplots_adjust(bottom=0.27)
@@ -250,10 +250,13 @@ def plotLines(x_y_lists_pair_dict, order, xlabel, ylabel, imagepath, colors, lin
     if order is None:
         order = x_y_lists_pair_dict.keys()
     #maxx = max([max(x_y_lists_pair_dict[t][0]) for t in order])
-    maxx = max([x_y_lists_pair_dict[t][0] for t in order])
+    maxx = max([max(x_y_lists_pair_dict[t][0]) for t in order])
     for ti,tech in enumerate(order):
         x, y = x_y_lists_pair_dict[tech]
-        plt.plot(x, y, color=colors[ti], linestyle=linestyles[ti], linewidth=linewidths[ti], label=tech, alpha=0.8)
+        if scatter:
+            plt.scatter(x, y, color=colors[ti], marker=linestyles[ti], s=linewidths[ti], label=tech, alpha=0.8)
+        else:
+            plt.plot(x, y, color=colors[ti], linestyle=linestyles[ti], linewidth=linewidths[ti], label=tech, alpha=0.8)
     plt.ylabel(ylabel, fontsize=fontsize)
     plt.xlabel(xlabel, fontsize=fontsize)
     plt.xticks((range(1, int(maxx+1), int(maxx/10)) if (maxx % 10 == 0 or type(maxx) == int) else np.arange(1,maxx+1, maxx/10.0)), fontsize=fontsize-5)
@@ -455,7 +458,7 @@ linewidths += linewidths*3
 
 # Others
 semuBEST = 'semu-best'
-infectOnly = 'no-propagation'
+infectOnly = 'infection-only'
 ######~
 
 goodViewColors = {
@@ -674,6 +677,12 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                     bests_only=False, use_fixed=False, special_on_per_param=False,\
                                     specific_cmp_best_only=True):
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
+    if use_fixed:
+        MS_str = "Mutation Score"
+        if n_suff == '*':
+            MS_str = 'Subsuming '+MS_str
+    else:
+        MS_str = "MS"+n_suff # Over time Average
 
     influence_folder = 'param_influence'
     if not os.path.isdir(os.path.join(outdir, influence_folder)):
@@ -779,7 +788,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                 # PLot
                 inner_stattest(best_sota_klee_data, outfile_best_sota_klee+'--statest.json')
                 median_vals = plotMerge.plot_Box_Grouped(best_sota_klee_data, outfile_best_sota_klee, colors_bw, \
-                                        y_repr+"MS"+n_suff+" (%)", yticks_range=get_yticks_range(best_sota_klee_data), \
+                                        MS_str+" (%)", yticks_range=get_yticks_range(best_sota_klee_data), \
                                         selectData=bsk_sel_dat, selectGroups=sorted(list(best_sota_klee_data), reverse=True))
                 dumpJson(median_vals, outfile_best_sota_klee+'.medians.json')
 
@@ -844,7 +853,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
         # plot
         inner_stattest(data, plot_out_file+'--statest.json')
         median_vals = plotMerge.plot_Box_Grouped(data, plot_out_file, colors_bw, \
-                                y_repr+"MS"+n_suff+" (%)", yticks_range=yticks_range, \
+                                MS_str+" (%)", yticks_range=yticks_range, \
                                     selectData=selected_data)
         dumpJson(median_vals, plot_out_file+'.medians.json')
 
@@ -856,7 +865,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
             median_vals = plotMerge.plot_Box_Grouped(emphasis[0], \
                                 emph1_plot_out_file, \
                                 colors_bw, \
-                                y_repr+"MS"+n_suff+" (%)", yticks_range=yticks_range, \
+                                MS_str+" (%)", yticks_range=yticks_range, \
                                     selectData=selected_data)
             dumpJson(median_vals, emph1_plot_out_file+'.medians.json')
 
@@ -865,7 +874,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
             median_vals = plotMerge.plot_Box_Grouped(emphasis[1], \
                                 emph2_plot_out_file, \
                                 colors_bw, \
-                                y_repr+"MS"+n_suff+" (%)", yticks_range=yticks_range, \
+                                MS_str+" (%)", yticks_range=yticks_range, \
                                     selectData=selected_data)
             dumpJson(median_vals, emph2_plot_out_file+'.medians.json')
 
@@ -932,8 +941,8 @@ def best_worst_conf(merged_df, outdir, SpecialTechs, ms_by_time, n_suff, \
                 name_ = bw+str(i+1)
             v_data = ms_by_time[v]
             plotobj[name_] = []
-            plotobj[name_].append(np.median([v_data[p][0] for p in v_data]))
-            plotobj[name_].append(np.median([v_data[p][1] for p in v_data]))
+            plotobj[name_].append([np.median([v_data[p][0] for p in v_data])])
+            plotobj[name_].append([np.median([v_data[p][1] for p in v_data])])
 
             if i > topN: #XXX focus on topN
                 break
@@ -1143,6 +1152,13 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
                                     all_initial, merged_initial_ms_json_obj, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff='', use_fixed=False):
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
+    if use_fixed:
+        MS_str = "Mutation Score"
+        if n_suff == '*':
+            MS_str = 'Subsuming '+MS_str
+    else:
+        MS_str = "MS"+n_suff # Over time Average
+
     tmp_elem = list(time_snap_df[techConfCol])[0]
     nonklee_tmp_elem = tmp_elem if tmp_elem != KLEE_KEY else list(time_snap_df[techConfCol])[1]
     tmp_elem_df = time_snap_df[time_snap_df[techConfCol] == tmp_elem]
@@ -1196,9 +1212,9 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
     image_file_final = os.path.join(outdir, "minimal_config_evolution-final")
 
     make_twoside_plot(bp_data, None, img_out_file=image_file, x_vals=list(range(1, len(bp_data)+1))+['all'], \
-                x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)", show_grid=False)
+                x_label="Configuations", y_left_label=MS_str+" (%)", show_grid=False)
     make_twoside_plot(bp_data_final, None, img_out_file=image_file_final, x_vals=list(range(1, len(bp_data_final)+1))+['all'], \
-                x_label="Configuations", y_left_label=y_repr+"MS"+n_suff+" (%)", show_grid=False)
+                x_label="Configuations", y_left_label=MS_str+" (%)", show_grid=False)
 
     # Stove Overal data
     json_obj = {}
@@ -1226,6 +1242,12 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
                                     all_initial, initialNumMutsKey, initialKillMutsKey, numMutsCol, killMutsCol, \
                                     n_suff='', use_fixed=False):
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
+    if use_fixed:
+        MS_str = "Mutation Score"
+        if n_suff == '*':
+            MS_str = 'Subsuming '+MS_str
+    else:
+        MS_str = "MS"+n_suff # Over time Average
 
     final_ms = {}
     nkilled_by_tech_by_proj = {}
@@ -1282,11 +1304,11 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
         image_file_final = os.path.join(outdir, "selected_techs_MS-final-"+name)
         make_twoside_plot(techperf_miss, None, x_vals=x_vals, \
                     img_out_file=image_file, \
-                    x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
+                    x_label=x_label, y_left_label=MS_str+" (%)", \
                                 left_stackbar_legends=[name, 'missed'], left_color_list=[goodViewColors[name], goodViewColors['missed']])
         make_twoside_plot(techperf_miss_final, None, x_vals=x_vals_final, \
                     img_out_file=image_file_final, \
-                    x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
+                    x_label=x_label, y_left_label=MS_str+" (%)", \
                                 left_stackbar_legends=['initial' ,name, 'missed'], \
                                 left_color_list=[goodViewColors['initial'], goodViewColors[name], goodViewColors['missed']])
 
@@ -1295,11 +1317,11 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
             image_file_p_final = os.path.join(outdir, "selected_partial_techs_MS-final-"+name)
             make_twoside_plot(techperf_partial_miss, None, x_vals=x_partial_vals, \
                         img_out_file=image_file_p, \
-                        x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
+                        x_label=x_label, y_left_label=MS_str+" (%)", \
                                     left_stackbar_legends=[name, 'missed'], left_color_list=[goodViewColors[name], goodViewColors['missed']])
             make_twoside_plot(techperf_partial_miss_final, None, x_vals=x_partial_vals_final, \
                         img_out_file=image_file_p_final, \
-                        x_label=x_label, y_left_label=y_repr+"MS"+n_suff+" (%)", \
+                        x_label=x_label, y_left_label=MS_str+" (%)", \
                                     left_stackbar_legends=['initial' ,name, 'missed'], \
                                     left_color_list=[goodViewColors['initial'], goodViewColors[name], goodViewColors['missed']])
         
@@ -1561,14 +1583,14 @@ def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
                             right_stackbar_legends=sb_legend)
 #~ def plot_overlap_3()
 
-def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
+def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj, all_initial):
     techlist = sorted(list(killed_muts_obj.keys()), reverse=True)
     proglist = sorted(list(mintests_obj[list(mintests_obj.keys())[0]].keys()))
     outfile = os.path.join(outdir, 'killedmuts_tests_table.tex')
     data = '\\begin{table}[!t]'
     data += '\n' + '\\centering'
-    data += '\n' + '\\label{tab:testsgen_kilmuts}'
     data += '\n' + '\\caption{Test generated and mutants killed}'
+    data += '\n' + '\\label{tab:testsgen_kilmuts}'
     data += '\n' + '\\begin{tabular}{l  c  c  c  c  c  c }'
     data += '\n' + '\\hline'
     data += '\n' + ' & '.join(['\\multirow{3}{*}{\\bf \\footnotesize Subjects}'] + \
@@ -1597,6 +1619,10 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj):
     
     with open(outfile, 'w') as f:
         f.write(data)
+
+    # plot scatters
+    # get the data used in computation for complementatiry to get scatter plot data. Then make boxplot of esch tech MS*
+    #plotLines(plotobj, sorted(plotobj.keys()), "time(min)", "MS"+n_suff, bw_image, colors, linestyles, linewidths, fontsize)
 #~ def get_table_muts_tests()
 
 #### CONTROLLER ####
@@ -1614,9 +1640,22 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                                 projcommonreldir, onlykillable)
     with open(os.path.join(outdir,'infos'), 'w') as f:
         nfuncs = 0
+        initial_surviving_tmp = {'initSurviveMuts': [], 
+                                                    'initSurviveSubsClust':[]}
+        ordered_tmp = [ "Initial#SubsumingClusters", 
+                                "Initial#SubsumingKilledClusters",
+                                "Initial#Mutants", "Initial#KilledMutants"]
+                            
         for p in tmp_all_initial:
             nfuncs += len(tmp_all_initial[p]["By-Functions"])
+            initial_surviving_tmp['initSurviveMuts'].append(\
+                                    tmp_all_initial[p][ordered_tmp[2]]-\
+                                            tmp_all_initial[p][ordered_tmp[3]])
+            initial_surviving_tmp['initSurviveSubsClust'].append(\
+                                    tmp_all_initial[p][ordered_tmp[0]]-\
+                                            tmp_all_initial[p][ordered_tmp[1]])
         f.write('Number of functions: '+str(nfuncs))
+        f.write(str(initial_surviving_tmp))
 
     # Compute merged initial
     merged_initial_ms_json_obj = merge_initial(all_initial, outdir, use_func, \
@@ -1734,7 +1773,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
             total_tests, minimal_tests = plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee, minGenTestsKillingCol)
 
-            get_table_muts_tests(outdir, nkilled_by_tech_by_proj, minimal_tests)
+            get_table_muts_tests(outdir, nkilled_by_tech_by_proj, minimal_tests, all_initial)
 
             plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee, add_total_cand_muts_by_proj)
                             
