@@ -2620,7 +2620,7 @@ def main():
                     # get subsuming mutants
                     subsuming_mutants_clusters = None
                     if not args.disable_subsuming_mutants:
-                        subsuming_mutants_clusters = list(get_subsuming_mutants(matrix, sm_file, gen_on_killed_sm))
+                        subsuming_mutants_clusters = list(get_subsuming_mutants(testgen_mode_initial_tests_set, matrix, sm_file, gen_on_killed_sm))
 
                     out_df_parts = []
                     funcs_out_df_parts = []
@@ -2869,7 +2869,7 @@ def main():
 
 #~ def main()
 
-def get_subsuming_mutants (initial_sm, surviving_sm, killed_on_surviving_sm):
+def get_subsuming_mutants (sel_initial_tests_set, initial_sm, surviving_sm, killed_on_surviving_sm):
     """ Return subsuming clusters
     """
     # Loading
@@ -2878,6 +2878,9 @@ def get_subsuming_mutants (initial_sm, surviving_sm, killed_on_surviving_sm):
         tmp = matrixHardness.loadMatrix(m_f, None)
         for m in set(tmp) - {matrixHardness.SM_index_string}:
             test_kill_m = set(matrixHardness.TestsKilling(m, tmp))
+            if m_f == initial_sm:
+                test_kill_m &= set(sel_initial_tests_set) #make sure the initial removed flaky tests are removed here
+                test_kill_m = {'initial:'+kt for kt in test_kill_m}
             if m in agg_mat_dat:
                 agg_mat_dat[m] |= test_kill_m
             else:
