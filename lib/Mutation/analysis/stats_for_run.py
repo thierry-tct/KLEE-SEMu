@@ -29,6 +29,8 @@ import numpy as np
 import itertools
 import copy
 
+import scipy.stats.stats as ss
+
 import pandas as pd
 
 import matplotlib
@@ -60,6 +62,25 @@ def wilcoxon(list1, list2, isranksum=True):
         p_value = scipy.stats.wilcoxon(list1, list2)
     return p_value
 #~ def wilcoxon()
+
+'''
+    Compute correlation coef
+'''
+def computeCorrelation(X, Y, algo='kendall'):
+    #print X, Y
+    assert (len(X) == len(Y)), "X and Y must have same length"
+    assert len(X) > 1, "Both X and Y must have at least 2 elements"
+    if algo == 'pearson':
+        cc, p_value = ss.pearsonr(X, Y) #+[0.0] assume that FD=0 when MS=0
+        #cc, p_value = ss.pearsonr(X+[0.0], Y+[0.0]) #+[0.0] assume that FD=0   when MS=0
+    elif algo == 'kendall':
+        cc, p_value = ss.kendalltau(X, Y) #+[0.0] assume that FD=0 when MS=0
+        #cc, p_value = ss.kendalltau(X+[0.0], Y+[0.0]) #+[0.0] assume that FD=0 when MS=0
+    else:
+        assert False, 'Unsuported correlation type: '+algo
+    return cc, p_value
+#~ del computeCorrelation()
+
 
 def dumpJson (obj, filename, pretty=True):
     with open(filename, "w") as fp:
@@ -122,7 +143,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
                                     right_stackbar_legends=None, show_grid=True,
                                     left_color_list=None, right_color_list=None):
 
-    fontsize = 18
+    fontsize = 22 #18
     if left_y_vals is None or right_y_vals is None:
         separate = True
         fig, ax = plt.subplots(figsize=(13,8))
@@ -221,6 +242,7 @@ def make_twoside_plot(left_y_vals, right_y_vals, x_vals=None, img_out_file=None,
         #assert len(locs) == len(x_vals), "labels mismatch: {} VS {}.".format(len(locs), len(x_vals))
         #print("labels mismatch: {} VS {}.".format(len(locs), len(x_vals)))
         plt.xticks(np.arange(len(x_vals)), x_vals, rotation=45, ha='right', fontsize=fontsize-4)
+    plt.yticks(fontsize=fontsize-4)
     
     if not show_grid:
         plt.rcParams["axes.grid"] = False
@@ -248,7 +270,7 @@ def plotLines(x_y_lists_pair_dict, order, xlabel, ylabel, imagepath, colors, lin
     #sns.set_context("talk")
     fontsize = 26
     if order is None:
-        order = x_y_lists_pair_dict.keys()
+        order = list(x_y_lists_pair_dict.keys())
     #maxx = max([max(x_y_lists_pair_dict[t][0]) for t in order])
     maxx = max([max(x_y_lists_pair_dict[t][0]) for t in order])
     for ti,tech in enumerate(order):
@@ -259,8 +281,10 @@ def plotLines(x_y_lists_pair_dict, order, xlabel, ylabel, imagepath, colors, lin
             plt.plot(x, y, color=colors[ti], linestyle=linestyles[ti], linewidth=linewidths[ti], label=tech, alpha=0.8)
     plt.ylabel(ylabel, fontsize=fontsize)
     plt.xlabel(xlabel, fontsize=fontsize)
-    plt.xticks((range(1, int(maxx+1), int(maxx/10)) if (maxx % 10 == 0 or type(maxx) == int) else np.arange(1,maxx+1, maxx/10.0)), fontsize=fontsize-5)
-    plt.yticks(np.arange(0,1.01,0.2), fontsize=fontsize-5)
+    #plt.xticks((range(1, int(maxx+1), int(maxx/10)) if (maxx % 10 == 0 or type(maxx) == int) else np.arange(1,maxx+1, maxx/10.0)), fontsize=fontsize-5)
+    plt.xticks(fontsize=fontsize-5)
+    #plt.yticks(np.arange(0,1.01,0.2), fontsize=fontsize-5)
+    plt.yticks(fontsize=fontsize-5)
     legendMode=1 if len(order) <= 3 else 2
     if legendMode==1:
         lgd = plt.legend(bbox_to_anchor=(0., 0.98, 1., .102), loc=2, ncol=3, mode="expand", fontsize=fontsize, borderaxespad=0.)
@@ -546,9 +570,9 @@ def merge_initial(all_initial, outdir, use_func, has_subsuming_data=True):
     merged_json_obj["Initial-MS(MED)"] = \
             np.median([float(all_initial[v]["Initial-MS"]) for v in all_initial])
     merged_json_obj["TestSampleMode"] = \
-                        all_initial[all_initial.keys()[0]]["TestSampleMode"]
+                        all_initial[list(all_initial.keys())[0]]["TestSampleMode"]
     merged_json_obj["MaxTestGen-Time(min)"] = \
-                    all_initial[all_initial.keys()[0]]["MaxTestGen-Time(min)"]
+                    all_initial[list(all_initial.keys())[0]]["MaxTestGen-Time(min)"]
     if use_func:
         merged_json_obj["#Functions"] = 0
         merged_json_obj['By-Functions'] = {}
@@ -642,7 +666,7 @@ def get_techConfUtils(only_semu_cfg_df, SpecialTechs):
     for c in config_columns:
         vals_by_conf[c] = list(set(only_semu_cfg_df[c]))
     # add combinations
-    for ls_, rs_ in itertools.combinations(vals_by_conf.keys(), 2):
+    for ls_, rs_ in itertools.combinations(list(vals_by_conf.keys()), 2):
         vals_by_conf[(ls_,rs_)] = list(itertools.product(vals_by_conf[ls_], vals_by_conf[rs_]))
 
     techConf2ParamVals = {k: {conf_name_mapping[cc]: None for cc in config_columns} for k in SpecialTechs}
@@ -688,6 +712,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
     if not os.path.isdir(os.path.join(outdir, influence_folder)):
         os.mkdir(os.path.join(outdir, influence_folder))
 
+    info_best_sota_klee = None
     for pc in techConfbyvalbyconf:
         for_sota = False
         min_vals = {}
@@ -700,7 +725,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                     key=lambda x: proj_agg_func(getListAPFDSForTechConf(x, ms_apfds)))
             min_vals[val] = sorted_by_apfd_tmp[0]
             max_vals[val] = sorted_by_apfd_tmp[-1]
-            med_vals[val] = sorted_by_apfd_tmp[len(sorted_by_apfd_tmp)/2]
+            med_vals[val] = sorted_by_apfd_tmp[int(len(sorted_by_apfd_tmp)/2)]
             if overal_best is None or proj_agg_func(getListAPFDSForTechConf(max_vals[val], ms_apfds)) > overal_best_score:
                 overal_best = str(val)
                 overal_best_score = proj_agg_func(getListAPFDSForTechConf(max_vals[val], ms_apfds))
@@ -719,11 +744,11 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                             for val in techConfbyvalbyconf[pc]}
         emphasis = None
         if len(data) == 2:
-            n_projs = len(data[data.keys()[0]]['max'])
+            n_projs = len(data[list(data.keys())[0]]['max'])
             if n_projs >= 2:
                 diff_of_projs = {projpos: None for projpos in range(n_projs)}
                 for projpos in range(n_projs):
-                    diff_of_projs[projpos] = data[data.keys()[0]]['max'][projpos] - data[data.keys()[1]]['max'][projpos]
+                    diff_of_projs[projpos] = data[list(data.keys())[0]]['max'][projpos] - data[list(data.keys())[1]]['max'][projpos]
                 avg = np.average([diff_of_projs[projpos] for projpos in diff_of_projs])
                 lt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] < avg]
                 gt_avg = [projpos for projpos in diff_of_projs if diff_of_projs[projpos] >= avg]
@@ -745,7 +770,6 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                                 for em in ['min', 'med','max']}
 
         # BEST VS SOTA VS KLEE
-        info_best_sota_klee = None
         if for_sota:
             sota_val = "('0', '0.0')"
             if sota_val in data:
@@ -786,10 +810,12 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                         del best_sota_klee_data[tc]['max']
                 
                 # PLot
+                order_tmp = [semuBEST, infectOnly, 'klee']
+                order_tmp += list(set(best_sota_klee_data) - set(order_tmp))
                 inner_stattest(best_sota_klee_data, outfile_best_sota_klee+'--statest.json')
                 median_vals = plotMerge.plot_Box_Grouped(best_sota_klee_data, outfile_best_sota_klee, colors_bw, \
                                         MS_str+" (%)", yticks_range=get_yticks_range(best_sota_klee_data), \
-                                        selectData=bsk_sel_dat, selectGroups=sorted(list(best_sota_klee_data), reverse=True))
+                                        selectData=bsk_sel_dat, selectGroups=order_tmp)
                 dumpJson(median_vals, outfile_best_sota_klee+'.medians.json')
 
         selected_data = ['min', 'med', 'max']
@@ -828,7 +854,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                     min_y = int(min_y - rem_tmp/2)
                 min_y = max(0, min_y)
                 max_y = min(100, max_y)
-            yticks_range = range(min_y, max_y+1, step_y)
+            yticks_range = range(int(min_y), int(max_y+1), int(step_y))
             return yticks_range
         #~ def get_yticks_range()
 
@@ -860,7 +886,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
         # if case it is having state-of-the art's similar config, plot BEST VS SOTA(zero-propagation) VS KLEE
         
         if emphasis is not None:
-            emph1_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_1__"+str(len(emphasis[0][emphasis[0].keys()[0]]['max'])))
+            emph1_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_1__"+str(len(emphasis[0][list(emphasis[0].keys())[0]]['max'])))
             inner_stattest(emphasis[0], emph1_plot_out_file+'--statest.json')
             median_vals = plotMerge.plot_Box_Grouped(emphasis[0], \
                                 emph1_plot_out_file, \
@@ -869,7 +895,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                     selectData=selected_data)
             dumpJson(median_vals, emph1_plot_out_file+'.medians.json')
 
-            emph2_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_2__"+str(len(emphasis[1][emphasis[1].keys()[0]]['max'])))
+            emph2_plot_out_file = os.path.join(outdir, influence_folder, "emph_perconf_apfd_"+pc+"_2__"+str(len(emphasis[1][list(emphasis[1].keys())[0]]['max'])))
             inner_stattest(emphasis[1], emph2_plot_out_file+'--statest.json')
             median_vals = plotMerge.plot_Box_Grouped(emphasis[1], \
                                 emph2_plot_out_file, \
@@ -947,7 +973,7 @@ def best_worst_conf(merged_df, outdir, SpecialTechs, ms_by_time, n_suff, \
             if i > topN: #XXX focus on topN
                 break
 
-        plotLines(plotobj, sorted(plotobj.keys()), "time(min)", "MS"+n_suff, bw_image, colors, linestyles, linewidths, fontsize)
+        plotLines(plotobj, sorted(list(plotobj.keys())), "time(min)", "MS"+n_suff, bw_image, colors, linestyles, linewidths, fontsize)
 
     return best_elems, worse_elems
 #~ def best_worst_conf()
@@ -1004,7 +1030,7 @@ def plot_extra_data(time_snap_df, time_snap, outdir, ms_apfds, msCol, \
     if len(metric2techconf2values) == 0:
         print ("#WARNING: metric2techconf2values is empty!")
     else:
-        sorted_techconf_by_ms = metric2techconf2values[fixed_y].keys()
+        sorted_techconf_by_ms = list(metric2techconf2values[fixed_y].keys())
         sorted_techconf_by_ms.sort(reverse=True, key=lambda x: ( \
                         np.median(metric2techconf2values[fixed_y][x]), \
                         np.average(metric2techconf2values[fixed_y][x])))
@@ -1111,7 +1137,7 @@ def get_overlap_data(proj2dir, projcommonreldir, time_snap, subsuming, \
                     assert len(lose) == 1
                     lose = list(lose)[0]
                     tech_conf_missed_muts[proj][lose] |= set(fobj[s_m_key]["NON_OVERLAP_VENN"][pair][win])
-    all_tech_confs = {v for p in non_overlap_obj[non_overlap_obj.keys()[0]] for v in p}
+    all_tech_confs = {v for p in non_overlap_obj[list(non_overlap_obj.keys())[0]] for v in p}
     # We only use top 5 and KLEE
     #assert all_tech_confs == set(sorted_techconf_by_ms), \
     #                    "Inconsistemcy between dataframe and overlap json"
@@ -1491,7 +1517,7 @@ def plot_overlap_2(outdir, non_overlap_obj, SpecialTechs, tech_conf2position, \
     num_x_wins = "# Mutants Killed more by X"
     df_obj = []
 
-    for left_right in non_overlap_obj[non_overlap_obj.keys()[0]]:
+    for left_right in non_overlap_obj[list(non_overlap_obj.keys())[0]]:
         for left, right in [left_right, reversed(left_right)]:
             hue_val = "SEMu"
             if left in SpecialTechs and right in SpecialTechs:
@@ -1583,7 +1609,7 @@ def plot_overlap_3(outdir, best_elems, msCol, proj_agg_func2_name,time_snap, \
                             right_stackbar_legends=sb_legend)
 #~ def plot_overlap_3()
 
-def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj, nkilled_by_tech_by_proj,\
+def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj, ref_killed_by_tech_by_proj,\
                                     add_total_cand_muts_by_proj, add_total_killed_muts_by_proj):
     techlist = sorted(list(killed_muts_obj.keys()), reverse=True)
     proglist = sorted(list(mintests_obj[list(mintests_obj.keys())[0]].keys()))
@@ -1621,35 +1647,77 @@ def get_table_muts_tests(outdir, killed_muts_obj, mintests_obj, nkilled_by_tech_
     with open(outfile, 'w') as f:
         f.write(data)
 
-    # plot scatters
-    # get the data used in computation for complementatiry to get scatter plot data. Then make boxplot of esch tech MS*
-    outfile_scat1 = os.path.join(outdir, 'scatter_semu_VS_sota_cand')
-    plot_obj1 = {semuBEST: ([], []), infectOnly: ([], [])}
-    for tech in plot_obj1:
+    if ref_killed_by_tech_by_proj is not None:
+		# plot scatters
+		# get the data used in computation for complementatiry to get scatter plot data. Then make boxplot of esch tech MS*
+        diff_key = semuBEST+'--'+infectOnly
+        outfile_scat1 = os.path.join(outdir, 'scatter_semu_VS_sota_cand')
+        plot_obj1 = {semuBEST: ([], []), infectOnly: ([], [])}
+        diff_obj1 = {diff_key: ([], [])}
         for p in add_total_cand_muts_by_proj:
-            plot_obj1[tech][0].append(add_total_cand_muts_by_proj[p])
-            plot_obj1[tech][1].append(nkilled_by_tech_by_proj[p])
-    plotLines(plot_obj1, sorted(list(plot_obj1.keys()), reverse=True), "# Targeted Mutants", "# Killed Reference Mutants", outfile_scat1,\
-                        colors[:2], ['X', 'o'], linewidths, fontsize, scatter=True)
+            for tech in plot_obj1:
+                plot_obj1[tech][0].append(add_total_cand_muts_by_proj[p])
+                plot_obj1[tech][1].append(ref_killed_by_tech_by_proj[tech][p])
+            diff_obj1[diff_key][0].append(add_total_cand_muts_by_proj[p])
+            diff_obj1[diff_key][1].append(plot_obj1[semuBEST][1][-1] - plot_obj1[infectOnly][1][-1])
+        diff_obj_prop1 = {diff_key: (diff_obj1[diff_key][0], [(diff_obj1[diff_key][1][i] * 100 / diff_obj1[diff_key][0][i] if diff_obj1[diff_key][0][i] != 0 else 0) for i in range(len(diff_obj1[diff_key][0]))])}
+		#plotLines(plot_obj1, sorted(list(plot_obj1.keys()), reverse=True), "# Candidate Mutants", "# Killed Reference Mutants", outfile_scat1,\
+		#					['blue', 'red'], ['X', 'o'], [26,24], fontsize, scatter=True)
+        plotLines(diff_obj1, sorted(list(diff_obj1.keys()), reverse=True), "# Candidate Mutants", "# Killed Reference Mutants", outfile_scat1,\
+							['blue', 'red'], ['X', 'o'], [26,24], fontsize, scatter=True)
+        corr_obj = {'kendall':{}, 'pearson':{}}
+        for corr_alg in corr_obj:
+            corr_obj[corr_alg]['correlation'], corr_obj[corr_alg]['p-value'] = computeCorrelation(diff_obj1[diff_key][0], diff_obj1[diff_key][1], algo=corr_alg)
+        dumpJson(corr_obj, outfile_scat1+'correlation.json')
+		
+        plotLines(diff_obj_prop1, sorted(list(diff_obj_prop1.keys()), reverse=True), "# Candidate Mutants", "% Killed Reference Mutants", outfile_scat1+'-proportion',\
+							['blue', 'red'], ['X', 'o'], [26,24], fontsize, scatter=True)
+        corr_obj = {'kendall':{}, 'pearson':{}}
+        for corr_alg in corr_obj:
+            corr_obj[corr_alg]['correlation'], corr_obj[corr_alg]['p-value'] = computeCorrelation(diff_obj_prop1[diff_key][0], diff_obj_prop1[diff_key][1], algo=corr_alg)
+        dumpJson(corr_obj, outfile_scat1+'-proportion-correlation.json')
+        
+		
+        corr, p_val = computeCorrelation(diff_obj_prop1[diff_key][0], diff_obj_prop1[diff_key][1], algo='kendall')
 
-    outfile_scat2 = os.path.join(outdir, 'scatter_semu_VS_sota_killablecand')
-    plot_obj2 = {semuBEST: ([], []), infectOnly: ([], [])}
-    for tech in plot_obj2:
+        outfile_scat2 = os.path.join(outdir, 'scatter_semu_VS_sota_killablecand')
+        plot_obj2 = {semuBEST: ([], []), infectOnly: ([], [])}
+        diff_obj2 = {diff_key: ([], [])}
         for p in add_total_killed_muts_by_proj:
-            plot_obj2[tech][0].append(add_total_killed_muts_by_proj[p])
-            plot_obj2[tech][1].append(nkilled_by_tech_by_proj[p])
-    plotLines(plot_obj2, sorted(list(plot_obj2.keys()), reverse=True), "# Targeted Mutants", "# Killed Reference Mutants", outfile_scat2,\
-                        colors[:2], ['X', 'o'], linewidths, fontsize, scatter=True)
+            for tech in plot_obj2:
+                plot_obj2[tech][0].append(add_total_killed_muts_by_proj[p])
+                plot_obj2[tech][1].append(ref_killed_by_tech_by_proj[tech][p])
+            diff_obj2[diff_key][0].append(add_total_killed_muts_by_proj[p])
+            diff_obj2[diff_key][1].append(plot_obj2[semuBEST][1][-1] - plot_obj2[infectOnly][1][-1])
+        diff_obj_prop2 = {diff_key: (diff_obj2[diff_key][0], [(diff_obj2[diff_key][1][i] * 100 / diff_obj2[diff_key][0][i] if diff_obj2[diff_key][0][i] != 0 else 0) for i in range(len(diff_obj2[diff_key][0]))])}
+		#plotLines(plot_obj2, sorted(list(plot_obj2.keys()), reverse=True), "# Candidate Killable Mutants", "# Killed Reference Mutants", outfile_scat2,\
+		#					['blue', 'red'], ['X', 'o'], [26,24], fontsize, scatter=True)
+        plotLines(diff_obj2, sorted(list(diff_obj2.keys()), reverse=True), "# Candidate Killable Mutants", "# Killed Reference Mutants", outfile_scat2,\
+							['blue', 'red'], ['X', 'o'], [26,24], fontsize, scatter=True)
+        corr_obj = {'kendall':{}, 'pearson':{}}
+        for corr_alg in corr_obj:
+            corr_obj[corr_alg]['correlation'], corr_obj[corr_alg]['p-value'] = computeCorrelation(diff_obj2[diff_key][0], diff_obj2[diff_key][1], algo=corr_alg)
+        dumpJson(corr_obj, outfile_scat2+'correlation.json')
+
+        plotLines(diff_obj_prop2, sorted(list(diff_obj_prop2.keys()), reverse=True), "# Candidate Killable Mutants", "% Killed Reference Mutants", outfile_scat2+'proportion',\
+							['blue', 'red'], ['X', 'o'], [26,24], fontsize, scatter=True)
+        corr_obj = {'kendall':{}, 'pearson':{}}
+        for corr_alg in corr_obj:
+            corr_obj[corr_alg]['correlation'], corr_obj[corr_alg]['p-value'] = computeCorrelation(diff_obj_prop2[diff_key][0], diff_obj_prop2[diff_key][1], algo=corr_alg)
+        dumpJson(corr_obj, outfile_scat2+'-proportion-correlation.json')
 #~ def get_table_muts_tests()
 
-def all_semu_techconf_boxplot(outdir, ms_Col, tmp_sorted_techconf_by_ms, tmp_metric2techconf2values):
-    medians = []
+def all_semu_techconf_boxplot(outdir, ms_Col, tmp_sorted_techconf_by_ms, tmp_metric2techconf2values, n_suff):
+    medians_obj = []
     for techconf in tmp_sorted_techconf_by_ms:
         if techconf in SPECIAL_TECHS:
             continue
-        medians.append(np.median(tmp_metric2techconf2values[ms_Col][techconf]))
+        medians_obj.append(np.median(tmp_metric2techconf2values[ms_Col][techconf]))
     # Next, draw
     
+    medians_obj = {'semu': medians_obj}
+    y_label = 'Mutation Score (%)' if n_suff != '*' else 'Subsuming Mutation Score (%)'
+    medians = plotMerge.plotBoxes(medians_obj, list(medians_obj.keys()), os.path.join(outdir, 'all_semu_techconf_boxplot'), colors_bw, ylabel=y_label, yticks_range=None)#range(0,101,10))
 #~ def all_semu_techconf_boxplot()
 
 #### CONTROLLER ####
@@ -1699,6 +1767,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
     outdir_bak = outdir
     merged_df_bak = merged_df
 
+    reference_killed_by_tech_by_conf = None
     for subsuming in ((True, False) if has_subsuming_data else (False,)):
         merged_df = merged_df_bak.copy(deep=True)
         if subsuming:
@@ -1778,7 +1847,7 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
                                 plot_extra_data(merged_df, time_snap, \
                                         outdir, ms_apfds, msCol, targetCol,\
                                         covMutsCol, numMutsCol, n_suff)
-            all_semu_techconf_boxplot(outdir, msCol, tmp_sorted_techconf_by_ms, tmp_metric2techconf2values)
+            all_semu_techconf_boxplot(outdir, msCol, tmp_sorted_techconf_by_ms, tmp_metric2techconf2values, n_suff)
 
 
             # XXX compare MS with compareState time, %targeted, #testgen, WM%
@@ -1809,7 +1878,9 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
 
             total_tests, minimal_tests = plot_gentest_killing(outdir, merged_df, time_snap, best_elems, info_best_sota_klee, minGenTestsKillingCol)
 
-            get_table_muts_tests(outdir, nkilled_by_tech_by_proj, minimal_tests, nkilled_by_tech_by_proj, add_total_cand_muts_by_proj,\
+            if subsuming:
+                reference_killed_by_tech_by_conf = copy.deepcopy(nkilled_by_tech_by_proj)
+            get_table_muts_tests(outdir, nkilled_by_tech_by_proj, minimal_tests, reference_killed_by_tech_by_conf, add_total_cand_muts_by_proj,\
                                                                                                 add_total_killed_muts_by_proj)
 
             plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_dict, info_best_sota_klee, add_total_cand_muts_by_proj)
@@ -1867,7 +1938,10 @@ def main():
         onlyprojects_list = list(set(args.onlyprojects.strip().split()))
 
     if os.path.isdir(outdir):
-        if raw_input("\nspecified output exists. Clear it? [y/n] ")\
+        reading_func = input
+        if sys.version_info.major < 3:
+            reading_func = eval('raw_input')
+        if reading_func("\nspecified output exists. Clear it? [y/n] ")\
                                                     .lower().strip() == 'y':
             shutil.rmtree(outdir)
         else:

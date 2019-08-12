@@ -1934,7 +1934,7 @@ def main():
     parser.add_argument("--semucontinueunfinishedtunings", action="store_true", help="enable reusing previous semu execution and computation result (if available). Useful when execution fail for some tunings and we do not want to reexecute other completed tunings")
     parser.add_argument("--disable_subsuming_mutants", action="store_true", help="Disable considering subsuming mutants in reporting")
 
-    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(230, 241, 10)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
+    parser.add_argument("--semuanalysistimesnapshots_min", type=str, default=(' '.join([str(x) for x in range(30, 241, 30)])), help="Specify the space separated list of the considered time snapshots to compare the approaches in analyse")
 
     args = parser.parse_args()
 
@@ -2557,6 +2557,8 @@ def main():
                 time_snapshots_minutes_list = [int(math.ceil(float(v))) for v in args.semuanalysistimesnapshots_min.strip().split()]
                 if len(time_snapshots_minutes_list) > 0:
                     time_snap_period = time_snapshots_minutes_list[1] - time_snapshots_minutes_list[0]
+                    if time_snap_period > 10:
+                        time_snap_period = 10
                 else:
                     time_snap_period = 1
                 max_time_minutes = int(math.ceil(float(args.semutimeout)/60.0))
