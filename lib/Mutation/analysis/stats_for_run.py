@@ -28,6 +28,7 @@ import scipy.stats
 import numpy as np
 import itertools
 import copy
+import random
 
 import scipy.stats.stats as ss
 
@@ -653,9 +654,14 @@ def get_ms_apfds(merged_df, msCol):
     return ms_apfds, ms_by_time
 #~ def get_ms_apfds()
 
-def getListAPFDSForTechConf (t_c, ms_apfds):
+def getListAPFDSForTechConf (t_c, ms_apfds, sel_projects=None):
     v_list = []
-    for p in ms_apfds.keys():
+    if sel_projects is None:
+        sel_projects = set(ms_apfds.keys())
+    else:
+        assert len(sel_projects) > 0, "empty sel_proj"
+        assert len(set(sel_projects) - set(ms_apfds.keys())) == 0, 'invalid proj passed'
+    for p in sel_projects:
         assert t_c in ms_apfds[p]
         v_list.append(ms_apfds[p][t_c])
     return v_list
@@ -699,7 +705,7 @@ def get_techConfUtils(only_semu_cfg_df, SpecialTechs):
 def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                     n_suff, ms_apfds, proj_agg_func=None, \
                                     bests_only=False, use_fixed=False, special_on_per_param=False,\
-                                    specific_cmp_best_only=True):
+                                    specific_cmp_best_only=True, cross_validation=False):
     y_repr = "" if use_fixed else "AVERAGE " # Over time Average
     if use_fixed:
         MS_str = "Mutation Score"
@@ -712,6 +718,27 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
     if not os.path.isdir(os.path.join(outdir, influence_folder)):
         os.mkdir(os.path.join(outdir, influence_folder))
 
+
+    infect_only_cross = False
+    if cross_validation:
+        nfolds = 10
+        # CREATE FOLDS each is a pair of (train, test)
+        proj_cross_list = list(ms_apfds.keys())
+        # shuffle
+        random.seed(3) # reproductibility
+        random.shuffle(proj_cross_list)
+        folds_data_sets = {i:set() for i in range(nfolds)}
+        ind_fold = 0
+        while len(proj_cross_list) > 0:
+            folds_data_sets[ind_fold].add(proj_cross_list.pop())
+            ind_fold = (ind_fold + 1) % nfolds
+        for i, p_set in folds_data_sets.items():
+            folds_data_sets[i] = ((set(ms_apfds) - p_set), p_set)
+
+        infect_only_cross = True
+
+
+    sota_val = "('0', '0.0')"
     info_best_sota_klee = None
     for pc in techConfbyvalbyconf:
         for_sota = False
@@ -720,15 +747,46 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
         med_vals = {}
         overal_best = None
         overal_best_score = proj_agg_func([0])
+        if cross_validation:
+            cross_fold_to_overal_best = {i:None for i in range(nfolds)}
+            cross_fold_to_overal_best_validate_score = {i:proj_agg_func([0])for i in range(nfolds)}
+            cross_median_best = None
+        if infect_only_cross:
+            io_cross_fold_to_overal_best = {i:None for i in range(nfolds)}
+            io_cross_fold_to_overal_best_validate_score = {i:proj_agg_func([0])for i in range(nfolds)}
+            io_cross_median_best = None
         for val in techConfbyvalbyconf[pc]:
             sorted_by_apfd_tmp = sorted(techConfbyvalbyconf[pc][val], \
                     key=lambda x: proj_agg_func(getListAPFDSForTechConf(x, ms_apfds)))
             min_vals[val] = sorted_by_apfd_tmp[0]
             max_vals[val] = sorted_by_apfd_tmp[-1]
             med_vals[val] = sorted_by_apfd_tmp[int(len(sorted_by_apfd_tmp)/2)]
+            if cross_validation:
+                for fold, f_dat in cross_fold_to_overal_best.items():
+                    cur_best = max(techConfbyvalbyconf[pc][val], key=lambda x:proj_agg_func(getListAPFDSForTechConf(x, ms_apfds, sel_projects=folds_data_sets[fold][0])))
+                    cur_best_val = proj_agg_func(getListAPFDSForTechConf(cur_best, ms_apfds, sel_projects=folds_data_sets[fold][0])) # (only 9 parts)
+                    if f_dat is None or cur_best_val > cross_fold_to_overal_best_validate_score[fold]: 
+                        cross_fold_to_overal_best[fold] = cur_best
+                        cross_fold_to_overal_best_validate_score[fold] = proj_agg_func(getListAPFDSForTechConf(cur_best, ms_apfds, sel_projects=folds_data_sets[fold][1])) # (only one part)
+                # take the median fold
+                folds_list_tmp = list(cross_fold_to_overal_best.keys())
+                folds_list_tmp.sort(key=lambda x:cross_fold_to_overal_best_validate_score[x])
+                cross_median_best = cross_fold_to_overal_best[folds_list_tmp[int(round(float(nfolds)/2))]]               
+            if infect_only_cross and str(val) == sota_val:
+                for fold, f_dat in io_cross_fold_to_overal_best.items():
+                    io_cur_best = max(techConfbyvalbyconf[pc][val], key=lambda x:proj_agg_func(getListAPFDSForTechConf(x, ms_apfds, sel_projects=folds_data_sets[fold][0])))
+                    io_cur_best_val = proj_agg_func(getListAPFDSForTechConf(io_cur_best, ms_apfds, sel_projects=folds_data_sets[fold][0])) # (only 9 parts)
+                    if f_dat is None or io_cur_best_val > io_cross_fold_to_overal_best_validate_score[fold]: 
+                        io_cross_fold_to_overal_best[fold] = io_cur_best
+                        io_cross_fold_to_overal_best_validate_score[fold] = proj_agg_func(getListAPFDSForTechConf(io_cur_best, ms_apfds, sel_projects=folds_data_sets[fold][1])) # (only one part)
+                # take the median fold
+                io_folds_list_tmp = list(io_cross_fold_to_overal_best.keys())
+                io_folds_list_tmp.sort(key=lambda x:io_cross_fold_to_overal_best_validate_score[x])
+                io_cross_median_best = io_cross_fold_to_overal_best[io_folds_list_tmp[int(round(float(nfolds)/2))]]                
             if overal_best is None or proj_agg_func(getListAPFDSForTechConf(max_vals[val], ms_apfds)) > overal_best_score:
                 overal_best = str(val)
                 overal_best_score = proj_agg_func(getListAPFDSForTechConf(max_vals[val], ms_apfds))
+
 
         # plot
         if type(pc) in (list, tuple):
@@ -771,7 +829,6 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
 
         # BEST VS SOTA VS KLEE
         if for_sota:
-            sota_val = "('0', '0.0')"
             if sota_val in data:
                 best_sota_klee_data = {}
                 for sp in SpecialTechs:
@@ -779,6 +836,11 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                                                     for em in ['min', 'med','max']}
                 best_sota_klee_data[infectOnly] = copy.deepcopy(data[sota_val])
                 best_sota_klee_data[semuBEST] = copy.deepcopy(data[overal_best])
+
+                if cross_validation:
+                    best_sota_klee_data[semuBEST]['max'] = getListAPFDSForTechConf(cross_median_best, ms_apfds)
+                if infect_only_cross:
+                    best_sota_klee_data[infectOnly]['max'] = getListAPFDSForTechConf(io_cross_median_best, ms_apfds)
 
                 outfile_best_sota_klee = os.path.join(outdir, "bestVSsotaVSklee")
                 
@@ -792,11 +854,11 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
                         v_str = str(v)
                         if v_str == sota_val:
                             info_best_sota_klee[lev][infectOnly] = {
-                                                    techConfCol: vals[v], 
+                                                    techConfCol: (io_cross_median_best if infect_only_cross else vals[v]), 
                                                     'score': proj_agg_func(best_sota_klee_data[infectOnly][lev])}
                         elif v_str == overal_best:
                             info_best_sota_klee[lev][semuBEST] = {
-                                                    techConfCol: vals[v], 
+                                                    techConfCol: (cross_median_best if cross_validation else vals[v]), 
                                                     'score': proj_agg_func(best_sota_klee_data[semuBEST][lev])}
                 dumpJson(info_best_sota_klee, outfile_best_sota_klee+'.info.json')
 
@@ -1722,7 +1784,8 @@ def all_semu_techconf_boxplot(outdir, ms_Col, tmp_sorted_techconf_by_ms, tmp_met
 
 #### CONTROLLER ####
 def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
-                projcommonreldir=None, onlykillable=False, no_concrete=False):
+                projcommonreldir=None, onlykillable=False, no_concrete=False, \
+                cross_validation=False):
     has_subsuming_data = True
 
     if projcommonreldir is None:
@@ -1825,13 +1888,16 @@ def libMain(outdir, proj2dir, use_func=False, customMaxtime=None, \
             # XXX Check the influence of each parameter. 
             info_best_sota_klee = compute_n_plot_param_influence(techConfbyvalbyconf, outdir, \
                                         SpecialTechs, n_suff, ms_apfds, proj_agg_func=bw_proj_agg_func, \
-                                        bests_only=False, use_fixed=use_fixed)
+                                        bests_only=False, use_fixed=use_fixed, cross_validation=cross_validation)
             
             # XXX Find best and worse confs
             best_elems, worse_elems = best_worst_conf(merged_df, outdir, \
                                         SpecialTechs, ms_by_time, n_suff, \
                                         techConfbyvalbyconf, ms_apfds, proj_agg_func=bw_proj_agg_func)
-                                    
+
+            # make sure that the best is update in cross validation
+            if cross_validation:
+                best_elems.insert(0, info_best_sota_klee['max'][semuBEST][techConfCol])                        
 
             # Select what to continue
             sel_merged_df = select_top_or_all(merged_df, \
@@ -1916,6 +1982,8 @@ def main():
                     help="Only for project/function with a killable mutant")
     parser.add_argument('--with_concrete', action='store_true', \
                     help="compare normal semu only with pure klee")
+    parser.add_argument('--cross_validation', action='store_true', \
+                    help="compute the best based on 10 fold cross validation")
     args = parser.parse_args()
 
     if args.forposter:
@@ -1964,7 +2032,8 @@ def main():
         if maxtime_list is None:
             libMain(outdir, proj2dir, use_func=args.usefunctions, \
                                             onlykillable=args.onlykillable, \
-                                        no_concrete=(not args.with_concrete))
+                                        no_concrete=(not args.with_concrete), \
+                                        cross_validation=args.cross_validation)
         else:
             for maxtime in maxtime_list:
                 mt_outdir = os.path.join(outdir, "maxtime-"+maxtime)
@@ -1972,7 +2041,8 @@ def main():
                 libMain(mt_outdir, proj2dir, use_func=args.usefunctions, \
                                             customMaxtime=float(maxtime), \
                                             onlykillable=args.onlykillable, \
-                                        no_concrete=(not args.with_concrete))
+                                        no_concrete=(not args.with_concrete), \
+                                        cross_validation=args.cross_validation)
 
         print("# DONE")
     else:
