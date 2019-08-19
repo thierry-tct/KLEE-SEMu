@@ -1422,12 +1422,20 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
                                     left_color_list=[goodViewColors['initial'], goodViewColors[name], goodViewColors['missed']])
         
         final_ms[name] = {}
-        final_ms[name]['MED'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
-        final_ms[name]['AVG'] = np.average([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
+        if len(missed_name) == 0:
+            final_ms[name]['MED'] = np.median([a for a in (techperf_miss_final[0])])
+            final_ms[name]['AVG'] = np.average([a for a in (techperf_miss_final[0])])
+        else:
+            final_ms[name]['MED'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
+            final_ms[name]['AVG'] = np.average([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
         if 'ALL_TECHS' not in final_ms:
             final_ms['ALL_TECHS'] = {}
-            final_ms['ALL_TECHS']['MED'] = np.median([a+b+c for a,b,c in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])])
-            final_ms['ALL_TECHS']['AVG'] = np.average([a+b+c for a,b,c in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])]) 
+            if len(missed_name) == 0:
+                final_ms['ALL_TECHS']['MED'] = np.median([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])])
+                final_ms['ALL_TECHS']['AVG'] = np.average([a+b for a,b in zip(techperf_miss_final[0], techperf_miss_final[1])]) 
+            else:
+                final_ms['ALL_TECHS']['MED'] = np.median([a+b+c for a,b,c in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])])
+                final_ms['ALL_TECHS']['AVG'] = np.average([a+b+c for a,b,c in zip(techperf_miss_final[0], techperf_miss_final[1], techperf_miss_final[2])]) 
     final_ms['INITIAL'] = {}
     final_ms['INITIAL']['MED'] = np.median([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
     final_ms['INITIAL']['AVG'] = np.average([all_initial[p][initialKillMutsKey] * 100.0 / all_initial[p][initialNumMutsKey] for p in all_initial])
