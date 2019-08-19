@@ -482,7 +482,7 @@ linewidths += linewidths*3
 #####~
 
 # Others
-semuBEST = 'semu-best'
+semuBEST = 'semu' #-best'
 infectOnly = 'infection-only'
 ######~
 
@@ -1387,17 +1387,25 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
                                         [list(v) for v in zip(*sorted(zip(techperf_partial_miss_final[0], techperf_partial_miss_final[1], \
                                                                                      techperf_partial_miss_final[2], x_partial_vals_final)))]
 
+        missed_name = [] #['missed']  # enable miss here
+        if len(missed_name) == 0:
+            for arr_tmp in [techperf_miss, techperf_miss_final, techperf_partial_miss, techperf_partial_miss_final]:
+                arr_tmp.pop()
+        else:
+            assert len(missed_name) == 1
+            
+
         x_label=None #'Programs'
         image_file = os.path.join(outdir, "selected_techs_MS-additional-"+name)
         image_file_final = os.path.join(outdir, "selected_techs_MS-final-"+name)
         make_twoside_plot(techperf_miss, None, x_vals=x_vals, \
                     img_out_file=image_file, \
                     x_label=x_label, y_left_label=MS_str+" (%)", \
-                                left_stackbar_legends=[name, 'missed'], left_color_list=[goodViewColors[name], goodViewColors['missed']])
+                                left_stackbar_legends=[name]+missed_name, left_color_list=[goodViewColors[name], goodViewColors['missed']])
         make_twoside_plot(techperf_miss_final, None, x_vals=x_vals_final, \
                     img_out_file=image_file_final, \
                     x_label=x_label, y_left_label=MS_str+" (%)", \
-                                left_stackbar_legends=['initial' ,name, 'missed'], \
+                                left_stackbar_legends=['initial' ,name]+missed_name, \
                                 left_color_list=[goodViewColors['initial'], goodViewColors[name], goodViewColors['missed']])
 
         if name == semuBEST:
@@ -1406,11 +1414,11 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
             make_twoside_plot(techperf_partial_miss, None, x_vals=x_partial_vals, \
                         img_out_file=image_file_p, \
                         x_label=x_label, y_left_label=MS_str+" (%)", \
-                                    left_stackbar_legends=[name, 'missed'], left_color_list=[goodViewColors[name], goodViewColors['missed']])
+                                    left_stackbar_legends=[name]+missed_name, left_color_list=[goodViewColors[name], goodViewColors['missed']])
             make_twoside_plot(techperf_partial_miss_final, None, x_vals=x_partial_vals_final, \
                         img_out_file=image_file_p_final, \
                         x_label=x_label, y_left_label=MS_str+" (%)", \
-                                    left_stackbar_legends=['initial' ,name, 'missed'], \
+                                    left_stackbar_legends=['initial' ,name]+missed_name, \
                                     left_color_list=[goodViewColors['initial'], goodViewColors[name], goodViewColors['missed']])
         
         final_ms[name] = {}
@@ -1540,7 +1548,7 @@ def plot_overlap_1(outdir, time_snap, non_overlap_obj, best_elems, overlap_data_
         ## plot
         x_vals_bak = x_vals
         x_label=None #'Programs'
-        for suffix, ylabel_name in [('number', "# Killed Mutants"), ('proportion', "Proportion Killed Mutants")]:
+        for suffix, ylabel_name in [('number', "# Killed Mutants"), ('proportion', "Proportion of Mutants Killed")]:
             tri_lists = klee_n_semu_by_proj+[by_proj_overlap]
             x_vals = list(x_vals_bak)
 
@@ -1778,7 +1786,7 @@ def all_semu_techconf_boxplot(outdir, ms_Col, tmp_sorted_techconf_by_ms, tmp_met
     # Next, draw
     
     medians_obj = {'semu': medians_obj}
-    y_label = 'Mutation Score (%)' if n_suff != '*' else 'Subsuming Mutation Score (%)'
+    y_label = 'Mutation Score (%)' if n_suff != '*' else 'Proportion of Mutants Killed (%)' #'Subsuming Mutation Score (%)'
     medians = plotMerge.plotBoxes(medians_obj, list(medians_obj.keys()), os.path.join(outdir, 'all_semu_techconf_boxplot'), colors_bw, ylabel=y_label, yticks_range=None)#range(0,101,10))
 #~ def all_semu_techconf_boxplot()
 
