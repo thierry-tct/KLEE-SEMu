@@ -2003,7 +2003,7 @@ def main():
     
     onlyprojects_list = None
     if args.onlyprojects is not None:
-        onlyprojects_list = list(set(args.onlyprojects.strip().split()))
+        onlyprojects_list = sorted(list(set(args.onlyprojects.strip().split())), key=lambda x: float(x))
 
     if os.path.isdir(outdir):
         reading_func = input
