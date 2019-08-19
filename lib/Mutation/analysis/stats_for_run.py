@@ -711,6 +711,7 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
         MS_str = "Mutation Score"
         if n_suff == '*':
             MS_str = 'Subsuming '+MS_str
+            MS_str = 'Proportion of Mutants Killed'
     else:
         MS_str = "MS"+n_suff # Over time Average
 
@@ -1244,6 +1245,7 @@ def compute_and_store_total_increase(outdir, tech_conf_missed_muts, minimal_num_
         MS_str = "Mutation Score"
         if n_suff == '*':
             MS_str = 'Subsuming '+MS_str
+            MS_str = 'Proportion of Mutants Killed'
     else:
         MS_str = "MS"+n_suff # Over time Average
 
@@ -1334,6 +1336,7 @@ def mutation_scores_best_sota_klee(outdir, add_total_cand_muts_by_proj, add_tota
         MS_str = "Mutation Score"
         if n_suff == '*':
             MS_str = 'Subsuming '+MS_str
+            MS_str = 'Proportion of Mutants Killed'
     else:
         MS_str = "MS"+n_suff # Over time Average
 
