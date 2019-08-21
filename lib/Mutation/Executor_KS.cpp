@@ -5916,7 +5916,7 @@ void Executor::ks_applyMutantSearchStrategy() {
     for (auto *s: toStop) {
       if (ks_reachedWatchPoint.count(s)) {
         if (!toContinue.empty() && // make sure that not everything is removed
-                s->ks_numSeenCheckpoints <= semuGenTestForDiscardedFromCheckNum) {
+                s->ks_numSeenCheckpoints < semuGenTestForDiscardedFromCheckNum) {
           ks_reachedWatchPoint.erase(s);
           toTerminate.insert(s);
         }
