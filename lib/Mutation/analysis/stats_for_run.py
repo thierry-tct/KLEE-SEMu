@@ -722,11 +722,11 @@ def compute_n_plot_param_influence(techConfbyvalbyconf, outdir, SpecialTechs, \
 
     infect_only_cross = False
     if cross_validation:
-        nfolds = 10
+        nfolds = 5
         # CREATE FOLDS each is a pair of (train, test)
         proj_cross_list = list(ms_apfds.keys())
         # shuffle
-        random.seed(3) # reproductibility
+        random.seed(7) # reproductibility
         random.shuffle(proj_cross_list)
         folds_data_sets = {i:set() for i in range(nfolds)}
         ind_fold = 0
