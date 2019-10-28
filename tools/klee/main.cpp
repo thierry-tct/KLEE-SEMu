@@ -1106,7 +1106,7 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule, StringRef libDir) 
   replaceOrRenameFunction(mainModule, "__libc_fcntl", "fcntl");
 
   // Take care of fortified functions
-  replaceOrRenameFunction(mainModule, "__fprintf_chk", "fprintf");
+  //replaceOrRenameFunction(mainModule, "__fprintf_chk", "fprintf");
 
   // XXX we need to rearchitect so this can also be used with
   // programs externally linked with uclibc.
