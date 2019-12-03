@@ -1,3 +1,7 @@
+# **** INFO FORM KLEE PAGE ****
+# NOTE: If you build LLVM and Clang 3.4 from source DO NOT USE CMAKE TO BUILD IT. Use LLVM’s Autoconf/Makefile build system. Although KLEE’s CMake build system is independent of the build system used to build LLVM and Clang a bug in LLVM 3.4 means that if CMake is used to build LLVM then it will likely lead to RTTI related linking errors. 
+#############################
+
 cmake -DCMAKE_BUILD_TYPE=Release \
  -DLLVMCC=/media/thierry/TestMutants/DG-dependency/llvm-3.4.2/build/bin/clang \
  -DLLVMCXX=/media/thierry/TestMutants/DG-dependency/llvm-3.4.2/build/bin/clang++ \
