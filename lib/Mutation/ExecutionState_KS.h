@@ -157,9 +157,6 @@ public:
   //Version ID: 0 for original; 1, 2, ... for mutants
   KS_MutantIDType ks_mutantID;
  
-  // Continuous Integration Version. -1 for unknown, 0 for pre-commit, 1 for post-commit
-  char ks_CIVersion = -1;
-  
   //The last returned value: Help compare states when the watch point is end of the function
   ref<Expr> ks_lastReturnedVal;
 
