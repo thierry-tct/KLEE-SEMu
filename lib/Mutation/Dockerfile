@@ -62,7 +62,7 @@ RUN cd /home/klee-semu/klee_build \
        ../klee_src \
   && CXXFLAGS='-fno-rtti -g -DNDEBUG -DHAVE_Z3_GET_ERROR_MSG_NEEDS_CONTEXT' make
 
-ENV PATH="/home/klee-semu/klee_build/Release+Asserts/bin:${PATH}"
+ENV PATH="/home/klee-semu/klee_build/bin:${PATH}"
 
 
 
