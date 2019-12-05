@@ -18,7 +18,8 @@ RUN git clone https://github.com/klee/klee-uclibc.git /home/klee-semu/uclibc_sol
   && apt-get -y install cmake bison flex libboost-all-dev perl minisat && git clone https://github.com/stp/stp /home/klee-semu/uclibc_solvers/stp \
     && cd /home/klee-semu/uclibc_solvers/stp && mkdir build && cd build && cmake .. && make && make install \
   && git clone https://github.com/Z3Prover/z3.git /home/klee-semu/uclibc_solvers/z3 \
-    && cd /home/klee-semu/uclibc_solvers/z3 && mkdir build && cd build && cmake -G "Unix Makefiles" ../ && make -j4 && make install
+    && cd /home/klee-semu/uclibc_solvers/z3 && python scripts/mk_make.py && cd build && make -j4 && make install
+#    && cd /home/klee-semu/uclibc_solvers/z3 && mkdir build && cd build && cmake -G "Unix Makefiles" ../ && make -j4 && make install
 
 COPY . /home/klee-semu/klee_src
 
@@ -38,17 +39,19 @@ COPY . /home/klee-semu/klee_src
 #  && cp /home/klee-semu/uclibc_solvers/z3/build/libz3.so /home/klee-semu/klee_build/Debug+Asserts/lib
 #ENV PATH="/home/klee-semu/klee_build/Debug+Asserts/bin:${PATH}"
 
+# Patch stub.c
+RUN sed -i'' '243s|.*|/*&|;258s|.*|&*/|' /home/klee-semu/klee_src/runtime/POSIX/stubs.c
 
 RUN cd /home/klee-semu/klee_build \
-  && CXXFLAGS="-fno-rtti -g" cmake -DCMAKE_BUILD_TYPE=Release \
+  && CXXFLAGS="-fno-rtti -g -DNDEBUG -DHAVE_Z3_GET_ERROR_MSG_NEEDS_CONTEXT" cmake -DCMAKE_BUILD_TYPE=Release \
            -DENABLE_KLEE_ASSERTS=true \
            -DENABLE_KLEE_UCLIBC=true \
            -DENABLE_POSIX_RUNTIME=true \
            -DENABLE_SOLVER_METASMT=false \
            -DENABLE_SOLVER_STP=true \
            -DENABLE_SOLVER_Z3=true \
-           -DZ3_INCLUDE_DIRS=/home/klee-semu/uclibc_solvers/z3/install/include \
-           -DZ3_LIBRARIES=/home/klee-semu/uclibc_solvers/z3/install/lib/libz3.so \
+           -DZ3_INCLUDE_DIRS=/usr/include \
+           -DZ3_LIBRARIES=/usr/lib/libz3.so \
            -DENABLE_TCMALLOC=true \
            -DENABLE_TESTS=true \
            -DENABLE_UNIT_TESTS=OFF \
@@ -57,8 +60,25 @@ RUN cd /home/klee-semu/klee_build \
            -DSTP_DIR=/home/klee-semu/uclibc_solvers/stp/build \
            -DUSE_CXX11=true \
        ../klee_src \
-  && CXXFLAGS='-fno-rtti -g' make
+  && CXXFLAGS='-fno-rtti -g -DNDEBUG -DHAVE_Z3_GET_ERROR_MSG_NEEDS_CONTEXT' make
 
 ENV PATH="/home/klee-semu/klee_build/Release+Asserts/bin:${PATH}"
 
 
+
+#/*unsigned int gnu_dev_major(unsigned long long int __dev) __attribute__((weak));
+#unsigned int gnu_dev_major(unsigned long long int __dev) {
+#  return ((__dev >> 8) & 0xfff) | ((unsigned int) (__dev >> 32) & ~0xfff);
+#}
+#
+#unsigned int gnu_dev_minor(unsigned long long int __dev) __attribute__((weak));
+#unsigned int gnu_dev_minor(unsigned long long int __dev) {
+#  return (__dev & 0xff) | ((unsigned int) (__dev >> 12) & ~0xff);
+#}
+#
+#unsigned long long int gnu_dev_makedev(unsigned int __major, unsigned int __minor) __attribute__((weak));
+#unsigned long long int gnu_dev_makedev(unsigned int __major, unsigned int __minor) {
+#  return ((__minor & 0xff) | ((__major & 0xfff) << 8)
+#          | (((unsigned long long int) (__minor & ~0xff)) << 12)
+#          | (((unsigned long long int) (__major & ~0xfff)) << 32));
+#}*/
