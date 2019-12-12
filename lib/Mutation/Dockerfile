@@ -18,7 +18,9 @@ RUN git clone https://github.com/klee/klee-uclibc.git /home/klee-semu/uclibc_sol
   && apt-get -y install cmake bison flex libboost-all-dev perl minisat && git clone https://github.com/stp/stp /home/klee-semu/uclibc_solvers/stp \
     && cd /home/klee-semu/uclibc_solvers/stp && mkdir build && cd build && cmake .. && make && make install \
   && git clone https://github.com/Z3Prover/z3.git /home/klee-semu/uclibc_solvers/z3 \
-    && cd /home/klee-semu/uclibc_solvers/z3 && python scripts/mk_make.py && cd build && make -j4 && make install
+  && cd /home/klee-semu/uclibc_solvers/z3 \
+  && git checkout tags/z3-4.8.4 \
+  && python scripts/mk_make.py && cd build && make -j4 && make install
 #    && cd /home/klee-semu/uclibc_solvers/z3 && mkdir build && cd build && cmake -G "Unix Makefiles" ../ && make -j4 && make install
 
 COPY . /home/klee-semu/klee_src
