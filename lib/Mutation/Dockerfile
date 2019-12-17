@@ -1,6 +1,6 @@
 ### Run from the repo root dir
-# docker build -t thierrytct/ks:llvm-3.4.2 -f lib/Mutation/Dockerfile .
-# docker push thierrytct/ks:llvm-3.4.2
+# docker build -t thierrytct/klee-semu:llvm-3.4.2 -f lib/Mutation/Dockerfile .
+# docker push thierrytct/klee-semu:llvm-3.4.2
 
 ARG mart_llvm_version=3.4.2
 
@@ -19,8 +19,8 @@ RUN git clone https://github.com/klee/klee-uclibc.git /home/klee-semu/uclibc_sol
     && cd /home/klee-semu/uclibc_solvers/stp && mkdir build && cd build && cmake .. && make && make install \
   && git clone https://github.com/Z3Prover/z3.git /home/klee-semu/uclibc_solvers/z3 \
   && cd /home/klee-semu/uclibc_solvers/z3 \
-  && git checkout tags/z3-4.8.4 \
-  && python scripts/mk_make.py && cd build && make -j4 && make install
+  && git checkout tags/Z3-4.8.5 \
+  && python scripts/mk_make.py && cd build && make -j8 && make install
 #    && cd /home/klee-semu/uclibc_solvers/z3 && mkdir build && cd build && cmake -G "Unix Makefiles" ../ && make -j4 && make install
 
 COPY . /home/klee-semu/klee_src
