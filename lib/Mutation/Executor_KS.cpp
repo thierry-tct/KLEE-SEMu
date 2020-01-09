@@ -3511,8 +3511,9 @@ void Executor::callExternalFunction(ExecutionState &state,
   if (semuForkProcessForSegvExternalCalls && function->getName() == "printf") {
     pid_t my_pid;
     int child_status;
-    if ((my_pid = ::fork()) < 0) {
-      llvm::errs() << "SEMU@ERROR: fork failure for external call (to avoid Sementation fault)";
+    // Use of vfork, be careful about multi threading
+    if ((my_pid = ::vfork()) < 0) {
+      llvm::errs() << "SEMU@ERROR: fork failure for external call (to avoid Segmentation fault)";
       exit(1);
     }
     if (my_pid == 0) {
