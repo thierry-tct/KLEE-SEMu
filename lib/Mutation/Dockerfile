@@ -1,5 +1,5 @@
 ### Run from the repo root dir
-# docker build -t thierrytct/klee-semu:llvm-3.4.2 -f lib/Mutation/Dockerfile .
+# docker build --no-cache -t thierrytct/klee-semu:llvm-3.4.2 -f lib/Mutation/Dockerfile .
 # docker push thierrytct/klee-semu:llvm-3.4.2
 
 ARG mart_llvm_version=3.4.2
