@@ -16,6 +16,7 @@ git push origin --tags
 
 ```
 
+After SEMu is ported to a newer version of klee, set the default branch of the remote SEMu repository to the newest `semu-klee-<version>` branch
 
 =============================
 =============================
