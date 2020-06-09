@@ -4372,8 +4372,11 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
     }
   }
 
-  if (cand_mut_ids.empty())
+  if (cand_mut_ids.empty()) {
+    ks_max_mutant_id = dyn_cast<ConstantInt>(ks_mutantIDSelectorGlobal->getInitializer())->getZExtValue() - 1;
     return;
+  }
+
   
   ks_max_mutant_id = 0;
 
