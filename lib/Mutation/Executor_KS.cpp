@@ -4359,6 +4359,7 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
         cand_mut_ids.insert(tmpid);
         ifs >> tmpid;
       }
+      cand_mut_ids.insert(tmpid); // Just in case the user forget the las new line
       ifs.close();
       if (cand_mut_ids.empty()) {
         klee_error("SEMU@ERROR: The candidate mutant list passed is empty!");
