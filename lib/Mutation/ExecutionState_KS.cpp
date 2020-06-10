@@ -451,6 +451,7 @@ int ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *M
         
         //when branching original, copy this so that children know that what was already mutated
         falseState->ks_VisitedMutPointsSet = ks_VisitedMutPointsSet;    
+        falseState->ks_VisitedMutantsSet = ks_VisitedMutantsSet;    
       } else {
         // KS_Mode::TESTGEN_MODE
         // just add falseState to children so that we can do 4 way fork with mutants

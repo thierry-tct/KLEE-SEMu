@@ -171,14 +171,13 @@ public:
   
   struct KS_OrigBranchTreeNode *ks_curBranchTreeNode;
   
-  //TODO: use a union for ks_childrenStates and ks_VisitedMutPointSet, as they are exclusive: the first for mutants and the second for original
-  
   //States with same mutants ID branched from this state : This is empty at creation (thus when resulting from branch)
   llvm::SmallPtrSet<ExecutionState *, 5> ks_childrenStates;
   
   // keep the mutation switch statement that has been executed previously
   // by this state or its parents. (help to know whether branch mutants or not)
   llvm::SmallPtrSet<llvm::Instruction *, 5> ks_VisitedMutPointsSet;         //CallInst
+  std::set<KS_MutantIDType> ks_VisitedMutantsSet;
 
   // Say whether the postmutationpoint need to be reached for this state
   // initially true for mutant state, 

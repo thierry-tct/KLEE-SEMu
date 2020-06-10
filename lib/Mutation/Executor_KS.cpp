@@ -187,6 +187,10 @@ cl::opt<bool> semuForkProcessForSegvExternalCalls("semu-forkprocessfor-segv-exte
                                           cl::init(false),
                                           cl::desc("Enable forking a new process for external call to 'printf' which can lead to Segmentation Fault."));
 
+cl::opt<bool> semuUseOnlyBranchForDepth("semu-use-only-pair-branching-for-depth",
+                                          cl::init(false),
+                                          cl::desc("Enable to use only symbolic state branching (when both sides are feasible) to measure the depth. Otherwise, one side fork are also used. This reduces the accuracy of the depth measure"));
+
 cl::opt<bool> semuTestgenOnlyForCriticalDiffs("semu-testsgen-only-for-critical-diffs", 
                                           cl::init(false), 
                                           cl::desc("Enable Outputting tests only for critial diffs (involving environment (this excludes local/global vars))"));
@@ -1057,6 +1061,10 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
+    // @KLEE-SEMu 
+    if (!semuUseOnlyBranchForDepth)
+      current.depth++;
+    //~KS
     return StatePair(&current, 0);
   } else if (res==Solver::False) {
     if (!isInternal) {
@@ -1065,6 +1073,10 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
+    // @KLEE-SEMu 
+    if (!semuUseOnlyBranchForDepth)
+      current.depth++;
+    //~KS
     return StatePair(0, &current);
   } else {
     TimerStatIncrementer timer(stats::forkTime);
@@ -1967,11 +1979,15 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             
             std::vector<uint64_t> mIdsHere;
             for (unsigned mIds = fromMID; mIds <= toMID; mIds++) {
-                mIdsHere.push_back(mIds);
+                auto ins_ret = state.ks_VisitedMutantsSet.insert(mIds);
+                // Consider only the mutants that were not seen before (Higher order mutant case)
+                if (ins_ret.second)
+                    mIdsHere.push_back(mIds);
             }
             // produce mutants states from the current original's state with each state having 
             // one of the possible Mutants of this mutation point (successors of this switch)
-            ks_mutationPointBranching(state, mIdsHere);
+            if (!mIdsHere.empty())
+                ks_mutationPointBranching(state, mIdsHere);
             //llvm::errs() << fromMID << " " << toMID << " --\n";    
             //i->dump();
             // Set to visited, so that subsequent pass do not mutate anymore
@@ -4518,6 +4534,10 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
       
       ns->ks_originalMutSisterStates = state.ks_curBranchTreeNode;
 
+      // Free useless space
+      ns->ks_VisitedMutPointsSet.clear();
+      ns->ks_VisitedMutantsSet.clear();
+
       // On test generation mode, the newly seen mutant is shadowing original
       // Thus is in seed mode (This is KLEE Shadow implementation (XXX))
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::TESTGEN_MODE)
@@ -4600,7 +4620,7 @@ inline bool Executor::ks_isOutEnvCallInvoke (Instruction *cii) {
   Function *f = nullptr;
   if (auto *ci = llvm::dyn_cast<llvm::CallInst>(cii))
     f = ci->getCalledFunction();  //TODO: consider indirect, maybe getCalledValue is better
-  else if (auto *ii = llvm::dyn_cast<llvm::CallInst>(cii))
+  else if (auto *ii = llvm::dyn_cast<llvm::InvokeInst>(cii))
     f = ii->getCalledFunction();  //TODO: consider indirect, maybe getCalledValue is better
   else
     return false;
@@ -4614,6 +4634,7 @@ inline bool Executor::ks_isOutEnvCallInvoke (Instruction *cii) {
       case Intrinsic::not_intrinsic:
         if (outEnvFuncs.count(f->getName()))
           return true;
+        break;
       default:
         ;
     }  
