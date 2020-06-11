@@ -5015,7 +5015,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       llvm::SmallPtrSet<ExecutionState *, 5> toremove;
       llvm::SmallPtrSet<ExecutionState *, 5> originals;
       for (auto *s: ks_atPointPostMutation) {
-        if(postMutOnly_hasdiff.count(s) == 0)
+        if(s->ks_mutantID != 0 && postMutOnly_hasdiff.count(s) == 0)
           toremove.insert(s);
       }
       // Remove mutants states that are terminated form their parent's 'children set'
