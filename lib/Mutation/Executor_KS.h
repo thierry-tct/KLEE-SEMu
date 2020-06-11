@@ -579,6 +579,7 @@ private:
 
   // will be set to the maximum mutant id when FilterMutants
   ExecutionState::KS_MutantIDType ks_max_mutant_id=0;
+  ExecutionState::KS_MutantIDType ks_number_of_mutants=0;
 
 #ifdef KS_Z3MAXSAT_SOLVER__H
   // Partial Max Sat Solver
@@ -611,6 +612,7 @@ public:
   
   inline void ks_fixTerminatedChildren(ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove); 
   void ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove); 
+  void ks_moveIntoTerminatedBeforeWP(ExecutionState *es); 
   void ks_terminateSubtreeMutants(ExecutionState *pes); 
   void ks_getMutParentStates(std::vector<ExecutionState *> &mutParentStates);
   void ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly=false, bool postMutOnly=false);

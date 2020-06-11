@@ -179,6 +179,9 @@ public:
   llvm::SmallPtrSet<llvm::Instruction *, 5> ks_VisitedMutPointsSet;         //CallInst
   std::set<KS_MutantIDType> ks_VisitedMutantsSet;
 
+  // For the original program: Store the number of mutants That compare with this original state
+  KS_MutantIDType ks_numberActiveCmpMutants = 0;
+
   // Say whether the postmutationpoint need to be reached for this state
   // initially true for mutant state, 
   // but change as mutants are found (for original)

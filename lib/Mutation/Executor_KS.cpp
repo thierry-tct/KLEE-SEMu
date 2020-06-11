@@ -4390,11 +4390,13 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
 
   if (cand_mut_ids.empty()) {
     ks_max_mutant_id = dyn_cast<ConstantInt>(ks_mutantIDSelectorGlobal->getInitializer())->getZExtValue() - 1;
+    ks_number_of_mutants = ks_max_mutant_id;
     return;
   }
 
   
   ks_max_mutant_id = 0;
+  ks_number_of_mutants = 0;
 
   // XXX Fix both the mutant fork function for ID range and the switch
   for (auto &Func: *module) {
@@ -4435,6 +4437,7 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
               // update max mutant id              
               ks_max_mutant_id = std::max(ks_max_mutant_id, 
                                       *std::max_element(tosCandIds.begin(), tosCandIds.end()));
+	      ks_number_of_mutants++;
 
               for (auto i = 0u; i < fromsCandIds.size() - 1; ++i) {
                 auto *clonei = llvm::dyn_cast<llvm::CallInst>(calli->clone());
@@ -4533,6 +4536,9 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
       ns->ks_mutantID = *it;
       
       ns->ks_originalMutSisterStates = state.ks_curBranchTreeNode;
+
+      // Update active
+      (state.ks_numberActiveCmpMutants)++;
 
       // Free useless space
       ns->ks_VisitedMutPointsSet.clear();
@@ -4743,16 +4749,34 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
 
   // let a child mutant state be the new parent of the group in case this parent terminated
   // XXX at this point, all terminated children are removed from its chindren set
-  if (toremove.count(es) > 0 && !es->ks_childrenStates.empty()) {
-    auto *newParent = *(es->ks_childrenStates.begin());
-    es->ks_childrenStates.erase(newParent);
+  if (toremove.count(es) > 0) {
+    if (!es->ks_childrenStates.empty()) {
+      auto *newParent = *(es->ks_childrenStates.begin());
+      es->ks_childrenStates.erase(newParent);
     
-    newParent->ks_childrenStates.insert(es->ks_childrenStates.begin(), es->ks_childrenStates.end());
-    assert (newParent->ks_originalMutSisterStates == nullptr);
-    newParent->ks_originalMutSisterStates = es->ks_originalMutSisterStates;
+      newParent->ks_childrenStates.insert(es->ks_childrenStates.begin(), es->ks_childrenStates.end());
+      assert (newParent->ks_originalMutSisterStates == nullptr);
+      newParent->ks_originalMutSisterStates = es->ks_originalMutSisterStates;
 
-    es->ks_originalMutSisterStates = nullptr;
-    es->ks_childrenStates.clear();
+      es->ks_originalMutSisterStates = nullptr;
+      es->ks_childrenStates.clear();
+    } else {
+      // No state of this mutant at this sub tree remains, decrease active count
+      std::vector<ExecutionState *> _sub_states;
+      llvm::SmallPtrSet<ExecutionState *, 5>  _toremove;
+      es->ks_curBranchTreeNode->getAllStates(_sub_states);
+      for (ExecutionState *_s: _sub_states) {
+        assert (_s->ks_numberActiveCmpMutants > 0, "BUG, ks_numberActiveCmpMutants must be > 0");
+        (_s->ks_numberActiveCmpMutants)--;
+	if (_s->ks_numberActiveCmpMutants == 0 && _s->ks_VisitedMutantsSet.size() >= ks_number_of_mutants) {
+	  _toremove.push_back(_s);
+          // Add to ks_terminatedBeforeWP
+          ks_moveIntoTerminatedBeforeWP(_s);
+	}
+      }
+      // Fixup
+      es->ks_curBranchTreeNode->ks_cleanTerminatedOriginals(_toremove);
+    }
   }
 }
 
@@ -4787,36 +4811,28 @@ void Executor::ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::Sma
   }
 }
 
+void Executor::ks_moveIntoTerminatedBeforeWP(ExecutionState *es) {
+  if (ks_reachedWatchPoint.count(es) > 0) {
+    ks_terminatedBeforeWP.insert(es);
+    ks_reachedWatchPoint.erase(es);
+  } else if (ks_ongoingExecutionAtWP.count(es) > 0) {
+    ks_terminatedBeforeWP.insert(es);
+    ks_ongoingExecutionAtWP.erase(es);
+  } else if (ks_atPointPostMutation.count(es) > 0) {
+    ks_terminatedBeforeWP.insert(es);
+    ks_atPointPostMutation.erase(es);
+  } else if (ks_reachedOutEnv.count(es) > 0) {
+    ks_terminatedBeforeWP.insert(es);
+    ks_reachedOutEnv.erase(es);
+  }
+}
+
 void Executor::ks_terminateSubtreeMutants(ExecutionState *pes) {
   for (ExecutionState *ces: pes->ks_childrenStates) {
     ks_terminateSubtreeMutants(ces);
-    if (ks_reachedWatchPoint.count(ces) > 0) {
-      ks_terminatedBeforeWP.insert(ces);
-      ks_reachedWatchPoint.erase(ces);
-    } else if (ks_ongoingExecutionAtWP.count(ces) > 0) {
-      ks_terminatedBeforeWP.insert(ces);
-      ks_ongoingExecutionAtWP.erase(ces);
-    } else if (ks_atPointPostMutation.count(ces) > 0) {
-      ks_terminatedBeforeWP.insert(ces);
-      ks_atPointPostMutation.erase(ces);
-    } else if (ks_reachedOutEnv.count(ces) > 0) {
-      ks_terminatedBeforeWP.insert(ces);
-      ks_reachedOutEnv.erase(ces);
-    }
+    ks_moveIntoTerminatedBeforeWP(ces);
   }
-  if (ks_reachedWatchPoint.count(pes) > 0) {
-    ks_terminatedBeforeWP.insert(pes);
-    ks_reachedWatchPoint.erase(pes);
-  } else if (ks_ongoingExecutionAtWP.count(pes) > 0) {
-    ks_terminatedBeforeWP.insert(pes);
-    ks_ongoingExecutionAtWP.erase(pes);
-  } else if (ks_atPointPostMutation.count(pes) > 0) {
-    ks_terminatedBeforeWP.insert(pes);
-    ks_atPointPostMutation.erase(pes);
-  } else if (ks_reachedOutEnv.count(pes) > 0) {
-    ks_terminatedBeforeWP.insert(pes);
-    ks_reachedOutEnv.erase(pes);
-  }
+  ks_moveIntoTerminatedBeforeWP(pes);
 }
 
 void Executor::ks_getMutParentStates(std::vector<ExecutionState *> &mutParentStates) {
