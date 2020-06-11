@@ -4762,6 +4762,7 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
       es->ks_childrenStates.clear();
     } else {
       // No state of this mutant at this sub tree remains, decrease active count
+      // And remove the corresponding original if no more mutant on the way (active and upcoming)
       std::vector<ExecutionState *> _sub_states;
       llvm::SmallPtrSet<ExecutionState *, 5>  _toremove;
       es->ks_originalMutSisterStates->getAllStates(_sub_states);
