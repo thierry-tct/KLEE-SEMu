@@ -4766,7 +4766,7 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
       llvm::SmallPtrSet<ExecutionState *, 5>  _toremove;
       es->ks_curBranchTreeNode->getAllStates(_sub_states);
       for (ExecutionState *_s: _sub_states) {
-        assert (_s->ks_numberActiveCmpMutants > 0, "BUG, ks_numberActiveCmpMutants must be > 0");
+        assert (_s->ks_numberActiveCmpMutants > 0 && "BUG, ks_numberActiveCmpMutants must be > 0");
         (_s->ks_numberActiveCmpMutants)--;
 	if (_s->ks_numberActiveCmpMutants == 0 && _s->ks_VisitedMutantsSet.size() >= ks_number_of_mutants) {
 	  _toremove.insert(_s);
