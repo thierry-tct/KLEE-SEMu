@@ -4769,7 +4769,7 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
         assert (_s->ks_numberActiveCmpMutants > 0, "BUG, ks_numberActiveCmpMutants must be > 0");
         (_s->ks_numberActiveCmpMutants)--;
 	if (_s->ks_numberActiveCmpMutants == 0 && _s->ks_VisitedMutantsSet.size() >= ks_number_of_mutants) {
-	  _toremove.push_back(_s);
+	  _toremove.insert(_s);
           // Add to ks_terminatedBeforeWP
           ks_moveIntoTerminatedBeforeWP(_s);
 	}
