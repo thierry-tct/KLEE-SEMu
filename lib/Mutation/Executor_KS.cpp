@@ -6098,10 +6098,21 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
 
       // If post compare, make sure to add all original states removed during ks_fixTerminatedChildren
       // into ks_justTerminatedStates
-      if (!pre_compare)
+      if (terminatedBefore_bak.size() != ks_terminatedBeforeWP.size()) {
+        toTerminate.clear();
         for(ExecutionState* tmp_s: ks_terminatedBeforeWP)
           if (terminatedBefore_bak.count(tmp_s) == 0)
-            ks_justTerminatedStates.insert(tmp_s);
+	    toTerminate.insert(tmp_s);
+        for (auto *es: toTerminate) {
+          std::vector<ExecutionState *>::iterator it =
+                  std::find(addedStates.begin(), addedStates.end(), es);
+	  if (it != addedStates.end())
+            addedStates.erase(it);
+
+	  ks_terminatedBeforeWP.erase(es);
+          terminateState(*es);
+	}
+      }
     }
   }
 }
