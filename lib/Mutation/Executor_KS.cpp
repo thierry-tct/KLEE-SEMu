@@ -191,6 +191,10 @@ cl::opt<bool> semuUseOnlyBranchForDepth("semu-use-only-pair-branching-for-depth"
                                           cl::init(false),
                                           cl::desc("Enable to use only symbolic state branching (when both sides are feasible) to measure the depth. Otherwise, one side fork are also used. This reduces the accuracy of the depth measure"));
 
+cl::opt<bool> semuDisableCheckAtPostMutationPoint("semu-disable-post-mutation-check",
+                                          cl::init(false),
+                                          cl::desc("Setting this will disable the check post mutation point for state diff. This is particularly needed for higher order mutants, where the diff can happend in a different component."));
+
 cl::opt<bool> semuTestgenOnlyForCriticalDiffs("semu-testsgen-only-for-critical-diffs", 
                                           cl::init(false), 
                                           cl::desc("Enable Outputting tests only for critial diffs (involving environment (this excludes local/global vars))"));
@@ -4741,7 +4745,7 @@ inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction 
 ///
 
 
-inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove) {
+inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove, bool terminateLooseOrig) {
   if (toremove.empty())
     return;
 
@@ -4780,6 +4784,21 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
 	llvm::errs() << "# SEMU@Status: Removing " << _toremove.size() 
 		     << " original states with no possible subtree mutant left.\n";
         es->ks_originalMutSisterStates->ks_cleanTerminatedOriginals(_toremove);
+      }
+
+      if (terminateLooseOrig) {
+        // If post compare, make sure to add all original states removed during ks_fixTerminatedChildren
+        // into ks_justTerminatedStates
+        for (auto *es: _toremove) {
+          std::vector<ExecutionState *>::iterator it =
+                    std::find(addedStates.begin(), addedStates.end(), es);
+          if (it != addedStates.end())
+            addedStates.erase(it);
+
+	  if (ks_terminatedBeforeWP.count(es) > 0)
+	    ks_terminatedBeforeWP.erase(es);
+          terminateState(*es);
+        }
       }
     }
   }
@@ -4989,7 +5008,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       // And set a new mutant parent if cur parent is terminated
       for (ExecutionState *es: mutParentStates) {
         // Remove mutants states that are terminated form their parent's 'children set'
-        ks_fixTerminatedChildren(es, ks_terminatedBeforeWP);
+        ks_fixTerminatedChildren(es, ks_terminatedBeforeWP, false);
       }
       remainStates.clear();
     } else {
@@ -5003,7 +5022,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       // And set a new mutant parent if cur parent is terminated
       for (ExecutionState *es: mutParentStates) {
         // Remove mutants states that are terminated form their parent's 'children set'
-        ks_fixTerminatedChildren(es, toremove);
+        ks_fixTerminatedChildren(es, toremove, true);
       }
 
       // put this here because some original may be moved out in ks_fixTerminatedChildren
@@ -5491,8 +5510,13 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           std::swap(ks_WPReached, ks_atNextCheck);
         }
       } else {
-        ks_atPostMutation = (curState.ks_hasToReachPostMutationPoint && 
-                              ks_checkAtPostMutationPoint(curState, ki));
+	if (curState.ks_hasToReachPostMutationPoint) {
+	  if (semuDisableCheckAtPostMutationPoint) {
+            ks_atPostMutation = curState.ks_hasToReachPostMutationPoint = false; 
+	  } else {
+	    ks_atPostMutation = ks_checkAtPostMutationPoint(curState, ki);
+	  }
+	}
         ks_atNextCheck = !ks_atPostMutation && ks_reachedCheckNextDepth(curState);
       }
     }
@@ -5985,7 +6009,7 @@ void Executor::ks_applyMutantSearchStrategy() {
 
   // Terminate the muts in toTerminate
   for (auto *es: parStates) {
-    ks_fixTerminatedChildren(es, toTerminate);
+    ks_fixTerminatedChildren(es, toTerminate, true);
   }
   for (auto *es: toTerminate) {
     //es->pc = es->prevPC;
@@ -6084,34 +6108,15 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
     if (! toTerminate.empty()) {
       ks_getMutParentStates(parStates);
 
-      llvm::SmallPtrSet<ExecutionState *, 5> terminatedBefore_bak (ks_terminatedBeforeWP);
       // Terminate the discarded
       for (auto *es: parStates) {
-        ks_fixTerminatedChildren(es, toTerminate);
+        ks_fixTerminatedChildren(es, toTerminate, true);
       }
       for (auto *es: toTerminate) {
         // FIXME: memory corruption the 
         //es->pc = es->prevPC;
         terminateState(*es);
         //ks_terminatedBeforeWP.insert(es);
-      }
-
-      // If post compare, make sure to add all original states removed during ks_fixTerminatedChildren
-      // into ks_justTerminatedStates
-      if (terminatedBefore_bak.size() != ks_terminatedBeforeWP.size()) {
-        toTerminate.clear();
-        for(ExecutionState* tmp_s: ks_terminatedBeforeWP)
-          if (terminatedBefore_bak.count(tmp_s) == 0)
-	    toTerminate.insert(tmp_s);
-        for (auto *es: toTerminate) {
-          std::vector<ExecutionState *>::iterator it =
-                  std::find(addedStates.begin(), addedStates.end(), es);
-	  if (it != addedStates.end())
-            addedStates.erase(it);
-
-	  ks_terminatedBeforeWP.erase(es);
-          terminateState(*es);
-	}
       }
     }
   }
