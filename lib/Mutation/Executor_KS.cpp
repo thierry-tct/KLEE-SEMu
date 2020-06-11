@@ -4996,9 +4996,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       llvm::SmallPtrSet<ExecutionState *, 5> toremove;
       llvm::SmallPtrSet<ExecutionState *, 5> originals;
       for (auto *s: ks_atPointPostMutation) {
-        if (s->ks_mutantID == 0)
-          originals.insert(s);
-        else if(postMutOnly_hasdiff.count(s) == 0)
+        if(postMutOnly_hasdiff.count(s) == 0)
           toremove.insert(s);
       }
       // Remove mutants states that are terminated form their parent's 'children set'
@@ -5006,6 +5004,12 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       for (ExecutionState *es: mutParentStates) {
         // Remove mutants states that are terminated form their parent's 'children set'
         ks_fixTerminatedChildren(es, toremove);
+      }
+
+      // put this here because some original may be moved out in ks_fixTerminatedChildren
+      for (auto *s: ks_atPointPostMutation) {
+        if (s->ks_mutantID == 0)
+          originals.insert(s);
       }
         
       // Get stats
@@ -6077,18 +6081,27 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
     }
 
     std::vector<ExecutionState *> parStates;
-    if (! toTerminate.empty())
+    if (! toTerminate.empty()) {
       ks_getMutParentStates(parStates);
 
-    // Terminate the discarded
-    for (auto *es: parStates) {
-      ks_fixTerminatedChildren(es, toTerminate);
-    }
-    for (auto *es: toTerminate) {
-      // FIXME: memory corruption the 
-      //es->pc = es->prevPC;
-      terminateState(*es);
-      //ks_terminatedBeforeWP.insert(es);
+      llvm::SmallPtrSet<ExecutionState *, 5> terminatedBefore_bak (ks_terminatedBeforeWP);
+      // Terminate the discarded
+      for (auto *es: parStates) {
+        ks_fixTerminatedChildren(es, toTerminate);
+      }
+      for (auto *es: toTerminate) {
+        // FIXME: memory corruption the 
+        //es->pc = es->prevPC;
+        terminateState(*es);
+        //ks_terminatedBeforeWP.insert(es);
+      }
+
+      // If post compare, make sure to add all original states removed during ks_fixTerminatedChildren
+      // into ks_justTerminatedStates
+      if (!pre_compare)
+        for(ExecutionState* tmp_s: ks_terminatedBeforeWP)
+          if (terminatedBefore_bak.count(tmp_s) == 0)
+            ks_justTerminatedStates.insert(tmp_s);
     }
   }
 }
