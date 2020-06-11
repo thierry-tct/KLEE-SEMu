@@ -4764,7 +4764,7 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
       // No state of this mutant at this sub tree remains, decrease active count
       std::vector<ExecutionState *> _sub_states;
       llvm::SmallPtrSet<ExecutionState *, 5>  _toremove;
-      es->ks_curBranchTreeNode->getAllStates(_sub_states);
+      es->ks_originalMutSisterStates->getAllStates(_sub_states);
       for (ExecutionState *_s: _sub_states) {
         assert (_s->ks_numberActiveCmpMutants > 0 && "BUG, ks_numberActiveCmpMutants must be > 0");
         (_s->ks_numberActiveCmpMutants)--;
