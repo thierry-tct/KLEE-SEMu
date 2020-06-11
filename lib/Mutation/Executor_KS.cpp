@@ -4775,7 +4775,11 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
 	}
       }
       // Fixup
-      es->ks_originalMutSisterStates->ks_cleanTerminatedOriginals(_toremove);
+      if (_toremove.size() > 0) {
+	llvm::errs() << "# SEMU@Status: Removing " << _toremove.size() 
+		     << " original states with no possible subtree mutant left.\n";
+        es->ks_originalMutSisterStates->ks_cleanTerminatedOriginals(_toremove);
+      }
     }
   }
 }
