@@ -4775,7 +4775,7 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
 	}
       }
       // Fixup
-      es->ks_curBranchTreeNode->ks_cleanTerminatedOriginals(_toremove);
+      es->ks_originalMutSisterStates->ks_cleanTerminatedOriginals(_toremove);
     }
   }
 }
