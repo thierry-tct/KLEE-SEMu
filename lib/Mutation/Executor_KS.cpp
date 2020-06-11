@@ -4790,10 +4790,10 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
         // If post compare, make sure to add all original states removed during ks_fixTerminatedChildren
         // into ks_justTerminatedStates
         for (auto *es: _toremove) {
-          std::vector<ExecutionState *>::iterator it =
-                    std::find(addedStates.begin(), addedStates.end(), es);
-          if (it != addedStates.end())
-            addedStates.erase(it);
+          //std::vector<ExecutionState *>::iterator it =
+          //          std::find(addedStates.begin(), addedStates.end(), es);
+          //if (it != addedStates.end())
+          //  addedStates.erase(it);
 
 	  if (ks_terminatedBeforeWP.count(es) > 0)
 	    ks_terminatedBeforeWP.erase(es);
