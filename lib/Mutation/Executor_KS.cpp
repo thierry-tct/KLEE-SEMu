@@ -187,7 +187,7 @@ cl::opt<bool> semuForkProcessForSegvExternalCalls("semu-forkprocessfor-segv-exte
                                           cl::init(false),
                                           cl::desc("Enable forking a new process for external call to 'printf' which can lead to Segmentation Fault."));
 
-cl::opt<bool> semuUseOnlyBranchForDepth("semu-use-only-pair-branching-for-depth",
+cl::opt<bool> semuUseOnlyBranchForDepth("semu-use-only-multi-branching-for-depth",
                                           cl::init(false),
                                           cl::desc("Enable to use only symbolic state branching (when both sides are feasible) to measure the depth. Otherwise, one side fork are also used. This reduces the accuracy of the depth measure"));
 
