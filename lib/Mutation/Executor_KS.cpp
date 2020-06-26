@@ -4524,6 +4524,7 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
         auto mapit = mutants2gentestsNum.find(*it);
         if (mapit != mutants2gentestsNum.end() 
                     && mapit->second >= semuMaxNumTestGenPerMutant) {
+          // Stop
           continue;
         }
       }
@@ -4559,6 +4560,13 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
       if (sm_it != seedMap.end()) {
         seedMap[ns] = sm_it->second;
       }
+    }
+    // No new mutant created because they reach their limit of number of tests
+    if (state.ks_numberActiveCmpMutants == 0 && state.ks_VisitedMutantsSet.size() >= ks_number_of_mutants) {
+      // remove from treenode
+      state.ks_curBranchTreeNode.exState = nullptr;
+      // early terminate
+      terminateStateEarly(state, "Original has no possible mutant left");
     }
   }
 }
