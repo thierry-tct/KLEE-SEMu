@@ -4564,7 +4564,7 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
     // No new mutant created because they reach their limit of number of tests
     if (state.ks_numberActiveCmpMutants == 0 && state.ks_VisitedMutantsSet.size() >= ks_number_of_mutants) {
       // remove from treenode
-      state.ks_curBranchTreeNode.exState = nullptr;
+      state.ks_curBranchTreeNode->exState = nullptr;
       // early terminate
       terminateStateEarly(state, "Original has no possible mutant left");
     }
