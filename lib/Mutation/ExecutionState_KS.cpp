@@ -84,6 +84,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
     ks_hasToReachPostMutationPoint(false),
     ks_startdepth(0),
     ks_numberOfOutEnvSeen(0),
+    ks_numberActiveCmpMutants(0),
     //~KS
 
     instsSinceCovNew(0),
@@ -97,7 +98,8 @@ ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
     : constraints(assumptions), queryCost(0.), ptreeNode(0), 
       // @KLEE-SEMu
       ks_mutantID(0), ks_originalMutSisterStates(nullptr), ks_curBranchTreeNode(nullptr),
-      ks_hasToReachPostMutationPoint(false), ks_startdepth(0), ks_numberOfOutEnvSeen(0) /*//~KS*/ {}
+      ks_hasToReachPostMutationPoint(false), ks_startdepth(0), ks_numberOfOutEnvSeen(0),
+      ks_numberActiveCmpMutants(0) /*//~KS*/ {}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++)
@@ -136,6 +138,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     ks_hasToReachPostMutationPoint(state.ks_hasToReachPostMutationPoint),
     ks_startdepth(state.ks_startdepth),
     ks_numberOfOutEnvSeen(state.ks_numberOfOutEnvSeen),
+    ks_numberActiveCmpMutants(state.ks_numberActiveCmpMutants),
     //~KS
     
     instsSinceCovNew(state.instsSinceCovNew),
