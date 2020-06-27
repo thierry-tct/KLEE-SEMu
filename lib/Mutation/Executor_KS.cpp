@@ -3157,7 +3157,8 @@ void Executor::run(ExecutionState &initialState) {
     if (ks_terminatedBeforeWP.count(s) > 0 
         || ks_reachedWatchPoint.count(s) > 0 
         || ks_reachedOutEnv.count(s) > 0
-        || ks_atPointPostMutation.count(s) > 0)
+        || ks_atPointPostMutation.count(s) > 0
+        || ks_ongoingExecutionAtWP.count(s) > 0)
       continue;
     newStates.push_back(s);
   }
