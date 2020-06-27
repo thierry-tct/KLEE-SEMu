@@ -3153,7 +3153,8 @@ void Executor::run(ExecutionState &initialState) {
   for (auto *s: states) {
     if (ks_terminatedBeforeWP.count(s) > 0 
         || ks_reachedWatchPoint.count(s) > 0 
-        || ks_reachedOutEnv.count(s) > 0)
+        || ks_reachedOutEnv.count(s) > 0
+        || ks_atPointPostMutation.count(s) > 0)
       continue;
     newStates.push_back(s);
   }
