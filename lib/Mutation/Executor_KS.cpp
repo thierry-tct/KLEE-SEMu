@@ -3089,10 +3089,13 @@ void Executor::run(ExecutionState &initialState) {
 
       // @KLEE-SEMu
       if (ExecutionState::ks_getMode() == ExecutionState::KS_Mode::SEMU_MODE) {
-        if (ks_CheckpointingMainCheck(state, ki, true/*is Seeidng*/, precond_offset)) {
-          processTimers(nullptr, MaxInstructionTime * numSeeds); // Make sure inst timer is reset
-          continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
-        }
+	// No check when precondlength is -2 because seeding stop when a mutant reached
+        if (semuPreconditionLength >= -1) {
+          if (ks_CheckpointingMainCheck(state, ki, true/*is Seeidng*/, precond_offset)) {
+            processTimers(nullptr, MaxInstructionTime * numSeeds); // Make sure inst timer is reset
+            continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
+          }
+	}
       }
       //~KS
 
