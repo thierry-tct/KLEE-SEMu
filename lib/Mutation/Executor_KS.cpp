@@ -3095,6 +3095,11 @@ void Executor::run(ExecutionState &initialState) {
             processTimers(nullptr, MaxInstructionTime * numSeeds); // Make sure inst timer is reset
             continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
           }
+	} else {
+	  // No check, thus we need to terminate terminated originals that did not reach a mutant
+	  for (auto *s: ks_justTerminatedStates)
+            terminateState(*s);
+	  ks_justTerminatedStates.clear();
 	}
       }
       //~KS
