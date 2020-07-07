@@ -611,7 +611,7 @@ public:
   bool ks_watchPointReached (ExecutionState &state, KInstruction *ki);
   
   inline void ks_fixTerminatedChildren(ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove, 
-				                bool terminateLooseOrig=false, bool removeLooseOrigFromAdded=false); 
+				             bool terminateLooseOrig=false, bool removeLooseOrigFromAddedPreTerm=false); 
   void ks_fixTerminatedChildrenRecursive (ExecutionState *pes, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove); 
   void ks_moveIntoTerminatedBeforeWP(ExecutionState *es); 
   void ks_terminateSubtreeMutants(ExecutionState *pes); 
