@@ -4763,7 +4763,8 @@ inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction 
 ///
 
 
-inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove, bool terminateLooseOrig) {
+inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPtrSet<ExecutionState *, 5> const &toremove, 
+				                          bool terminateLooseOrig, bool removeLooseOrigFromAddedPreTerm) {
   if (toremove.empty())
     return;
 
@@ -4804,6 +4805,15 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
         es->ks_originalMutSisterStates->ks_cleanTerminatedOriginals(_toremove);
       }
 
+      if (removeLooseOrigFromAddedPreTerm) {
+        for (auto *es: _toremove) {
+          std::vector<ExecutionState *>::iterator it =
+                        std::find(addedStates.begin(), addedStates.end(), es);
+          if (it != addedStates.end())
+            addedStates.erase(it);
+        }
+      }
+            
       if (terminateLooseOrig) {
         // If post compare, make sure to add all original states removed during ks_fixTerminatedChildren
         // into ks_justTerminatedStates
@@ -6128,7 +6138,7 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
 
       // Terminate the discarded
       for (auto *es: parStates) {
-        ks_fixTerminatedChildren(es, toTerminate, true);
+        ks_fixTerminatedChildren(es, toTerminate, true, !pre_compare);
       }
       for (auto *es: toTerminate) {
         // FIXME: memory corruption the 
