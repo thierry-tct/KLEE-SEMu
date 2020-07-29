@@ -203,6 +203,10 @@ cl::opt<bool> semuConsiderOutEnvForDiffs("semu-consider-outenv-for-diffs",
                                           cl::init(false), 
                                           cl::desc("Enable also checking outenv calls parameters for diffs."));
 	
+cl::opt<bool> semuEnableNoErrorOnMemoryLimit("semu-no-error-on-memory-limit",
+                                 cl::init(false),
+                                 cl::desc("Enable no error  on memory limit. This mean that states can be remove uncontrollabl and m worsen the effectiveness of SEMu"));
+	
 // Use shadow test case generation for mutants ()
 cl::opt<bool> semuShadowTestGeneration("semu-shadow-test-gen", 
                                           cl::init(false), 
@@ -5507,8 +5511,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   // // FIXME: We just checked memory and some states will be killed if memory exeeded and we will have some problem in comparison
   // // FIXME: For now we assume that the memory limit must not be exceeded, need to find a way to handle this later
   if (atMemoryLimit) {
-    klee_error("SEMU@ERROR: Must not reach memory limit and kill states. increase memory limit or restrict symbex (FIXME)");
-    exit(1);
+    if (semuEnableNoErrorOnMemoryLimit) {
+      klee_warning("SEMU@WARNING: reached memory limit and killed states. You could increase memory limit or restrict symbex.");
+    } else {
+      klee_error("SEMU@ERROR: Must not reach memory limit and kill states. increase memory limit or restrict symbex (FIXME)");
+      exit(1);
+    }
   }
 
   static std::map<ExecutionState*, std::vector<SeedInfo> > backed_seedMap;
