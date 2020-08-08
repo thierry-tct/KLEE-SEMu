@@ -207,6 +207,10 @@ cl::opt<bool> semuEnableNoErrorOnMemoryLimit("semu-no-error-on-memory-limit",
                                  cl::init(false),
                                  cl::desc("Enable no error  on memory limit. This mean that states can be remove uncontrollabl and m worsen the effectiveness of SEMu"));
 	
+cl::opt<bool> semuQuiet("semu-quiet",
+                                 cl::init(false),
+                                 cl::desc("Enable quiet log"));
+                                          
 // Use shadow test case generation for mutants ()
 cl::opt<bool> semuShadowTestGeneration("semu-shadow-test-gen", 
                                           cl::init(false), 
@@ -4804,7 +4808,8 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
       }
       // Fixup
       if (_toremove.size() > 0) {
-	llvm::errs() << "# SEMU@Status: Removing " << _toremove.size() 
+	if(!semuQuiet)
+	  llvm::errs() << "# SEMU@Status: Removing " << _toremove.size() 
 		     << " original states with no possible subtree mutant left.\n";
         es->ks_originalMutSisterStates->ks_cleanTerminatedOriginals(_toremove);
       }
@@ -5663,20 +5668,23 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           // all states are ongoing, no need to compare, just put them back
           // XXX Will be added into added states bellow
         } else {
-          llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() 
+	  if(!semuQuiet)
+            llvm::errs() << "# SEMU@Status: Comparing states: " << states.size() 
                         << " States" << (ks_hasOutEnv?" (OutEnv)":
                             (ks_isAtPostMut?" (PostMutationPoint)":" (Checkpoint)"))
                         << ".\n";
           auto elapsInittime = util::getWallTime();
           ks_compareStates(remainWPStates, ks_hasOutEnv/*outEnvOnly*/, ks_isAtPostMut/*postMutOnly*/);
-          llvm::errs() << "# SEMU@Status: State Comparison Done! (" << (util::getWallTime() - elapsInittime) << " seconds)\n";
+          if(!semuQuiet)
+	    llvm::errs() << "# SEMU@Status: State Comparison Done! (" << (util::getWallTime() - elapsInittime) << " seconds)\n";
           ks_totalStateComparisonTime += (util::getWallTime() - elapsInittime);
         }
         
         //continue the execution
         if (ks_isAtPostMut) {
           // print stats
-          llvm::errs() << "# SEMU@Status: Aggregated post mutation Discarded/created mutants states: "
+          if(!semuQuiet)
+	    llvm::errs() << "# SEMU@Status: Aggregated post mutation Discarded/created mutants states: "
                         << ks_numberOfMutantStatesDiscardedAtMutationPoint << "/"
                         << ks_numberOfMutantStatesCheckedAtMutationPoint << "\n";
           if (remainWPStates.empty()) {
@@ -5749,7 +5757,8 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
             ks_atPointPostMutation.clear();
           }
 
-          llvm::errs() << "# SEMU@Status: After nextdepth point ID=" << (ks_nextDepthID-1) 
+	  if(!semuQuiet)
+            llvm::errs() << "# SEMU@Status: After nextdepth point ID=" << (ks_nextDepthID-1) 
                         << " There are " << addedStates.size() 
                         <<" States remaining (seeding is "
                         <<(isSeeding?"True":"False")<<")!\n";
