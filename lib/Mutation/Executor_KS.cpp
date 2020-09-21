@@ -5612,7 +5612,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       if (atMemoryLimit) {
         // remove the state interrupted, to terminate, in checkMemoryUsage from other sets
         for (auto *_es: ks_justTerminatedStates)
-          ks_moveIntoTerminatedBeforeWP(_es)
+          ks_moveIntoTerminatedBeforeWP(_es);
       }
       ks_justTerminatedStates.clear();
     }
