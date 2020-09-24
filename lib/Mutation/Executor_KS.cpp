@@ -5614,7 +5614,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         for (auto *_es: ks_justTerminatedStates) {
           ks_moveIntoTerminatedBeforeWP(_es);
           if (_es == &curState)
-            continue
+            continue;
           addedNdeleted.push_back(_es); // FIXME: Not really addedNdeleted. Use another similar vector
         }
       }
