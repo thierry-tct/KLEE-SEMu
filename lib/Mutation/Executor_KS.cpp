@@ -5611,8 +5611,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
       ks_terminatedBeforeWP.insert(ks_justTerminatedStates.begin(), ks_justTerminatedStates.end());
       if (atMemoryLimit) {
         // remove the state interrupted, to terminate, in checkMemoryUsage from other sets
-        for (auto *_es: ks_justTerminatedStates)
+        for (auto *_es: ks_justTerminatedStates) {
           ks_moveIntoTerminatedBeforeWP(_es);
+          if (_es == &curState)
+            continue
+          addedNdeleted.push_back(_es); // FIXME: Not really addedNdeleted. Use another similar vector
+        }
       }
       ks_justTerminatedStates.clear();
     }
