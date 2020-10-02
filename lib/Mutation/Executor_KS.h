@@ -586,6 +586,15 @@ private:
   // Make this with cache
   ks::PartialMaxSATSolver pmaxsat_solver;
 #endif //~KS_Z3MAXSAT_SOLVER__H
+
+#ifdef SEMU_RELMUT_PRED_ENABLED
+  unsigned long long ks_current_oldnew_split_id = 0;
+  const char *ks_isOldVersionName = "klee_semu_GenMu_Is_Old_Version_Bool";
+  const char *ks_klee_change_funtion_Name = "klee_change";
+  llvm::GlobalVariable *ks_isOldVersionGlobal;
+  llvm::Function *ks_klee_change_function;
+#endif
+
 public:
   /// Create new states where each constraint is that of the input state
   /// and return the results. The input state is *NOT* included
@@ -670,6 +679,17 @@ public:
   void ks_eliminateMutantStatesWithMaxTests(bool pre_compare=false);
 
   bool ks_lazyInitialize (ExecutionState &state, KInstruction *ki);
+
+#ifdef SEMU_RELMUT_PRED_ENABLED
+  inline unsigned long long ks_get_next_oldnew_split_id();
+  void ks_oldNewBranching(ExecutionState &state); 
+  void ks_odlNewPrepareModule (llvm::module *mod);
+  //TODO TCT: 
+  // X. Implement compare states
+  // - add 'use_klee_change' PL arguments to control precondition length
+  // - reach checkpoint for mutant post commit version only when both mutant and change are seen
+  // - adapt the comparison to seach others and compare accordingly and use the condition
+#endif
   //~KS
 };
   

@@ -543,6 +543,9 @@ const Module *Executor::setModule(llvm::Module *module,
 
   ks_FilterMutants(module);
   ks_initialize_ks_instruction2closestout_distance(module);
+#ifdef SEMU_RELMUT_PRED_ENABLED
+  ks_odlNewPrepareModule(module);
+#endif
   //~KS
   
   kmodule = new KModule(module);
@@ -2114,6 +2117,13 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         free = res.second;
       } while (free);
     }
+    // @KLEE-SEMu
+#ifdef SEMU_RELMUT_PRED_ENABLED
+    // branch old new
+    if (f == ks_klee_change_function && state.ks_old_new == 0)
+      ks_oldNewBranching(state);
+#endif
+    //~KS
     break;
   }
   case Instruction::PHI: {
@@ -4589,6 +4599,7 @@ void Executor::ks_mutationPointBranching(ExecutionState &state,
   }
 }
 
+
 bool Executor::ks_checkfeasiblewithsolver(ExecutionState &state, ref<Expr> bool_expr) {
   bool result;
   bool success = solver->mayBeTrue(state, bool_expr, result);
@@ -6175,6 +6186,112 @@ void Executor::ks_eliminateMutantStatesWithMaxTests(bool pre_compare) {
     }
   }
 }
+
+#ifdef SEMU_RELMUT_PRED_ENABLED
+// get a new ID for a version split node
+inline unsigned long long Executor::ks_get_next_oldnew_split_id() {
+  return ks_current_oldnew_split_id++;
+}
+
+void Executor::ks_odlNewPrepareModule (llvm::module *mod) {
+  // - Set isold global
+  if (mod->getNamedGlobal(ks_isOldVersionName)) {
+    llvm::errs() << "The gobal variable '" << ks_isOldVersionName
+                 << "' already present in code!\n";
+    assert(false &&  "ERROR: Module already mutated!");
+    exit(1);
+  }
+  mod.getOrInsertGlobal(ks_isOldVersionName,
+                           llvm::Type::getInt1Ty(getGlobalContext()));
+  ks_isOldVersionGlobal = mod.getNamedGlobal(ks_isOldVersionName);
+  //ks_isOldVersionGlobal->setAlignment(4);
+  ks_isOldVersionGlobal->setInitializer(llvm::ConstantInt::get(
+                            getGlobalContext(), llvm::APInt(1, 0, false)));
+
+  // - check and prepare klee_change
+  ks_klee_change_function = module->getFunction(ks_klee_change_funtion_Name);
+  if (!ks_klee_change_function || ks_klee_change_function->arg_size() != 2) {
+    llvm::errs() << 
+            "ERROR: klee_change missing in relevant mutant prediction mode\n";
+    assert (false);
+    exit(1);
+  }
+  // change the body of klee_change
+  ks_klee_change_function->deleteBody();
+  llvm::BasicBlock *block = llvm::BasicBlock::Create(
+                        getGlobalContext(), "entry", ks_klee_change_function);
+  llvm::IRBuilder<> builder(block);
+  llvm::Function::arg_iterator args = ks_klee_change_function->arg_begin();
+  llvm::Value *old_v = llvm::dyn_cast<llvm::Value>(args++);
+  llvm::Value *new_v = llvm::dyn_cast<llvm::Value>(args++);
+  // load ks_isOldVersionGlobal
+  llvm::Value *isold = builder.CreateLoad(ks_isOldVersionGlobal);
+  // create select
+  llvm::Value *selection = builder.CreateSelect(isold, old_v, new_v);
+  //builder.CreateBinOp(llvm::Instruction::Mul, x, y, "tmp");
+  builder.CreateRet(selection);
+}
+
+void Executor::ks_oldNewBranching(ExecutionState &state) {
+  assert (state.ks_old_new == 0);
+  TimerStatIncrementer timer(stats::forkTime);
+
+  if (MaxForks!=~0u && stats::forks >= MaxForks) {
+    
+    llvm::errs() << "!! OldNew Not Processed due to MaxForks.\n";
+    return;
+    
+    /*unsigned next = theRNG.getInt32() % N;
+    for (unsigned i=0; i<N; ++i) {
+      if (i == next) {
+        result.push_back(&state);
+      } else {
+        result.push_back(NULL);
+      }
+    }*/
+  } else {
+    stats::forks += 1;
+    //addedStates.push_back(&state);
+
+    // In the test generation mode, do not even generate more mutants 
+    // If reached max number of tests
+    if (ks_outputTestsCases) {
+      auto mapit = mutants2gentestsNum.find(state.ks_mutantID);
+      if (mapit != mutants2gentestsNum.end() 
+                  && mapit->second >= semuMaxNumTestGenPerMutant) {
+        // Stop
+        // remove from treenode
+        state.ks_curBranchTreeNode->exState = nullptr;
+        // early terminate
+        terminateStateEarly(state, "Original has no possible mutant left");
+        return;
+      }
+    }
+    
+    // get old_new_split_id
+    state.ks_oldnew_split_id = ks_get_next_oldnew_split_id();
+
+    ExecutionState *ns = state.branch();
+    addedStates.push_back(ns);
+    //result.push_back(ns);
+    state.ptreeNode->data = 0;
+    std::pair<PTree::Node*,PTree::Node*> res = processTree->split(state.ptreeNode, ns, &state);
+    ns->ptreeNode = res.first;
+    state.ptreeNode = res.second;
+    
+    executeMemoryOperation (*ns, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(*it, 1), 1);    // isOld is a boolean (1 bit int)
+    ns->ks_old_new = -1;
+    state.ks_old_new = 1;
+    
+    // Handle seed phase. Insert old in seedMap with same seed as new
+    std::map< ExecutionState*, std::vector<SeedInfo> >::iterator sm_it = 
+      seedMap.find(&state);
+    if (sm_it != seedMap.end()) {
+      seedMap[ns] = sm_it->second;
+    }
+  }
+}
+#endif
 
 /**/
 // This function is called when running Under Const

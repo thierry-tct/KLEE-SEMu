@@ -213,8 +213,6 @@ public:
   
   // store the id of the point where the version split occued for this state 
   unsigned long long ks_oldnew_split_id;
-  
-  ExecutionState *ks_branchOldNew();
 #endif
 //~KS
 
