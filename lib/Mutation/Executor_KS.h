@@ -606,6 +606,7 @@ public:
   
   bool ks_nextIsOutEnv (ExecutionState &state);
   bool ks_reachedAMutant(KInstruction *ki);
+  bool ks_reachedAnOldNew(KInstruction *ki);
   bool ks_checkAtPostMutationPoint(ExecutionState &state, KInstruction *ki);
   inline bool ks_reachedCheckNextDepth(ExecutionState &state);
   bool ks_reachedCheckMaxDepth(ExecutionState &state);
@@ -626,6 +627,13 @@ public:
   void ks_terminateSubtreeMutants(ExecutionState *pes); 
   void ks_getMutParentStates(std::vector<ExecutionState *> &mutParentStates);
   void ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly=false, bool postMutOnly=false);
+  bool ks_diffTwoStates (ExecutionState *mState, ExecutionState *mSisState, 
+                                  std::map<ExecutionState *, ref<Expr>> &origSuffConstr, 
+                                  bool outEnvOnly, int &sDiff, 
+                                  std::vector<ref<Expr>> &inStateDiffExp);
+  void ks_createDiffExpr(ExecutionState *mState, ref<Expr> &insdiff, 
+                                  ref<Expr> &origpathPrefix,
+                                  std::vector<ref<Expr>> &inStateDiffExp);
   bool ks_compareRecursive (ExecutionState *mState, std::vector<ExecutionState *> &mSisStatesVect, 
                           std::map<ExecutionState *, ref<Expr>> &origSuffConstr, bool outEnvOnly, 
                           bool postMutOnly, llvm::SmallPtrSet<ExecutionState *, 5> &postMutOnly_hasdiff);
@@ -684,7 +692,10 @@ public:
   inline unsigned long long ks_get_next_oldnew_split_id();
   void ks_oldNewBranching(ExecutionState &state); 
   void ks_odlNewPrepareModule (llvm::module *mod);
-  //TODO TCT: 
+  bool ks_mutantPrePostDiff (ExecutionState *mState, bool outEnvOnly, 
+                                      std::vector<ref<Expr>> &inStateDiffExp, 
+                                      ref<Expr> &insdiff);
+  //DONE TCT: 
   // X. Implement compare states
   // - add 'use_klee_change' PL arguments to control precondition length
   // - reach checkpoint for mutant post commit version only when both mutant and change are seen
