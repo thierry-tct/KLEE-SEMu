@@ -32,6 +32,7 @@
 #include "klee/ExprBuilder.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/CFG.h"
+#include "llvm/IR/IRBuilder.h"
 //#include "llvm/Support/FileSystem.h"
 #include <unistd.h>
 #include <sys/wait.h>
@@ -6323,15 +6324,15 @@ void Executor::ks_odlNewPrepareModule (llvm::Module *mod) {
     assert(false &&  "ERROR: Module already mutated!");
     exit(1);
   }
-  mod.getOrInsertGlobal(ks_isOldVersionName,
+  mod->getOrInsertGlobal(ks_isOldVersionName,
                            llvm::Type::getInt1Ty(getGlobalContext()));
-  ks_isOldVersionGlobal = mod.getNamedGlobal(ks_isOldVersionName);
+  ks_isOldVersionGlobal = mod->getNamedGlobal(ks_isOldVersionName);
   //ks_isOldVersionGlobal->setAlignment(4);
   ks_isOldVersionGlobal->setInitializer(llvm::ConstantInt::get(
                             getGlobalContext(), llvm::APInt(1, 0, false)));
 
   // - check and prepare klee_change
-  ks_klee_change_function = module->getFunction(ks_klee_change_funtion_Name);
+  ks_klee_change_function = mod->getFunction(ks_klee_change_funtion_Name);
   if (!ks_klee_change_function || ks_klee_change_function->arg_size() != 2) {
     llvm::errs() << 
             "ERROR: klee_change missing in relevant mutant prediction mode\n";
@@ -6403,8 +6404,8 @@ void Executor::ks_oldNewBranching(ExecutionState &state) {
     ns->ptreeNode = res.first;
     state.ptreeNode = res.second;
     
-    executeMemoryOperation (*ns, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(-1, 1), 1);    // isOld is a boolean (1 bit int)
-    executeMemoryOperation (state, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(1, 1), 1);    // isOld is a boolean (1 bit int)
+    executeMemoryOperation (*ns, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(-1, 1), 0);    // isOld is a boolean (1 bit int)
+    executeMemoryOperation (state, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(1, 1), 0);    // isOld is a boolean (1 bit int)
     ns->ks_old_new = -1;
     state.ks_old_new = 1;
     
