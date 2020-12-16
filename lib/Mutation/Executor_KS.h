@@ -628,7 +628,7 @@ public:
   void ks_getMutParentStates(std::vector<ExecutionState *> &mutParentStates);
   void ks_compareStates (std::vector<ExecutionState *> &remainStates, bool outEnvOnly=false, bool postMutOnly=false);
   bool ks_diffTwoStates (ExecutionState *mState, ExecutionState *mSisState, 
-                                  std::map<ExecutionState *, ref<Expr>> &origSuffConstr, 
+                                  ref<Expr> &origSuffConstr, 
                                   bool outEnvOnly, int &sDiff, 
                                   std::vector<ref<Expr>> &inStateDiffExp);
   void ks_createDiffExpr(ExecutionState *mState, ref<Expr> &insdiff, 
