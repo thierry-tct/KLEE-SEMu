@@ -209,7 +209,7 @@ public:
 #ifdef SEMU_RELMUT_PRED_ENABLED
   // record the version represented by the state
   // 0 means common to both old and new, -1 means old, 1 means new
-  char ks_old_new = 0
+  char ks_old_new = 0;
   
   // store the id of the point where the version split occued for this state 
   unsigned long long ks_oldnew_split_id;
