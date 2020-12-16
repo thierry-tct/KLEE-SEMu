@@ -6343,16 +6343,22 @@ void Executor::ks_odlNewPrepareModule (llvm::Module *mod) {
   ks_klee_change_function->deleteBody();
   llvm::BasicBlock *block = llvm::BasicBlock::Create(
                         getGlobalContext(), "entry", ks_klee_change_function);
-  llvm::IRBuilder<> builder(block);
   llvm::Function::arg_iterator args = ks_klee_change_function->arg_begin();
   llvm::Value *old_v = llvm::dyn_cast<llvm::Value>(args++);
   llvm::Value *new_v = llvm::dyn_cast<llvm::Value>(args++);
+	
+  //llvm::IRBuilder<> builder(block);
   // load ks_isOldVersionGlobal
-  llvm::Value *isold = builder.CreateLoad(ks_isOldVersionGlobal);
+  //llvm::Value *isold = builder.CreateLoad(ks_isOldVersionGlobal);
+  llvm::Value *isold = new LoadInst(ks_isOldVersionGlobal);
+  block->getInstList().push_back(isold);
   // create select
-  llvm::Value *selection = builder.CreateSelect(isold, old_v, new_v);
-  //builder.CreateBinOp(llvm::Instruction::Mul, x, y, "tmp");
-  builder.CreateRet(selection);
+  //llvm::Value *selection = builder.CreateSelect(isold, old_v, new_v);
+  llvm::Value *selection = SelectInst::Create(isold, old_v, new_v);
+  block->getInstList().push_back(selection);
+  ////builder.CreateBinOp(llvm::Instruction::Mul, x, y, "tmp");
+  //builder.CreateRet(selection);
+  block->getInstList().push_back(ReturnInst::Create(selection));
 }
 
 void Executor::ks_oldNewBranching(ExecutionState &state) {
