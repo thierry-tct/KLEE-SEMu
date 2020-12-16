@@ -5133,6 +5133,8 @@ bool Executor::ks_diffTwoStates (ExecutionState *mState, ExecutionState *mSisSta
   /**
    * Return the result of the solver.
    */
+  static const bool usethesolverfordiff = true;
+
   inStateDiffExp.clear();
   bool result;
   bool success = solver->mayBeTrue(*mState, origpathPrefix, result);
@@ -5254,7 +5256,6 @@ bool Executor::ks_compareRecursive (ExecutionState *mState,
                                     std::vector<ExecutionState *> &mSisStatesVect,
                                     std::map<ExecutionState *, ref<Expr>> &origSuffConstr, 
                                     bool outEnvOnly, bool postMutOnly, llvm::SmallPtrSet<ExecutionState *, 5> &postMutOnly_hasdiff) {
-  static const bool usethesolverfordiff = true;
 
   static unsigned gentestid = 0;
   static unsigned num_failed_testgen = 0;
