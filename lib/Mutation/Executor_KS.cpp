@@ -4790,7 +4790,7 @@ inline bool Executor::ks_watchPointReached (ExecutionState &state, KInstruction 
 #ifdef SEMU_RELMUT_PRED_ENABLED
   // if not reached oldnew, not watchedpoint
   if (state.ks_old_new == 0)
-    return false
+    return false;
 #endif
   // No need to check return of non entry func.
   // Change this to enable/disable intermediate return
@@ -5225,22 +5225,22 @@ bool Executor::ks_mutantPrePostDiff (ExecutionState *mState, bool outEnvOnly,
     int sDiff = ExecutionState::KS_StateDiff_t::ksNO_DIFF; 
     ref<Expr> prepathPrefix = ConstantExpr::alloc(1, Expr::Bool);
     for (ConstraintManager::constraint_iterator it = preMutState->constraints.begin(), 
-                      ie = prMutState->constraints.end(); it != ie; ++it) {
+                      ie = preMutState->constraints.end(); it != ie; ++it) {
       prepathPrefix = AndExpr::create(prepathPrefix, *it);
     }
-    bool result = ks_diffTwoStates (mState, mSisState, prepathPrefix, 
+    bool result = ks_diffTwoStates (mState, preMutState, prepathPrefix, 
                                                 outEnvOnly, sDiff, inStateDiffExp); 
     if (result) {
       if (!ExecutionState::ks_isNoDiff(sDiff)) {
-        if (outputTestCases 
-              && (!(semuTestgenOnlyForCriticalDiffs || outEnvOnly) 
+        if (/*outputTestCases 
+              &&*/ (!(semuTestgenOnlyForCriticalDiffs || outEnvOnly) 
                     || ExecutionState::ks_isCriticalDiff(sDiff))) {
             ref<Expr> tmp_insdiff;
             ks_createDiffExpr(mState, tmp_insdiff, prepathPrefix, inStateDiffExp);
             if (ks_checkfeasiblewithsolver(*mState, AndExpr::create(insdiff, tmp_insdiff))) {
               insdiff = AndExpr::create(insdiff, tmp_insdiff);
               can_diff = true;
-              break
+              break;
             }
         }
       }
