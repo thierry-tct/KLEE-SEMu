@@ -6315,7 +6315,7 @@ inline unsigned long long Executor::ks_get_next_oldnew_split_id() {
   return ks_current_oldnew_split_id++;
 }
 
-void Executor::ks_odlNewPrepareModule (llvm::module *mod) {
+void Executor::ks_odlNewPrepareModule (llvm::Module *mod) {
   // - Set isold global
   if (mod->getNamedGlobal(ks_isOldVersionName)) {
     llvm::errs() << "The gobal variable '" << ks_isOldVersionName
@@ -6403,7 +6403,8 @@ void Executor::ks_oldNewBranching(ExecutionState &state) {
     ns->ptreeNode = res.first;
     state.ptreeNode = res.second;
     
-    executeMemoryOperation (*ns, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(*it, 1), 1);    // isOld is a boolean (1 bit int)
+    executeMemoryOperation (*ns, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(-1, 1), 1);    // isOld is a boolean (1 bit int)
+    executeMemoryOperation (state, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(1, 1), 1);    // isOld is a boolean (1 bit int)
     ns->ks_old_new = -1;
     state.ks_old_new = 1;
     
