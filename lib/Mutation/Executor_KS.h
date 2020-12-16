@@ -691,7 +691,7 @@ public:
 #ifdef SEMU_RELMUT_PRED_ENABLED
   inline unsigned long long ks_get_next_oldnew_split_id();
   void ks_oldNewBranching(ExecutionState &state); 
-  void ks_odlNewPrepareModule (llvm::module *mod);
+  void ks_odlNewPrepareModule (llvm::Module *mod);
   bool ks_mutantPrePostDiff (ExecutionState *mState, bool outEnvOnly, 
                                       std::vector<ref<Expr>> &inStateDiffExp, 
                                       ref<Expr> &insdiff);
