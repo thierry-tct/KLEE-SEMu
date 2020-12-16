@@ -6350,15 +6350,15 @@ void Executor::ks_odlNewPrepareModule (llvm::Module *mod) {
   //llvm::IRBuilder<> builder(block);
   // load ks_isOldVersionGlobal
   //llvm::Value *isold = builder.CreateLoad(ks_isOldVersionGlobal);
-  llvm::Value *isold = new LoadInst(ks_isOldVersionGlobal);
+  llvm::LoadInst *isold = new LoadInst(ks_isOldVersionGlobal);
   block->getInstList().push_back(isold);
   // create select
   //llvm::Value *selection = builder.CreateSelect(isold, old_v, new_v);
-  llvm::Value *selection = SelectInst::Create(isold, old_v, new_v);
+  llvm::SelectInst *selection = SelectInst::Create(isold, old_v, new_v);
   block->getInstList().push_back(selection);
   ////builder.CreateBinOp(llvm::Instruction::Mul, x, y, "tmp");
   //builder.CreateRet(selection);
-  block->getInstList().push_back(ReturnInst::Create(selection));
+  block->getInstList().push_back(ReturnInst::Create(getGlobalContext(), selection));
 }
 
 void Executor::ks_oldNewBranching(ExecutionState &state) {
