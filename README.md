@@ -205,7 +205,7 @@ klee-semu \
   --solver-backen z3 \
   --max-memory 2048 \
   --max-time 300 \
-  --max-time uclibc \
+  --libc uclibc \
   --semu-precondition-length 0 \
   --semu-checkpoint-window 1 \
   --semu-propagation-proportion 0.25 \
@@ -226,7 +226,7 @@ klee-semu \
   --solver-backen z3 \
   --max-memory 2048 \
   --max-time 300 \
-  --max-time uclibc \
+  --libc uclibc \
   --semu-precondition-length 0 \
   --semu-checkpoint-window 1 \
   --semu-propagation-proportion 0.25 \
