@@ -54,7 +54,9 @@ The usage of SEMu is similar to that of KLEE. For integration with other testing
 
 The command line is of this form:
 ``` bash
-klee-semu <KLEE and SEMu specific control arguments> <LLVM bitcode (.bc) file> <Optional Symbolic arguments>
+klee-semu <KLEE and SEMu specific control arguments> \
+          <LLVM bitcode (.bc) file> \
+          <Optional Symbolic arguments>
 ```
 
 ### A. Description of SEMu Specific Arguments
@@ -125,7 +127,7 @@ Here is an example of Meta-mutant code that is expected by SEMu. This is represe
 Initial code:
 ```C
 #include <stdio.h>
-#include <atoi.h>
+#include <stdlib.h>
 int main (int argc, char ** argv) {
     int x = atoi(argv[0]);
     if (x > 0) {
@@ -141,7 +143,7 @@ After creating 4 mutants, such that Mutant 1 changes `x = x + 10` into `x = x - 
 
 ``` C
 #include <stdio.h>
-#include <atoi.h>
+#include <stdlib.h>
 
 // Mutant ID selector global initialized to N+1 (N=4)
 unsigned long  klee_semu_GenMu_Mutant_ID_Selector = 5;
