@@ -128,14 +128,13 @@ using namespace klee;
 
 // @KLEE-SEMu
 namespace {
-// Optional file containing the precondition of symbolic execution, maybe extracted from existing test using Zesti
-cl::list<std::string> semuPrecondFiles("semu-precondition-file", 
-                                        cl::desc("precondition for bounded semu (use this many times for multiple files)"));
 
-// Optionally set the list of mutants to consider, the remaining will be removed from meta module
-cl::opt<std::string> semuCandidateMutantsFile("semu-candidate-mutants-list-file", 
-                                        cl::init(""),
-                                        cl::desc("File containing the subset  list of mutants to consider in the analysis"));
+/**** SEMu Main Parameters ****/
+
+// precondition Length value is fixed if >= 0; stop when any state finds a mutants and set to that depth if == -1; stop when each state reach a mutant if < -1
+cl::opt<int> semuPreconditionLength("semu-precondition-length", 
+                                 cl::init(6), 
+                                 cl::desc("(PL) Sets number of pre-conditions that will be taken from the seeds' (initial tests) path conditions and used as precondition. Use the two negative values: -1 for Global Minimum Distance to Mutated Statement (GMD2MS), and -2 for Specific Minimum Distance to Mutated Statement (SMD2MS)."));
 
 // optional watch point max depth to leverage mutant state explosion
 // When the value of semuMaxDepthWP is 0, check right after the mutation point (similar to waek mutation)
@@ -145,52 +144,60 @@ cl::opt<unsigned> semuMaxDepthWP("semu-mutant-max-fork",
                                  cl::init(0), 
                                  cl::desc("Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
 
-cl::opt<bool> semuDisableStateDiffInTestGen("semu-disable-statediff-in-testgen",
-                                 cl::init(false),
-                                 cl::desc("Disable the state comparison with original when generating test for mutant (only consider mutant PC)"));
+// TODO implement different selection strategies on which to continue
+cl::opt<double> semuPostCheckpointMutantStateContinueProba("semu-mutant-state-continue-proba", 
+                                 cl::init(0.0), 
+                                 cl::desc("Set the proportion of mutant states of a particular mutant that will continue after checkpoint(checkpoint postponing). For a given mutant ID, will see the states that reach checkpoint and remove the specified proportion to continue past the checkpoint."));
+
 cl::opt<bool> semuApplyMinDistToOutputForMutContinue(
                                 "semu-continue-mindist-out-heuristic",
                                  cl::init(false),
                                  cl::desc("Enable using the distance to the output to select which states to continue post mutant checkpoint"));
-cl::opt<bool> semuUseBBForDistance("semu-use-basicblock-for-distance",
-                                 cl::init(false),
-                                 cl::desc("Enable using number of Basic blocks instead of number of instructions for distance"));
 
 cl::opt<unsigned> semuGenTestForDiscardedFromCheckNum(
                                  "semu-checknum-before-testgen-for-discarded",
                                  cl::init(0),
                                  cl::desc("Number of checkpoints where mutants states that reach are discarded without test generated for them, before a test is generated. Help to generate test only for the states, for a mutant, that goes deep"));
 
-// TODO implement different selection strategies on which to continue
-cl::opt<double> semuPostCheckpointMutantStateContinueProba("semu-mutant-state-continue-proba", 
-                                 cl::init(0.0), 
-                                 cl::desc("Set the proportion of mutant states of a particular mutant that will continue after checkpoint(checkpoint postponing). For a given mutant ID, will see the states that reach checkpoint and remove the specified proportion to continue past the checkpoint."));
-
-// TODO, actually detect loop and limit the number of iterations. For now just limit the time. set this time large enough to capture loop, not simple instructions
-cl::opt<double> semuLoopBreakDelay("semu-loop-break-delay", 
-                                 cl::init(120.0), 
-                                 cl::desc("Set the maximum time in seconds that the same state is executed without stop"));
-
-// precondition Length value is fixed if >= 0; stop when any state finds a mutants and set to that depth if == -1; stop when each state reach a mutant if < -1
-cl::opt<int> semuPreconditionLength("semu-precondition-length", 
-                                 cl::init(6), 
-                                 cl::desc("Set number of conditions that will be taken from the test cases path conditions and used as precondition"));
-
-cl::opt<unsigned> semuMaxTotalNumTestGen("semu-max-total-tests-gen", 
-                                 cl::init(0), 
-                                 cl::desc("Set the maximum number of test generated to kill the mutants. (== 0) and semu-max-tests-gen-per-mutant=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
+cl::opt<bool> semuDisableStateDiffInTestGen("semu-disable-statediff-in-testgen",
+                                 cl::init(false),
+                                 cl::desc("Disable the state comparison with original when generating test for mutant (only consider mutant PC)"));
 
 cl::opt<unsigned> semuMaxNumTestGenPerMutant("semu-max-tests-gen-per-mutant", 
                                  cl::init(0), 
                                  cl::desc("Set the maximum number of test generated to kill each mutant. (== 0) and semu-max-total-tests-gen=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
 
-cl::opt<bool> semuForkProcessForSegvExternalCalls("semu-forkprocessfor-segv-externalcalls",
-                                          cl::init(false),
-                                          cl::desc("Enable forking a new process for external call to 'printf' which can lead to Segmentation Fault."));
+/***** SEMu Auxiliary parameters *****/
+
+cl::opt<bool> semuConsiderOutEnvForDiffs("semu-consider-outenv-for-diffs", 
+                                          cl::init(false), 
+                                          cl::desc("Enable also checking outenv calls parameters for diffs."));
+	
+cl::opt<bool> semuUseBBForDistance("semu-use-basicblock-for-distance",
+                                 cl::init(false),
+                                 cl::desc("Enable using number of Basic blocks instead of number of instructions for distance (for Minimum Distance to Output - MDO strategy)"));
+
+cl::opt<unsigned> semuMaxTotalNumTestGen("semu-max-total-tests-gen", 
+                                 cl::init(0), 
+                                 cl::desc("Set the maximum number of test generated to kill the mutants. (== 0) and semu-max-tests-gen-per-mutant=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
+
+// Optionally set the list of mutants to consider, the remaining will be removed from meta module
+cl::opt<std::string> semuCandidateMutantsFile("semu-candidate-mutants-list-file", 
+                                  cl::init(""),
+                                  cl::desc("File containing the subset  list of mutants to consider in the analysis"));
 
 cl::opt<bool> semuUseOnlyBranchForDepth("semu-use-only-multi-branching-for-depth",
                                           cl::init(false),
                                           cl::desc("Enable to use only symbolic state branching (when both sides are feasible) to measure the depth. Otherwise, one side fork are also used. This reduces the accuracy of the depth measure"));
+
+cl::opt<bool> semuForkProcessForSegvExternalCalls("semu-forkprocessfor-segv-externalcalls",
+                                          cl::init(false),
+                                          cl::desc("Enable forking a new process for external call to 'printf' which can lead to Segmentation Fault."));
+
+// TODO, actually detect loop and limit the number of iterations. For now just limit the time. set this time large enough to capture loop, not simple instructions
+cl::opt<double> semuLoopBreakDelay("semu-loop-break-delay", 
+                                 cl::init(120.0), 
+                                 cl::desc("Set the maximum time in seconds that the same state is executed without stop"));
 
 cl::opt<bool> semuDisableCheckAtPostMutationPoint("semu-disable-post-mutation-check",
                                           cl::init(false),
@@ -200,10 +207,6 @@ cl::opt<bool> semuTestgenOnlyForCriticalDiffs("semu-testsgen-only-for-critical-d
                                           cl::init(false), 
                                           cl::desc("Enable Outputting tests only for critial diffs (involving environment (this excludes local/global vars))"));
 
-cl::opt<bool> semuConsiderOutEnvForDiffs("semu-consider-outenv-for-diffs", 
-                                          cl::init(false), 
-                                          cl::desc("Enable also checking outenv calls parameters for diffs."));
-	
 cl::opt<bool> semuEnableNoErrorOnMemoryLimit("semu-no-error-on-memory-limit",
                                  cl::init(false),
                                  cl::desc("Enable no error  on memory limit. This mean that states can be remove uncontrollabl and m worsen the effectiveness of SEMu"));
@@ -212,15 +215,21 @@ cl::opt<bool> semuQuiet("semu-quiet",
                                  cl::init(false),
                                  cl::desc("Enable quiet log"));
                                           
+/**** SEMu Under development ****/
 // Use shadow test case generation for mutants ()
 cl::opt<bool> semuShadowTestGeneration("semu-shadow-test-gen", 
                                           cl::init(false), 
-                                          cl::desc("Enable Test generation using the shadow SE based approach"));
+                                          cl::desc("(FIXME: DO NOT USE THIS) Enable Test generation using the shadow SE based approach"));
 
 // Automatically set the arguments of the entry function symbolic
 cl::opt<bool> semuSetEntryFuncArgsSymbolic("semu-set-entyfunction-args-symbolic", 
                                           cl::init(false), 
-                                          cl::desc("Enable automatically set the parameters of the entry point symbolic"));
+                                          cl::desc("(FIXME: DO NOT USE THIS - ONGOING) Enable automatically set the parameters of the entry point symbolic"));
+
+// Optional file containing the precondition of symbolic execution, maybe extracted from existing test using Zesti
+cl::list<std::string> semuPrecondFiles("semu-precondition-file", 
+                                  cl::desc("(FIXME: DO NOT USE THIS) precondition for bounded semu (use this many times for multiple files)"));
+
 }
 //~ KS
 

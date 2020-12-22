@@ -1,4 +1,4 @@
-### Run from the repo root dir
+### Run from the repo root dir (optionally set the ARG using "--build-arg <ARG>=<value>")
 # docker build --no-cache -t thierrytct/klee-semu:llvm-3.4.2 -f lib/Mutation/Dockerfile .
 # docker push thierrytct/klee-semu:llvm-3.4.2
 
@@ -7,6 +7,9 @@ ARG mart_llvm_version=3.4.2
 FROM thierrytct/mart:llvm-$mart_llvm_version
 
 ARG mart_llvm_version=3.4.2
+
+# Set this to enable relevant mutant prediction
+ARG enable_rel_mut_pred  
 
 RUN apt-get -y update && apt-get -y install git vim \
   && apt-get -y install build-essential curl wget libcap-dev libncurses5-dev unzip libtcmalloc-minimal4 libgoogle-perftools-dev libsqlite3-dev doxygen \
@@ -44,8 +47,9 @@ COPY . /home/klee-semu/klee_src
 # Patch stub.c
 RUN sed -i'' '243s|.*|/*&|;258s|.*|&*/|' /home/klee-semu/klee_src/runtime/POSIX/stubs.c
 
-RUN cd /home/klee-semu/klee_build \
-  && CXXFLAGS="-fno-rtti -g -DNDEBUG -DHAVE_Z3_GET_ERROR_MSG_NEEDS_CONTEXT" cmake -DCMAKE_BUILD_TYPE=Release \
+RUN if [ "${enable_rel_mut_pred}" = "" ]; then extra=""; else extra="-DSEMU_RELMUT_PRED_ENABLED"; fi \
+  && cd /home/klee-semu/klee_build \
+  && CXXFLAGS="-fno-rtti -g -DNDEBUG -DHAVE_Z3_GET_ERROR_MSG_NEEDS_CONTEXT $extra" cmake -DCMAKE_BUILD_TYPE=Release \
            -DENABLE_KLEE_ASSERTS=true \
            -DENABLE_KLEE_UCLIBC=true \
            -DENABLE_POSIX_RUNTIME=true \
@@ -62,7 +66,7 @@ RUN cd /home/klee-semu/klee_build \
            -DSTP_DIR=/home/klee-semu/uclibc_solvers/stp/build \
            -DUSE_CXX11=true \
        ../klee_src \
-  && CXXFLAGS='-fno-rtti -g -DNDEBUG -DHAVE_Z3_GET_ERROR_MSG_NEEDS_CONTEXT' make
+  && CXXFLAGS='-fno-rtti -g -DNDEBUG -DHAVE_Z3_GET_ERROR_MSG_NEEDS_CONTEXT $extra' make
 
 ENV PATH="/home/klee-semu/klee_build/bin:${PATH}"
 
