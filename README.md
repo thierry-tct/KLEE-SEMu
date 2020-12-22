@@ -38,6 +38,11 @@ SEMu is easily used with the [Muteria](https://github.com/muteria/muteria) Frame
 
 ### A. Using pre-build [Docker](https://www.docker.com/) image
 This tool has a Docker image available here [https://hub.docker.com/r/thierrytct/klee-semu](https://hub.docker.com/r/thierrytct/klee-semu).
+Start the Docker container in interactive mode with the following command:
+```bash
+sudo docker run -it --rm thierrytct/klee-semu bash
+```
+
 The `Dockerfile` used to build SEMu's Docker image is found in the code location `lib/Mutation/Dockerfile`.
 
 ### B. Build from Source
