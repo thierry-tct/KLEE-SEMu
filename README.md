@@ -216,7 +216,7 @@ klee-semu \
 
 #### 2. Using seeds
 
-Need to specify the directory that contains the seeds and `--only-replay-seeds`. The seeds can be created by running KLEE first. The output of KLEE (the `.ktest` files) can be used as seeds for SEMu.
+Need to specify the directory that contains the seeds (assuming `example_path/seeds_dir` for this example) and `--only-replay-seeds`. The seeds can be created by running KLEE first. The output of KLEE (the `.ktest` files) can be used as seeds for SEMu.
 
 ``` bash
 klee-semu \
