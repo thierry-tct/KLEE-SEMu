@@ -134,7 +134,7 @@ namespace {
 // precondition Length value is fixed if >= 0; stop when any state finds a mutants and set to that depth if == -1; stop when each state reach a mutant if < -1
 cl::opt<int> semuPreconditionLength("semu-precondition-length", 
                                  cl::init(6), 
-                                 cl::desc("(PL) Sets number of pre-conditions that will be taken from the seeds' (initial tests) path conditions and used as precondition. Use the two negative values: -1 for Global Minimum Distance to Mutated Statement (GMD2MS), and -2 for Specific Minimum Distance to Mutated Statement (SMD2MS)."));
+                                 cl::desc("(PL) default=6. Sets number of pre-conditions that will be taken from the seeds' (initial tests) path conditions and used as precondition. Use the two negative values: -1 for Global Minimum Distance to Mutated Statement (GMD2MS), and -2 for Specific Minimum Distance to Mutated Statement (SMD2MS)."));
 
 // optional watch point max depth to leverage mutant state explosion
 // When the value of semuMaxDepthWP is 0, check right after the mutation point (similar to waek mutation)
@@ -142,30 +142,30 @@ cl::opt<int> semuPreconditionLength("semu-precondition-length",
 // TODO: Add this to ks_reachedCheckMaxDepth
 cl::opt<unsigned> semuMaxDepthWP("semu-checkpoint-window", 
                                  cl::init(0), 
-                                 cl::desc("Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
+                                 cl::desc("(CW) default=0. Maximum length of mutant path condition from mutation point to watch point (number of fork locations since mutation point)"));
 
 // TODO implement different selection strategies on which to continue
 cl::opt<double> semuPostCheckpointMutantStateContinueProba("semu-propagation-proportion", 
                                  cl::init(0.0), 
-                                 cl::desc("Set the proportion of mutant states of a particular mutant that will continue after checkpoint(checkpoint postponing). For a given mutant ID, will see the states that reach checkpoint and remove the specified proportion to continue past the checkpoint."));
+                                 cl::desc("(PP) default=0. Set the proportion of mutant states of a particular mutant that will continue after checkpoint(checkpoint postponing). For a given mutant ID, will see the states that reach checkpoint and remove the specified proportion to continue past the checkpoint."));
 
 cl::opt<bool> semuApplyMinDistToOutputForMutContinue(
                                 "semu-MDO-propagation-selection-strategy",
                                  cl::init(false),
-                                 cl::desc("Enable using the distance to the output to select which states to continue post mutant checkpoint"));
+                                 cl::desc("(PSS-MDO) Enable using the distance to the output to select which states to continue post mutant checkpoint"));
 
 cl::opt<unsigned> semuGenTestForDiscardedFromCheckNum(
                                  "semu-minimum-propagation-depth",
                                  cl::init(0),
-                                 cl::desc("Number of checkpoints where mutants states that reach are discarded without test generated for them, before a test is generated. Help to generate test only for the states, for a mutant, that goes deep"));
+                                 cl::desc("(MPD) default=0. Number of checkpoints where mutants states that reach are discarded without test generated for them, before a test is generated. Help to generate test only for the states, for a mutant, that goes deep"));
 
 cl::opt<bool> semuDisableStateDiffInTestGen("semu-no-state-difference",
                                  cl::init(false),
-                                 cl::desc("Disable the state comparison with original when generating test for mutant (only consider mutant PC)"));
+                                 cl::desc("(NSD) Disable the state comparison with original when generating test for mutant (only consider mutant PC)"));
 
 cl::opt<unsigned> semuMaxNumTestGenPerMutant("semu-number-of-tests-per-mutant", 
                                  cl::init(0), 
-                                 cl::desc("Set the maximum number of test generated to kill each mutant. (== 0) and semu-max-total-tests-gen=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
+                                 cl::desc("(NTPM) default=0. Set the maximum number of test generated to kill each mutant. (== 0) and semu-max-total-tests-gen=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
 
 /***** SEMu Auxiliary parameters *****/
 
@@ -179,7 +179,7 @@ cl::opt<bool> semuUseBBForDistance("semu-use-basicblock-for-distance",
 
 cl::opt<unsigned> semuMaxTotalNumTestGen("semu-max-total-tests-gen", 
                                  cl::init(0), 
-                                 cl::desc("Set the maximum number of test generated to kill the mutants. (== 0) and semu-max-tests-gen-per-mutant=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
+                                 cl::desc("default=0. Set the maximum number of test generated to kill the mutants. (== 0) and semu-max-tests-gen-per-mutant=0 means do not generate test, only get state difference. Either (> 0) means generate test, do not get state differences. default is 0"));
 
 // Optionally set the list of mutants to consider, the remaining will be removed from meta module
 cl::opt<std::string> semuCandidateMutantsFile("semu-candidate-mutants-list-file", 
@@ -197,7 +197,7 @@ cl::opt<bool> semuForkProcessForSegvExternalCalls("semu-forkprocessfor-segv-exte
 // TODO, actually detect loop and limit the number of iterations. For now just limit the time. set this time large enough to capture loop, not simple instructions
 cl::opt<double> semuLoopBreakDelay("semu-loop-break-delay", 
                                  cl::init(120.0), 
-                                 cl::desc("Set the maximum time in seconds that the same state is executed without stop"));
+                                 cl::desc("default=120. Set the maximum time in seconds that the same state is executed without stop"));
 
 cl::opt<bool> semuDisableCheckAtPostMutationPoint("semu-disable-post-mutation-check",
                                           cl::init(false),
