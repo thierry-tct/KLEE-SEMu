@@ -202,7 +202,7 @@ klee-semu \
   --allow-external-sym-calls \
   --posix-runtime \
   --semu-no-error-on-memory-limit \
-  --solver-backen z3 \
+  --solver-backend z3 \
   --max-memory 2048 \
   --max-time 300 \
   --libc uclibc \
@@ -223,7 +223,7 @@ klee-semu \
   --allow-external-sym-calls \
   --posix-runtime \
   --semu-no-error-on-memory-limit \
-  --solver-backen z3 \
+  --solver-backend z3 \
   --max-memory 2048 \
   --max-time 300 \
   --libc uclibc \
