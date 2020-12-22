@@ -206,6 +206,7 @@ klee-semu \
   --max-memory 2048 \
   --max-time 300 \
   --libc uclibc \
+  --search bfs \
   --semu-precondition-length 0 \
   --semu-checkpoint-window 1 \
   --semu-propagation-proportion 0.25 \
@@ -227,6 +228,7 @@ klee-semu \
   --max-memory 2048 \
   --max-time 300 \
   --libc uclibc \
+  --search bfs \
   --semu-precondition-length 0 \
   --semu-checkpoint-window 1 \
   --semu-propagation-proportion 0.25 \
