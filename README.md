@@ -183,7 +183,17 @@ int main (int argc, char ** argv) {
 ```
 
 ### D. Examples
-Assuming that we have a program named `example.c` and that was compiled into LLVM bitcode to produce `example.bc` file (using the command `clang -g -c -emit-llvm example.c -o example.bc`). Then [Mart](https://github.com/thierry-tct/mart) was used to generate the meta mutant file for SEMu, named `example.MetaMu.bc`. Following are example of commands. 
+Assuming that we have an example program named `example.c` and that was compiled into LLVM bitcode to produce `example.bc` file as following:
+```
+clang -g -c -emit-llvm example.c -o example.bc
+```
+Then [Mart](https://github.com/thierry-tct/mart) was used to generate the meta mutant file for SEMu, named `example.MetaMu.bc`, as following:
+```
+mart example.bc
+```
+The file `example.MetaMu.bc` is located into the folder `mart-out-0`.
+
+Following are example of commands. 
 
 #### 1. Without using seeds
 
