@@ -4290,6 +4290,12 @@ Expr::Width Executor::getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const {
   return kmodule->targetData->getTypeSizeInBits(type);
 }
 
+
+/*****************************************************************/
+/****************** SEMu Only Methods @ START ********************/
+/*****************************************************************/
+
+
 // @KLEE-SEMu
 //#define ENABLE_KLEE_SEMU_DEBUG 1
 
@@ -6441,6 +6447,10 @@ bool Executor::ks_lazyInitialize (ExecutionState &state, KInstruction *ki) {
 }
 
 //~KS
+
+/*****************************************************************/
+/*~~~~~~~~~~~~~~~~ SEMu Only Methods @ END ~~~~~~~~~~~~~~~~~~~~~~*/
+/*****************************************************************/
 
 ///
 

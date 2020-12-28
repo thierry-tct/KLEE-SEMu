@@ -71,6 +71,10 @@ class ExecutionState {
 public:
   typedef std::vector<StackFrame> stack_ty;
   
+/*****************************************************************/
+/****************** SEMu Only Elements @ START *******************/
+/*****************************************************************/
+
 // @KLEE-SEMu Fields KS
 public:
   class KScheckFeasibleBase {
@@ -215,6 +219,10 @@ public:
   unsigned long long ks_oldnew_split_id;
 #endif
 //~KS
+
+/*****************************************************************/
+/*~~~~~~~~~~~~~~~~~ SEMu Only Elements @ END ~~~~~~~~~~~~~~~~~~~~*/
+/*****************************************************************/
 
 private:
   // unsupported, use copy constructor

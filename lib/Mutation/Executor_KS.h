@@ -510,6 +510,10 @@ public:
 
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
   
+/*****************************************************************/
+/****************** SEMu Only Elements @ START *******************/
+/*****************************************************************/
+
   // @KLEE-SEMu
   class KScheckFeasible: public ExecutionState::KScheckFeasibleBase {
   private:
@@ -702,6 +706,11 @@ public:
   // - adapt the comparison to seach others and compare accordingly and use the condition
 #endif
   //~KS
+
+/*****************************************************************/
+/*~~~~~~~~~~~~~~~~~ SEMu Only Elements @ END ~~~~~~~~~~~~~~~~~~~~*/
+/*****************************************************************/
+
 };
   
 } // End klee namespace
