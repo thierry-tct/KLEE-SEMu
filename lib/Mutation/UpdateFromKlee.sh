@@ -41,7 +41,7 @@ add_subdirectory(klee-semu)
 # Patch tools/klee-semu/CMakeLists.txt file
 test -d $here/../../tools/klee-semu || mkdir $here/../../tools/klee-semu || error_exit "failed to create klee-semu dir"
 test -f $here/../../tools/klee/CMakeLists.txt || error_exit "CMakeLists.txt missing for tools/klee"
-sed 's|klee|klee-semu|g;s|main.cpp|klee-semu.cpp|g;s|kleeCore|kleeSemuCore|g' $here/../../tools/klee/CMakeLists.txt > $here/../../tools/klee-semu/CMakeLists.txt
+sed 's|kleeCore|xxxxCore|g;s|klee|klee-semu|g;s|main.cpp|klee-semu.cpp|g;s|xxxxCore|kleeSemuCore|g' $here/../../tools/klee/CMakeLists.txt > $here/../../tools/klee-semu/CMakeLists.txt
 
 # Ask to manually update $here/Makefile, $here, $here/../../tools/klee-semu
 echo "# DONE!"
