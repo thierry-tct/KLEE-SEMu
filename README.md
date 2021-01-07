@@ -129,7 +129,7 @@ Initial code:
 #include <stdio.h>
 #include <stdlib.h>
 int main (int argc, char ** argv) {
-    int x = atoi(argv[0]);
+    int x = atoi(argv[1]);
     if (x > 0) {
         x = x + 10;
         printf ("Changed\n");
@@ -158,7 +158,7 @@ void klee_semu_GenMu_Mutant_ID_Selector_Func (unsigned long fromID, unsigned lon
 void klee_semu_GenMu_Post_Mutation_Point_Func (unsigned long fromID, unsigned long toID);
 
 int main (int argc, char ** argv) {
-    int x = atoi(argv[0]);
+    int x = atoi(argv[1]);
     if (x > 0) {
         klee_semu_GenMu_Mutant_ID_Selector_Func(1,2);
         klee_semu_GenMu_Mutant_ID_Selector_Func(4,4);
