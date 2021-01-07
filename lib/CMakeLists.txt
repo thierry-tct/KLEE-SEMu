@@ -12,3 +12,11 @@ add_subdirectory(Expr)
 add_subdirectory(Solver)
 add_subdirectory(Module)
 add_subdirectory(Core)
+
+# @KLEE-SEMu
+add_subdirectory(Mutation)
+#~KS
+
+# @KLEE-SEMu
+add_subdirectory(Mutation)
+#~KS
