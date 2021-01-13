@@ -2,7 +2,7 @@
 
 SEMu (KLEE-SEMu) is a (Dynamic) Symbolic Execution-based Mutant analysis framework build on top of [KLEE](https://github.com/klee/klee) Symbolic Virtual Machine. 
 
-SEMu uses a form of differential symbolic execution to generate test inputs to kill mutants. The relevant paper can be found [here](https://orbilu.uni.lu/bitstream/10993/44339/1/main%20%283%29.pdf), and cited as following:
+SEMu uses a form of differential symbolic execution to generate test inputs to kill mutants. The relevant paper can be found [here](https://orbilu.uni.lu/bitstream/10993/44339/1/main%20%283%29.pdf) (the paper's pdf [here](https://orbilu.uni.lu/bitstream/10993/44339/1/main%20%283%29.pdf) and the data-set [here](https://github.com/thierry-tct/SEMu-Experiement-data)), and cited as following:
 
 ``` 
 [x] Thierry Titcheu Chekam, Mike Papadakis, Maxime Cordy, Yves Le Traon. Killing Stubborn Mutants. 
