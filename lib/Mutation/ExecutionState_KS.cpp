@@ -192,7 +192,12 @@ bool ExecutionState::ks_stackHasAnyFunctionOf(std::set<std::string> &funcnames) 
   return false;
 }
 
-int ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, std::vector<ref<Expr>> &inStateDiffExp, KScheckFeasibleBase *feasibleChecker, bool postExec, bool checkRegs/*=false*/) {
+int ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, 
+#ifdef SEMU_RELMUT_PRED_ENABLED
+                                               llvm::Value *IsOldVersionDeclIns,
+#endif
+                                         std::vector<ref<Expr>> &inStateDiffExp, KScheckFeasibleBase *feasibleChecker, 
+                                         bool postExec, bool checkRegs/*=false*/) {
   //if (pc != b.pc)     //Commented beacause some states may terminate early but should still be considered(they may have different PC)
   //  return false;
   
@@ -375,7 +380,12 @@ int ExecutionState::ks_compareStateWith (const ExecutionState &b, llvm::Value *M
         continue;
       }
       
-      if (ai->second != bi->second && (*ai->second).read(0, ai->first->size*8).compare((*bi->second).read(0, bi->first->size*8)) != 0 && ai->first->allocSite != MutantIDSelectDeclIns) {
+      if (ai->second != bi->second 
+          && (*ai->second).read(0, ai->first->size*8).compare((*bi->second).read(0, bi->first->size*8)) != 0 
+#ifdef SEMU_RELMUT_PRED_ENABLED
+          && ai->first->allocSite != IsOldVersionDeclIns
+#endif
+          && ai->first->allocSite != MutantIDSelectDeclIns) {
         ref<Expr> tmpexpr = NeExpr::create((*ai->second).read(0, ai->first->size*8), (*bi->second).read(0, bi->first->size*8));
         if (feasibleChecker->isFeasible(tmpexpr)) {
           if (DebugLogStateMerge)
