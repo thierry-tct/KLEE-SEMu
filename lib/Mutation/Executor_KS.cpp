@@ -6425,8 +6425,8 @@ void Executor::ks_oldNewBranching(ExecutionState &state) {
     ns->ptreeNode = res.first;
     state.ptreeNode = res.second;
     
-    executeMemoryOperation (*ns, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(-1, 1), 0);    // isOld is a boolean (1 bit int)
-    executeMemoryOperation (state, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(1, 1), 0);    // isOld is a boolean (1 bit int)
+    executeMemoryOperation (*ns, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(1, 1), 0);    // isOld is a boolean (1 bit int). 1 for True
+    executeMemoryOperation (state, true, evalConstant(ks_isOldVersionGlobal), ConstantExpr::create(0, 1), 0);    // isOld is a boolean (1 bit int). 0 for False
     ns->ks_old_new = -1;
     state.ks_old_new = 1;
     
