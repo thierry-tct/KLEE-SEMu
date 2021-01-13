@@ -208,7 +208,12 @@ public:
   bool ks_stackHasAnyFunctionOf(std::set<std::string> &funcnames);
 
   // Post exec say whether the comparison is done after the chekpoint instruction execution
-  int ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, std::vector<ref<Expr>> &inStateDiffExp, KScheckFeasibleBase *feasibleChecker, bool postExec=true, bool checkRegs=false);
+  int ks_compareStateWith (const ExecutionState &b, llvm::Value *MutantIDSelectDeclIns, 
+#ifdef SEMU_RELMUT_PRED_ENABLED
+                                               llvm::Value *IsOldVersionGlobal,
+#endif
+                           std::vector<ref<Expr>> &inStateDiffExp, KScheckFeasibleBase *feasibleChecker, 
+                           bool postExec=true, bool checkRegs=false);
   
 #ifdef SEMU_RELMUT_PRED_ENABLED
   // record the version represented by the state
