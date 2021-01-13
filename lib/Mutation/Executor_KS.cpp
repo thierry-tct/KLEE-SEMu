@@ -5176,9 +5176,17 @@ bool Executor::ks_diffTwoStates (ExecutionState *mState, ExecutionState *mSisSta
         // XXX: we also compare states (ks_compareStateWith) here or not?
 
         if (!ExecutionState::ks_isNoDiff(sDiff))
-          sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, &feasibleChecker, false/*post...*/);
+          sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, 
+#ifdef SEMU_RELMUT_PRED_ENABLED
+                                               ks_isOldVersionGlobal,
+#endif
+                                               inStateDiffExp, &feasibleChecker, false/*post...*/);
       } else {
-        sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, inStateDiffExp, &feasibleChecker, true/*post...*/);
+        sDiff |= mState->ks_compareStateWith(*mSisState, ks_mutantIDSelectorGlobal, 
+#ifdef SEMU_RELMUT_PRED_ENABLED
+                                               ks_isOldVersionGlobal,
+#endif
+                                             inStateDiffExp, &feasibleChecker, true/*post...*/);
         // XXX if mutant terminated and not original or vice versa, set the main return diff
         // TODO: Meke this more efficient
         if (ks_terminatedBeforeWP.count(mSisState) != ks_terminatedBeforeWP.count(mState))
