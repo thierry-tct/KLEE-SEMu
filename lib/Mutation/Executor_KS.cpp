@@ -4714,11 +4714,6 @@ inline bool Executor::ks_nextIsOutEnv (ExecutionState &state) {
   //if ((uint64_t)state.pc->inst==1) {state.prevPC->inst->getParent()->dump();state.prevPC->inst->dump();} 
   // Is the next instruction to execute an external call that change output
   if (! semuNoConsiderOutEnvForDiffs) {
-#ifdef SEMU_RELMUT_PRED_ENABLED
-    // If it is a mutant but haven't reached old_new split, do not consider out env
-    if (state.ks_mutantID != 0 && state.ks_old_new == 0)
-      return false;
-#endif
     if (llvm::dyn_cast_or_null<llvm::UnreachableInst>(state.prevPC->inst) 
                                                                 == nullptr) {
       if (ks_isOutEnvCallInvoke(state.pc->inst)) {
