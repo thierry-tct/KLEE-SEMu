@@ -139,6 +139,10 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     ks_startdepth(state.ks_startdepth),
     ks_numberOfOutEnvSeen(state.ks_numberOfOutEnvSeen),
     ks_numberActiveCmpMutants(state.ks_numberActiveCmpMutants),
+#ifdef SEMU_RELMUT_PRED_ENABLED
+    ks_old_new(state.ks_old_new),
+    ks_oldnew_split_id(state.ks_oldnew_split_id),
+#endif
     //~KS
     
     instsSinceCovNew(state.instsSinceCovNew),
