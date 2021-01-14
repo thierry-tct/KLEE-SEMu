@@ -5285,7 +5285,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState,
   bool diffFound = false;
 
 #ifdef SEMU_RELMUT_PRED_ENABLED
-  if (mState->ks_old_new > 0) { // only post commit version
+  if (mState->ks_old_new > 0 || postMutOnly) { // only post commit version, except postMut
 #endif
 
   // enter if WP (neither outenv nor post mutation) and the state in not ongoing
@@ -5295,7 +5295,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState,
       || (postMutOnly && ks_atPointPostMutation.count(mState) > 0)) {
     for (auto mSisState: mSisStatesVect) {
 #ifdef SEMU_RELMUT_PRED_ENABLED
-      if (mSisState->ks_old_new <= 0) // No need for pre-commit original
+      if (mSisState->ks_old_new <= 0 && !postMutOnly) // No need for pre-commit original, except postMut
         continue; 
 #endif
       int sDiff = ExecutionState::KS_StateDiff_t::ksNO_DIFF; 
