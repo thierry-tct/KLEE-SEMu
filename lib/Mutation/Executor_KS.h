@@ -584,6 +584,9 @@ private:
   // will be set to the maximum mutant id when FilterMutants
   ExecutionState::KS_MutantIDType ks_max_mutant_id=0;
   ExecutionState::KS_MutantIDType ks_number_of_mutants=0;
+  
+  // Specify custom function as output env
+  std::vector<std::string> ks_customOutEnvFuncNames;
 
 #ifdef KS_Z3MAXSAT_SOLVER__H
   // Partial Max Sat Solver
