@@ -214,6 +214,9 @@ cl::opt<bool> semuEnableNoErrorOnMemoryLimit("semu-no-error-on-memory-limit",
 cl::opt<bool> semuQuiet("semu-quiet",
                                  cl::init(false),
                                  cl::desc("Enable quiet log"));
+	
+cl::list<std::string> semuCustomOutEnvFunction("semu-custom-output-function",
+					       cl::desc("Specify the functions to consider as output functions, besides the standard ones."));
                                           
 /**** SEMu Under development ****/
 // Use shadow test case generation for mutants ()
@@ -551,6 +554,9 @@ const Module *Executor::setModule(llvm::Module *module,
   assert (ks_postMutationPoint_Func && ks_postMutationPoint_Func->arg_size() == 2 &&
     "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
 
+  for (auto it=semuCustomOutEnvFunction.begin(), ie=semuCustomOutEnvFunction.end(); it != ie; ++it)
+    ks_customOutEnvFuncNames.insert(*it);
+  
   ks_FilterMutants(module);
   ks_initialize_ks_instruction2closestout_distance(module);
 #ifdef SEMU_RELMUT_PRED_ENABLED
@@ -4699,7 +4705,7 @@ inline bool Executor::ks_isOutEnvCallInvoke (Instruction *cii) {
       case Intrinsic::trap:
         return true;
       case Intrinsic::not_intrinsic:
-        if (outEnvFuncs.count(f->getName()))
+        if (outEnvFuncs.count(f->getName()) || ks_customOutEnvFuncNames.count(f->getName()))
           return true;
         break;
       default:
