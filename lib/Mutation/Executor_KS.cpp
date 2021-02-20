@@ -554,6 +554,7 @@ const Module *Executor::setModule(llvm::Module *module,
   assert (ks_postMutationPoint_Func && ks_postMutationPoint_Func->arg_size() == 2 &&
     "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
 
+  // Add custom outenv
   for (auto it=semuCustomOutEnvFunction.begin(), ie=semuCustomOutEnvFunction.end(); it != ie; ++it)
     ks_customOutEnvFuncNames.insert(*it);
   
