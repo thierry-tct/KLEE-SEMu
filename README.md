@@ -85,6 +85,7 @@ These arguments affect how the values of some main arguments are interpreted, fo
 | --semu-use-only-multi-branching-for-depth | boolean | This argument enable to only count the branching points where both branches are feasible when calculating the checkpoint Window (CW). By default, all branching points are used. |
 | --semu-no-environment-output-diff | boolean | This argument disables the consideration of calls to the output environment (library calls that changes the environment, like _printf_ for example) when comparing states at the checkpoints. | 
 | --semu-max-total-tests-gen | value | This argument sets the total number of tests to generate across all mutants. Setting this to an integer > 0 invalidate the NTPM argument such that the maximum number of test per mutant is not fixed anymore. |
+| --semu-custom-output-function" | value | Specify the functions to consider as output functions, besides the standard ones. Specify this multiple times for multiple functions. |
 
 #### 3. Other arguments
 These are arguments that were added do to extra stuffs.
