@@ -540,19 +540,27 @@ const Module *Executor::setModule(llvm::Module *module,
     ks_setInitialSymbolics (*module, *ks_entryFunction);   
   }
   ks_mutantIDSelectorGlobal = module->getNamedGlobal(ks_mutantIDSelectorName);
-  assert (ks_mutantIDSelectorGlobal && 
-    "@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
+  if (!ks_mutantIDSelectorGlobal) {
+    assert (false && "@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
+    klee_error ("@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
+  }
   // Not needed, it has value the number of mutants + 1 Make sure that the value of the mutIDSelector global variable is 0 (original)
-  assert (ks_mutantIDSelectorGlobal->hasInitializer() 
+  if (! ks_mutantIDSelectorGlobal->hasInitializer() ) {
           //&& ks_mutantIDSelectorGlobal->getInitializer()->isNullValue()
-          && "@KLEE-SEMu - ERROR: mutant ID selector Must be initialized to 0!");
+    assert (false && "@KLEE-SEMu - ERROR: mutant ID selector Must be initialized to 0!");
+    klee_error ("@KLEE-SEMu - ERROR: mutant ID selector Must be initialized to 0!");
+  }
           
   ks_mutantIDSelectorGlobal_Func = module->getFunction(ks_mutantIDSelectorName_Func);
-  assert (ks_mutantIDSelectorGlobal_Func && ks_mutantIDSelectorGlobal_Func->arg_size() == 2 &&
-    "@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
+  if (!ks_mutantIDSelectorGlobal_Func || ks_mutantIDSelectorGlobal_Func->arg_size() != 2) {
+    assert (false && "@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
+    klee_error ("@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
+  }
   ks_postMutationPoint_Func = module->getFunction(ks_postMutationPointFuncName);
-  assert (ks_postMutationPoint_Func && ks_postMutationPoint_Func->arg_size() == 2 &&
-    "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
+  if (!ks_postMutationPoint_Func || ks_postMutationPoint_Func->arg_size() != 2) {
+    assert (false && "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
+    klee_error ("@KLEE-SEMu - ERROR: The module is missing post mutation point function");
+  }
 
   // Add custom outenv
   for (auto it=semuCustomOutEnvFunction.begin(), ie=semuCustomOutEnvFunction.end(); it != ie; ++it)
@@ -592,19 +600,27 @@ const Module *Executor::setModule(llvm::Module *module,
   // @KLEE-SEMu
   // Reverify since module was changed
   ks_mutantIDSelectorGlobal = module->getNamedGlobal(ks_mutantIDSelectorName);
-  assert (ks_mutantIDSelectorGlobal && 
-    "@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
+  if (!ks_mutantIDSelectorGlobal) {
+    assert (false && "@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
+    klee_error ("@KLEE-SEMu - ERROR: The module is unmutated(no mutant ID selector global var)");
+  }
   //Make sure that the value of the mutIDSelector global variable is 0 (original)
-  assert (ks_mutantIDSelectorGlobal->hasInitializer() 
+  if (!ks_mutantIDSelectorGlobal->hasInitializer()) {
           //&& ks_mutantIDSelectorGlobal->getInitializer()->isNullValue()
-          && "@KLEE-SEMu - ERROR: mutant ID selector Must be initialized to 0!");
+    assert (false && "@KLEE-SEMu - ERROR: mutant ID selector Must be initialized to 0!");
+    klee_error ("@KLEE-SEMu - ERROR: mutant ID selector Must be initialized to 0!");
+  }
           
   ks_mutantIDSelectorGlobal_Func = module->getFunction(ks_mutantIDSelectorName_Func);
-  assert (ks_mutantIDSelectorGlobal_Func && ks_mutantIDSelectorGlobal_Func->arg_size() == 2 &&
-    "@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
+  if (!ks_mutantIDSelectorGlobal_Func || ks_mutantIDSelectorGlobal_Func->arg_size() != 2) {
+    assert (false && "@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
+    klee_error ("@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
+  }
   ks_postMutationPoint_Func = module->getFunction(ks_postMutationPointFuncName);
-  assert (ks_postMutationPoint_Func && ks_postMutationPoint_Func->arg_size() == 2 &&
-    "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
+  if (!ks_postMutationPoint_Func || ks_postMutationPoint_Func->arg_size() != 2) {
+    assert (false && "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
+    klee_error ("@KLEE-SEMu - ERROR: The module is missing post mutation point function");
+  }
   //~KS
   
   return module;
