@@ -1,6 +1,7 @@
 ### Run from the repo root dir (optionally set the ARG using "--build-arg <ARG>=<value>")
 # docker build --no-cache -t thierrytct/klee-semu:llvm-3.4.2 -f lib/Mutation/Dockerfile .
 # docker push thierrytct/klee-semu:llvm-3.4.2
+# docker image tag thierrytct/klee-semu:llvm-3.4.2 thierrytct/klee-semu:latest && docker push thierrytct/klee-semu:latest
 
 ARG mart_llvm_version=3.4.2
 
