@@ -4512,14 +4512,15 @@ void Executor::ks_FilterMutants (llvm::Module *module) {
               // update max mutant id              
               ks_max_mutant_id = std::max(ks_max_mutant_id, 
                                       *std::max_element(tosCandIds.begin(), tosCandIds.end()));
-              ks_number_of_mutants++;
 
               for (auto i = 0u; i < fromsCandIds.size() - 1; ++i) {
+                ks_number_of_mutants += tosCandIds[i] - fromsCandIds[i] + 1;
                 auto *clonei = llvm::dyn_cast<llvm::CallInst>(calli->clone());
                 clonei->insertBefore(calli);
                 clonei->setArgOperand(0, llvm::ConstantInt::get(clonei->getArgOperand(0)->getType(), fromsCandIds[i]));
                 clonei->setArgOperand(1, llvm::ConstantInt::get(clonei->getArgOperand(1)->getType(), tosCandIds[i]));
               }
+              ks_number_of_mutants += tosCandIds[tosCandIds.size() - 1] - fromsCandIds[fromsCandIds.size() - 1] + 1;
               calli->setArgOperand(0, llvm::ConstantInt::get(calli->getArgOperand(0)->getType(), fromsCandIds[fromsCandIds.size() - 1]));
               calli->setArgOperand(1, llvm::ConstantInt::get(calli->getArgOperand(1)->getType(), tosCandIds[tosCandIds.size() - 1]));
             }
