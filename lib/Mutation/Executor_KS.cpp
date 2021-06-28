@@ -5049,7 +5049,7 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
       // RELMUT: Do not remove induced mutants if old version (the mutants might sill be needed). Of course, in case they are no more needed
       // they will be explored in vain. 
       // FIXME: find a better way to avoid exploration in vain in this case
-      if (es.ks_old_new == -1)
+      if (es->ks_old_new == -1)
 #endif
       ks_terminateSubtreeMutants(es);
       //continue;
