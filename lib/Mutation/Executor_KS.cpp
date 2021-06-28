@@ -5038,6 +5038,12 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
     if (correspOriginals.empty()) {
       // No need to continue with the mutants since original finished
       // Remove the mutants of the subtree from ks_reachedWatchPoint..., add to terminated
+#ifdef SEMU_RELMUT_PRED_ENABLED
+      // RELMUT: Do not remove induced mutants if old version (the mutants might sill be needed). Of course, in case they are no more needed
+      // they will be explored in vain. 
+      // FIXME: find a better way to avoid exploration in vain in this case
+      if (es.ks_old_new == -1)
+#endif
       ks_terminateSubtreeMutants(es);
       //continue;
 
