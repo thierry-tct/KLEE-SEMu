@@ -5324,7 +5324,7 @@ bool Executor::ks_compareRecursive (ExecutionState *mState,
       || (postMutOnly && ks_atPointPostMutation.count(mState) > 0)) {
     for (auto mSisState: mSisStatesVect) {
 #ifdef SEMU_RELMUT_PRED_ENABLED
-      if (mSisState->ks_old_new <= 0 && !postMutOnly) // No need for pre-commit original, except postMut
+      if (mSisState != nullptr && mSisState->ks_old_new <= 0 && !postMutOnly) // No need for pre-commit original, except postMut
         continue; 
 #endif
       int sDiff = ExecutionState::KS_StateDiff_t::ksNO_DIFF; 
