@@ -5036,6 +5036,13 @@ void Executor::ks_compareStates (std::vector<ExecutionState *> &remainStates, bo
     // This may happend because an original ma terminate before its corresponding mutant
     // and thus, it will be removed from ks_terminatedBeforeWP at a "next check" before the mutant's watch point
     if (correspOriginals.empty()) {
+      if (outEnvOnly) {
+        // no original left, no comparison to be done. Let the generation to the checkpoint
+        remainStates.clear();
+        remainStates.insert(remainStates.begin(), ks_reachedOutEnv.begin(), ks_reachedOutEnv.end());
+        return;
+      }
+      
       // No need to continue with the mutants since original finished
       // Remove the mutants of the subtree from ks_reachedWatchPoint..., add to terminated
 #ifdef SEMU_RELMUT_PRED_ENABLED
