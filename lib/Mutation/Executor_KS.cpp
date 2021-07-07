@@ -217,7 +217,11 @@ cl::opt<bool> semuQuiet("semu-quiet",
 	
 cl::list<std::string> semuCustomOutEnvFunction("semu-custom-output-function",
 					       cl::desc("Specify the functions to consider as output functions, besides the standard ones."));
-                                          
+                                      
+cl::opt<bool> semuNoCompareMemoryLimitDiscarded("semu-no-compare-memory-limit-discarded",
+                                 cl::init(false),
+                                 cl::desc("Disable comparison of states that were stopped due to memory limit (useful to ensure the the memory limit is kept when large checkpoint window)"));
+
 /**** SEMu Under development ****/
 // Use shadow test case generation for mutants ()
 cl::opt<bool> semuShadowTestGeneration("semu-shadow-test-gen", 
