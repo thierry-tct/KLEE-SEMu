@@ -220,7 +220,7 @@ cl::list<std::string> semuCustomOutEnvFunction("semu-custom-output-function",
                                       
 cl::opt<bool> semuNoCompareMemoryLimitDiscarded("semu-no-compare-memory-limit-discarded",
                                  cl::init(false),
-                                 cl::desc("Disable comparison of states that were stopped due to memory limit (useful to ensure the the memory limit is kept when large checkpoint window)"));
+                                 cl::desc("(TODO) Disable comparison of states that were stopped due to memory limit (useful to ensure the the memory limit is kept when large checkpoint window)"));
 
 /**** SEMu Under development ****/
 // Use shadow test case generation for mutants ()
