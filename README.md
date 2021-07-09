@@ -121,8 +121,8 @@ The LLVM bitcode file must contain the following:
 - The mutants need to be represented using a `switch` statement controlled by the mutant ID global variable.
 - There must be a declaration of the selection function function named`klee_semu_GenMu_Mutant_ID_Selector_Func`, which takes two mutant IDs as arguments (two `i32` values), representing a range of mutant IDs, and returns `void`.
 - Right before any mutant selection `switch` statement, there must be calls to the selection function `klee_semu_GenMu_Mutant_ID_Selector_Func` where the arguments represent the range of mutants ID present in the `switch` statement. In case the IDs are not continuous, make multiple consecutive calls to `klee_semu_GenMu_Mutant_ID_Selector_Func` for each interval. e.g. make two calls with (4,6) and (8,8) as arguments, respectively, if the mutants in the corresponding `switch` statement are with IDs 4, 5, 6 and 8.
-- There must be a declaration of the post mutant function `klee_semu_GenMu_Post_Mutation_Point_Func`, which is similar in signature with `klee_semu_GenMu_Mutant_ID_Selector_Func`, but instead of being called before the mutant, is called right after the mutants.
-- There must be call to the function `klee_semu_GenMu_Post_Mutation_Point_Func` right after the corresponding mutants. This enable SEMu to do conservative pruning and remove the mutant states that are uninfected (same as corresponding original ones).
+- If `--semu-disable-post-mutation-check` is not used, there must be a declaration of the post mutant function `klee_semu_GenMu_Post_Mutation_Point_Func`, which is similar in signature with `klee_semu_GenMu_Mutant_ID_Selector_Func`, but instead of being called before the mutant, is called right after the mutants.
+- If `--semu-disable-post-mutation-check` is not used, there must be call to the function `klee_semu_GenMu_Post_Mutation_Point_Func` right after the corresponding mutants. This enable SEMu to do conservative pruning and remove the mutant states that are uninfected (same as corresponding original ones). Note that each mutant point's `klee_semu_GenMu_Post_Mutation_Point_Func` mush also have the call for the original program as following `klee_semu_GenMu_Post_Mutation_Point_Func(0,0)`.
 
 Here is an example of Meta-mutant code that is expected by SEMu. This is represented in C for simplicity and can be compiled to LLVM for use with SEMu.
 
@@ -170,6 +170,7 @@ int main (int argc, char ** argv) {
             case 4: break;
             default: x = x + 10;
         }
+        klee_semu_GenMu_Post_Mutation_Point_Func(0,0);
         klee_semu_GenMu_Post_Mutation_Point_Func(1,2);
         klee_semu_GenMu_Post_Mutation_Point_Func(4,4);
         printf ("Changed\n");
@@ -179,6 +180,7 @@ int main (int argc, char ** argv) {
         case 3: break;
         default: printf ("DONE!\n");
     }
+    klee_semu_GenMu_Post_Mutation_Point_Func(0,0);
     klee_semu_GenMu_Post_Mutation_Point_Func(3,3);
     return x;
 }
