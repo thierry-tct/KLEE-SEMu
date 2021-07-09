@@ -561,7 +561,7 @@ const Module *Executor::setModule(llvm::Module *module,
     klee_error ("@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
   }
   ks_postMutationPoint_Func = module->getFunction(ks_postMutationPointFuncName);
-  if (!ks_postMutationPoint_Func || ks_postMutationPoint_Func->arg_size() != 2) {
+  if (!semuDisableCheckAtPostMutationPoint && (!ks_postMutationPoint_Func || ks_postMutationPoint_Func->arg_size() != 2)) {
     assert (false && "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
     klee_error ("@KLEE-SEMu - ERROR: The module is missing post mutation point function");
   }
@@ -621,7 +621,7 @@ const Module *Executor::setModule(llvm::Module *module,
     klee_error ("@KLEE-SEMu - ERROR: The module is missing mutant selector Function");
   }
   ks_postMutationPoint_Func = module->getFunction(ks_postMutationPointFuncName);
-  if (!ks_postMutationPoint_Func || ks_postMutationPoint_Func->arg_size() != 2) {
+  if (!semuDisableCheckAtPostMutationPoint && (!ks_postMutationPoint_Func || ks_postMutationPoint_Func->arg_size() != 2)) {
     assert (false && "@KLEE-SEMu - ERROR: The module is missing post mutation point function");
     klee_error ("@KLEE-SEMu - ERROR: The module is missing post mutation point function");
   }
@@ -2050,7 +2050,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         else { //Simply skip that call when mutant or already seen
             break;  //case
         }
-    } else if (f == ks_postMutationPoint_Func) {
+    } else if (!semuDisableCheckAtPostMutationPoint && f == ks_postMutationPoint_Func) {
       // Do nothing. Will be checked later
       break;
     }
