@@ -69,7 +69,9 @@ RUN if [ "${enable_rel_mut_pred}" = "" ]; then extra=""; else extra="-DSEMU_RELM
        ../klee_src \
   && CXXFLAGS='-fno-rtti -g -DNDEBUG -DHAVE_Z3_GET_ERROR_MSG_NEEDS_CONTEXT $extra' make
 
-ENV PATH="/home/klee-semu/klee_build/bin:${PATH}"
+ENV PATH="/home/klee-semu/klee_build/bin:${PATH}" \
+  LIBRARY_PATH="/home/klee-semu/klee_build/Release+Debug+Asserts/lib/:/home/klee-semu/klee_build/lib/:${LIBRARY_PATH}" \
+  LD_LIBRARY_PATH="/home/klee-semu/klee_build/Release+Debug+Asserts/lib/:/home/klee-semu/klee_build/lib/:${LD_LIBRARY_PATH}"
 
 
 
