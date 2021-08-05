@@ -71,8 +71,8 @@ RUN if [ "${enable_rel_mut_pred}" = "" ]; then extra=""; else extra="-DSEMU_RELM
 
 ENV PATH="/home/klee-semu/klee_build/bin:${PATH}" \
   LIBRARY_PATH="/home/klee-semu/klee_build/Release+Debug+Asserts/lib/:/home/klee-semu/klee_build/lib/:${LIBRARY_PATH}" \
-  LD_LIBRARY_PATH="/home/klee-semu/klee_build/Release+Debug+Asserts/lib/:/home/klee-semu/klee_build/lib/:${LD_LIBRARY_PATH}"
-
+  LD_LIBRARY_PATH="/home/klee-semu/klee_build/Release+Debug+Asserts/lib/:/home/klee-semu/klee_build/lib/:${LD_LIBRARY_PATH}" \
+  C_INCLUDE_PATH="/home/klee-semu/klee_src/include/klee/:${C_INCLUDE_PATH}"
 
 
 #/*unsigned int gnu_dev_major(unsigned long long int __dev) __attribute__((weak));
