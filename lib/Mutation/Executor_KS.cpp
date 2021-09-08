@@ -2050,8 +2050,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         else { //Simply skip that call when mutant or already seen
             break;  //case
         }
-    } else if (!semuDisableCheckAtPostMutationPoint && f == ks_postMutationPoint_Func) {
-      // Do nothing. Will be checked later
+    } else if (f == ks_postMutationPoint_Func) {
+      // Do nothing. Will be checked later, if !semuDisableCheckAtPostMutationPoint
       break;
     }
     //~KS
