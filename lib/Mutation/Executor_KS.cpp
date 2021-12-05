@@ -4878,8 +4878,8 @@ inline void Executor::ks_fixTerminatedChildren(ExecutionState *es, llvm::SmallPt
         if (_s->ks_numberActiveCmpMutants == 0 
                 && _s->ks_VisitedMutantsSet.size() >= ks_number_of_mutants) {
           _toremove.insert(_s);
-                // Add to ks_terminatedBeforeWP
-                ks_moveIntoTerminatedBeforeWP(_s);
+          // Add to ks_terminatedBeforeWP
+          ks_moveIntoTerminatedBeforeWP(_s);
         }
       }
       // Fixup
@@ -4961,6 +4961,9 @@ void Executor::ks_moveIntoTerminatedBeforeWP(ExecutionState *es) {
   } else if (ks_reachedOutEnv.count(es) > 0) {
     ks_terminatedBeforeWP.insert(es);
     ks_reachedOutEnv.erase(es);
+  } else {
+    llvm::errs() << "Error: Execution state in None of the depth check sets (watchpoint, terminated, ...)\n";
+    assert(false, "In ks_moveIntoTerminatedBeforeWP");
   }
 }
 
