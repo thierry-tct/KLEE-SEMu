@@ -2,6 +2,10 @@
 # docker build --no-cache -t thierrytct/klee-semu:llvm-3.4.2 -f lib/Mutation/Dockerfile .
 # docker push thierrytct/klee-semu:llvm-3.4.2
 # docker image tag thierrytct/klee-semu:llvm-3.4.2 thierrytct/klee-semu:latest && docker push thierrytct/klee-semu:latest
+#
+# For Relmut:
+# docker build --no-cache --build-arg enable_rel_mut_pred=on -t thierrytct/klee-semu-relmut:llvm-3.4.2 -f lib/Mutation/Dockerfile .
+# docker push thierrytct/klee-semu-relmut:llvm-3.4.2
 
 ARG mart_llvm_version=3.4.2
 
