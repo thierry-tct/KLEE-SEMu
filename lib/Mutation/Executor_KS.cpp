@@ -5857,7 +5857,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
 
         // Make sure that on test gen mode, the mutants that reached maximum
         // generated tests are removed
-        /*if (ks_outputTestsCases) {
+        /*if (ks_outputTestsCases && !ks_hasOutEnv) {
           ks_eliminateMutantStatesWithMaxTests(true);
         }*/
 
@@ -5966,7 +5966,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
             ks_atPointPostMutation.clear();
           }
 
-	  if(!semuQuiet)
+	        if(!semuQuiet)
             llvm::errs() << "# SEMU@Status: After nextdepth point ID=" << (ks_nextDepthID-1) 
                         << " There are " << addedStates.size() 
                         <<" States remaining (seeding is "
@@ -5982,8 +5982,10 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
         }
 
         // Make sure that on test gen mode, the mutants that reached maximum
-        // generated tests are removed
-        if (ks_outputTestsCases) {
+        // generated tests are removed. 
+        // For now, only do that when not outev checking, because if causes a segfault when 
+        // there is a single mutant (issue: https://github.com/thierry-tct/KLEE-SEMu/issues/1)
+        if (ks_outputTestsCases && !ks_hasOutEnv) {
           ks_eliminateMutantStatesWithMaxTests(false);
         }
 
