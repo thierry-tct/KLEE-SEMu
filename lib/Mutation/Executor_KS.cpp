@@ -4962,8 +4962,8 @@ void Executor::ks_moveIntoTerminatedBeforeWP(ExecutionState *es) {
     ks_terminatedBeforeWP.insert(es);
     ks_reachedOutEnv.erase(es);
   } else if (ks_terminatedBeforeWP.count(es) == 0) {
-    llvm::errs() << "Error: Execution state in None of the depth check sets (watchpoint, terminated, ...)\n";
-    throw "Executor::ks_moveIntoTerminatedBeforeWP exception";
+    //llvm::errs() << "Error: Execution state in None of the depth check sets (watchpoint, terminated, ...)\n";
+    //throw "Executor::ks_moveIntoTerminatedBeforeWP exception";
   }
 }
 
