@@ -4777,7 +4777,16 @@ bool Executor::ks_checkAtPostMutationPoint(ExecutionState &state, KInstruction *
   bool ret = false;
   KInstruction * cur_ki = ki;
   Instruction *i;
-
+  
+  if (!state.ks_hasToReachPostMutationPoint) {
+    return ret;
+  }
+  
+  if (semuDisableCheckAtPostMutationPoint) {
+    curState.ks_hasToReachPostMutationPoint = false; 
+    return ret;
+  } 
+  
   do {
     i = cur_ki->inst;
     if (i->getOpcode() == Instruction::Call) {
@@ -4803,9 +4812,10 @@ bool Executor::ks_checkAtPostMutationPoint(ExecutionState &state, KInstruction *
   // function is not inserted (return) or call to
   // a function within mutated statement.
   // XXX if the post mutation is not seen after first
-  // fork, we take it as post mutation point.
-  if (!ret && state.depth > state.ks_startdepth)
-    ret = true;
+  // fork, we disable post mutation point for the state.
+  if (!ret && state.depth > state.ks_startdepth) {
+    curState.ks_hasToReachPostMutationPoint = false;
+  }
   return ret;
 }
 
@@ -5747,13 +5757,7 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
           std::swap(ks_WPReached, ks_atNextCheck);
         }
       } else {
-        if (curState.ks_hasToReachPostMutationPoint) {
-          if (semuDisableCheckAtPostMutationPoint) {
-            ks_atPostMutation = curState.ks_hasToReachPostMutationPoint = false; 
-          } else {
-            ks_atPostMutation = ks_checkAtPostMutationPoint(curState, ki);
-          }
-        }
+	      ks_atPostMutation = ks_checkAtPostMutationPoint(curState, ki);
         ks_atNextCheck = !ks_atPostMutation && ks_reachedCheckNextDepth(curState);
       }
     }
