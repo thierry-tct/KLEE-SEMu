@@ -4783,7 +4783,7 @@ bool Executor::ks_checkAtPostMutationPoint(ExecutionState &state, KInstruction *
   }
   
   if (semuDisableCheckAtPostMutationPoint) {
-    curState.ks_hasToReachPostMutationPoint = false; 
+    state.ks_hasToReachPostMutationPoint = false; 
     return ret;
   } 
   
@@ -4814,7 +4814,7 @@ bool Executor::ks_checkAtPostMutationPoint(ExecutionState &state, KInstruction *
   // XXX if the post mutation is not seen after first
   // fork, we disable post mutation point for the state.
   if (!ret && state.depth > state.ks_startdepth) {
-    curState.ks_hasToReachPostMutationPoint = false;
+    state.ks_hasToReachPostMutationPoint = false;
   }
   return ret;
 }
