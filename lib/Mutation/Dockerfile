@@ -23,7 +23,7 @@ RUN apt-get -y update && apt-get -y install git vim \
 
 # install uclibc, stp and z3
 RUN git clone https://github.com/klee/klee-uclibc.git /home/klee-semu/uclibc_solvers/klee-uclibc && cd /home/klee-semu/uclibc_solvers/klee-uclibc && ./configure --make-llvm-lib && make -j2 \
-  && apt-get -y install cmake bison flex libboost-all-dev perl minisat && git clone https://github.com/stp/stp /home/klee-semu/uclibc_solvers/stp \
+  && apt-get -y install cmake bison flex libboost-all-dev perl minisat && git clone -b 2.3.3 https://github.com/stp/stp /home/klee-semu/uclibc_solvers/stp \
     && cd /home/klee-semu/uclibc_solvers/stp && mkdir build && cd build && cmake .. && make && make install \
   && git clone https://github.com/Z3Prover/z3.git /home/klee-semu/uclibc_solvers/z3 \
   && cd /home/klee-semu/uclibc_solvers/z3 \
