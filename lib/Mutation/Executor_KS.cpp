@@ -5723,7 +5723,12 @@ inline bool Executor::ks_CheckpointingMainCheck(ExecutionState &curState, KInstr
   // // FIXME: For now we assume that the memory limit must not be exceeded, need to find a way to handle this later
   if (atMemoryLimit) {
     if (semuEnableNoErrorOnMemoryLimit) {
-      klee_warning("SEMU@WARNING: reached memory limit and killed states. You could increase memory limit or restrict symbex.");
+      static double prevWarnMemLimitTime = 0;
+      // Print at most one warning per 3 seconds, to avoid clogging
+      if (util::getWallTime() - prevWarnMemLimitTime > 3) {
+        klee_warning("SEMU@WARNING: reached memory limit and killed states. You could increase memory limit or restrict symbex.");
+        prevWarnMemLimitTime = util::getWallTime();
+      }
     } else {
       klee_error("SEMU@ERROR: Must not reach memory limit and kill states. increase memory limit or restrict symbex (FIXME)");
       exit(1);
