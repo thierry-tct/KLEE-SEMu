@@ -1047,14 +1047,14 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
           inhibitForking || 
           (MaxForks!=~0u && stats::forks >= MaxForks)) {
 
-	if (MaxMemoryInhibit && atMemoryLimit)
-	  klee_warning_once(0, "skipping fork (memory cap exceeded)");
-	else if (current.forkDisabled)
-	  klee_warning_once(0, "skipping fork (fork disabled on current path)");
-	else if (inhibitForking)
-	  klee_warning_once(0, "skipping fork (fork disabled globally)");
-	else 
-	  klee_warning_once(0, "skipping fork (max-forks reached)");
+        if (MaxMemoryInhibit && atMemoryLimit)
+          klee_warning_once(0, "skipping fork (memory cap exceeded)");
+        else if (current.forkDisabled)
+          klee_warning_once(0, "skipping fork (fork disabled on current path)");
+        else if (inhibitForking)
+          klee_warning_once(0, "skipping fork (fork disabled globally)");
+        else 
+          klee_warning_once(0, "skipping fork (max-forks reached)");
 
         TimerStatIncrementer timer(stats::forkTime);
         if (theRNG.getBool()) {
@@ -2959,7 +2959,11 @@ void Executor::checkMemoryUsage() {
             idx = rand() % N;
 
           std::swap(arr[idx], arr[N - 1]);
+#ifdef SEMU_RELMUT_PRED_ENABLED
+          terminateState(*arr[N - 1]);
+#else
           terminateStateEarly(*arr[N - 1], "Memory limit exceeded.");
+#endif
         }
       }
       atMemoryLimit = true;
