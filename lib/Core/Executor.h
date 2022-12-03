@@ -25,6 +25,12 @@
 
 #include "llvm/ADT/Twine.h"
 
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+#include "Mutation/ExecutorHelperSemu.h"
+#endif
+//~KS
+
 #include <vector>
 #include <string>
 #include <map>
@@ -505,6 +511,14 @@ public:
                                std::map<const std::string*, std::set<unsigned> > &res);
 
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
+
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+public:
+  friend class ExecutorHelperSemu;
+  ExecutorHelperSemu semuEHelper;
+#endif
+//~KS
 };
   
 } // End klee namespace

@@ -74,6 +74,12 @@ ExecutionState::ExecutionState(KFunction *kf) :
     weight(1),
     depth(0),
 
+    // @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+    semuESHelper(this, DebugLogStateMerge),
+#endif
+    //~KS
+
     instsSinceCovNew(0),
     coveredNew(false),
     forkDisabled(false),
@@ -82,7 +88,13 @@ ExecutionState::ExecutionState(KFunction *kf) :
 }
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
-    : constraints(assumptions), queryCost(0.), ptreeNode(0) {}
+    : constraints(assumptions), queryCost(0.), 
+    // @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+    semuESHelper(this, DebugLogStateMerge),
+#endif
+    //~KS
+    ptreeNode(0) {}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++)
@@ -111,6 +123,12 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     weight(state.weight),
     depth(state.depth),
 
+    // @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+    semuESHelper(this, state.semuESHelper, DebugLogStateMerge),
+#endif
+    //~KS
+
     pathOS(state.pathOS),
     symPathOS(state.symPathOS),
 
@@ -135,6 +153,12 @@ ExecutionState *ExecutionState::branch() {
 
   weight *= .5;
   falseState->weight -= weight;
+  
+  // @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+  semuESHelper.ks_stateBranchPostProcessing(falseState);
+#endif
+  //~KS
 
   return falseState;
 }

@@ -18,6 +18,12 @@
 #include "../../lib/Core/AddressSpace.h"
 #include "klee/Internal/Module/KInstIterator.h"
 
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+#include "../../lib/Core/Mutation/ExecutionStateHelperSemu.h"
+#endif
+//~KS
+
 #include <map>
 #include <set>
 #include <vector>
@@ -169,6 +175,14 @@ public:
 
   bool merge(const ExecutionState &b);
   void dumpStack(llvm::raw_ostream &out) const;
+
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+public:
+  friend class ExecutionStateHelperSemu;
+  ExecutionStateHelperSemu semuESHelper;
+#endif
+//~KS
 };
 }
 
