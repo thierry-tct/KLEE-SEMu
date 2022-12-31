@@ -20,3 +20,20 @@ install(TARGETS klee RUNTIME DESTINATION bin)
 
 # The KLEE binary depends on the runtimes
 add_dependencies(klee BuildKLEERuntimes)
+
+# @KLEE-SEMu
+add_executable(klee-semu
+  main.cpp
+)
+
+set(SEMU_LIBS
+  kleeSemuCore
+)
+
+target_link_libraries(klee-semu ${SEMU_LIBS})
+
+install(TARGETS klee-semu RUNTIME DESTINATION bin)
+
+# The KLEE binary depends on the runtimes
+add_dependencies(klee-semu BuildKLEERuntimes)
+#~KS

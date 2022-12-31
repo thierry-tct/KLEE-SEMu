@@ -20,6 +20,12 @@
 #include "klee/Solver/Solver.h"
 #include "klee/System/Time.h"
 
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+#include "Mutation/ExecutionStateHelperSemu.h"
+#endif
+//~KS
+
 #include <map>
 #include <memory>
 #include <set>
@@ -265,6 +271,15 @@ public:
 
   std::uint32_t getID() const { return id; };
   void setID() { id = nextID++; };
+
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+public:
+  friend class ExecutionStateHelperSemu;
+  ExecutionStateHelperSemu semuESHelper;
+#endif
+//~KS
+
 };
 
 struct ExecutionStateIDCompare {

@@ -47,3 +47,40 @@ target_link_libraries(kleeCore PRIVATE
   kleaverExpr
   kleeSupport
 )
+
+# @KLEE-SEMu
+klee_add_component(kleeSemuCore
+  AddressSpace.cpp
+  MergeHandler.cpp
+  CallPathManager.cpp
+  Context.cpp
+  CoreStats.cpp
+  ExecutionState.cpp
+  Executor.cpp
+  ExecutorUtil.cpp
+  ExternalDispatcher.cpp
+  ImpliedValue.cpp
+  Memory.cpp
+  MemoryManager.cpp
+  PTree.cpp
+  Searcher.cpp
+  SeedInfo.cpp
+  SpecialFunctionHandler.cpp
+  StatsTracker.cpp
+  TimingSolver.cpp
+  UserSearcher.cpp
+
+  Mutation/ExecutionStateHelperSemu.cpp
+  Mutation/ExecutorHelperSemu.cpp
+)
+target_compile_definitions(kleeSemuCore PRIVATE SEMU_ENABLED_MACRO=1)
+klee_get_llvm_libs(LLVM_LIBS ${LLVM_COMPONENTS})
+target_link_libraries(kleeSemuCore PUBLIC ${LLVM_LIBS} ${SQLITE3_LIBRARIES})
+target_link_libraries(kleeSemuCore PRIVATE
+  kleeBasic
+  kleeModule
+  kleaverSolver
+  kleaverExpr
+  kleeSupport
+)
+#~KS
