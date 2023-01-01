@@ -71,7 +71,13 @@ StackFrame::~StackFrame() {
 /***/
 
 ExecutionState::ExecutionState(KFunction *kf)
-    : pc(kf->instructions), prevPC(pc) {
+    : pc(kf->instructions), 
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+    semuESHelper(this, DebugLogStateMerge),
+#endif
+    //~KS
+    prevPC(pc) {
   pushFrame(nullptr, kf);
   setID();
 }
@@ -105,6 +111,11 @@ ExecutionState::ExecutionState(const ExecutionState& state):
                              ? state.unwindingInformation->clone()
                              : nullptr),
     coveredNew(state.coveredNew),
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+    semuESHelper(this, state.semuESHelper, DebugLogStateMerge),
+#endif
+    //~KS
     forkDisabled(state.forkDisabled) {
   for (const auto &cur_mergehandler: openMergeStack)
     cur_mergehandler->addOpenState(this);
@@ -117,6 +128,12 @@ ExecutionState *ExecutionState::branch() {
   falseState->setID();
   falseState->coveredNew = false;
   falseState->coveredLines.clear();
+
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+  semuESHelper.ks_stateBranchPostProcessing(falseState);
+#endif
+  //~KS
 
   return falseState;
 }

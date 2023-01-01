@@ -32,6 +32,12 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/raw_ostream.h"
 
+// @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+#include "Mutation/ExecutorHelperSemu.h"
+#endif
+//~KS
+
 #include <map>
 #include <memory>
 #include <set>
@@ -552,6 +558,15 @@ public:
 
   MergingSearcher *getMergingSearcher() const { return mergingSearcher; };
   void setMergingSearcher(MergingSearcher *ms) { mergingSearcher = ms; };
+
+  // @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+public:
+  friend class ExecutorHelperSemu;
+  ExecutorHelperSemu semuEHelper;
+#endif
+  //~KS
+
 };
   
 } // End klee namespace

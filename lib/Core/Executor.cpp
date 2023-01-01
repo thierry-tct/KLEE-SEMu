@@ -457,6 +457,11 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
       pathWriter(0), symPathWriter(0), specialFunctionHandler(0), timers{time::Span(TimerInterval)},
       replayKTest(0), replayPath(0), usingSeeds(0),
       atMemoryLimit(false), inhibitForking(false), haltExecution(false),
+      // @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+      semuEHelper(this, MaxForks),
+#endif
+      //~KS
       ivcEnabled(false), debugLogBuffer(debugBufferString) {
 
 
@@ -538,6 +543,12 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &modules,
     kmodule->instrument(opts);
   }
 
+  // @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+  semuEHelper.ks_initializeModule(kmodule->module.get(), opts);
+#endif
+  //~KS
+
   // 3.) Optimise and prepare for KLEE
 
   // Create a list of functions that should be preserved if used
@@ -572,6 +583,12 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &modules,
   DataLayout *TD = kmodule->targetData.get();
   Context::initialize(TD->isLittleEndian(),
                       (Expr::Width)TD->getPointerSizeInBits());
+
+  // @KLEE-SEMu
+#if SEMU_ENABLED_MACRO == 1
+  semuEHelper.ks_verifyModule(kmodule->module.get());
+#endif
+  //~KS
 
   return kmodule->module.get();
 }
@@ -1122,6 +1139,13 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
       }
     }
 
+#if SEMU_ENABLED_MACRO == 1
+    // @KLEE-SEMu 
+    if (!semuEHelper.cfgSemuUseOnlyBranchForDepth)
+      current.depth++;
+    //~KS
+#endif
+
     return StatePair(&current, nullptr);
   } else if (res==Solver::False) {
     if (!isInternal) {
@@ -1129,6 +1153,13 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
         current.pathOS << "0";
       }
     }
+
+#if SEMU_ENABLED_MACRO == 1
+    // @KLEE-SEMu 
+    if (!semuEHelper.cfgSemuUseOnlyBranchForDepth)
+      current.depth++;
+    //~KS
+#endif
 
     return StatePair(nullptr, &current);
   } else {
@@ -1895,6 +1926,23 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       transferToBasicBlock(ii->getNormalDest(), i->getParent(), state);
     }
   } else {
+
+#if SEMU_ENABLED_MACRO == 1
+    // @KLEE-SEMu
+    // Make sure to unset the ks_hasToReachPostMutationPoint so to avoid
+    // post mutation point checking when the execution of the mutated stmt
+    // calls a function. the reason for this are:
+    // - Other mutants may be spawn in the called function, confusing
+    // therefore the original.
+    // - A mutant may mutate the value returned by the function call
+    // and considered same as original because no diff found 
+    // within the called funcion.
+    if (state.semuESHelper.ks_hasToReachPostMutationPoint) {
+      state.semuESHelper.ks_hasToReachPostMutationPoint = false;
+    }
+    //~KS
+#endif
+
     // Check if maximum stack size was reached.
     // We currently only count the number of stack frames
     if (RuntimeMaxStackFrames && state.stack.size() > RuntimeMaxStackFrames) {
@@ -2091,7 +2139,19 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     KInstIterator kcaller = state.stack.back().caller;
     Instruction *caller = kcaller ? kcaller->inst : nullptr;
     bool isVoidReturn = (ri->getNumOperands() == 0);
+
+#if SEMU_ENABLED_MACRO == 1
+    // disable
+    if (0) {
+#endif
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
+#if SEMU_ENABLED_MACRO == 1
+    }
+    // @KLEE-SEMu
+    ref<Expr> &result = state.semuESHelper.ks_lastReturnedVal;
+    result = ConstantExpr::alloc(0, Expr::Bool);
+    //~KS
+#endif 
     
     if (!isVoidReturn) {
       result = eval(ki, 0, state).value;
@@ -2420,6 +2480,47 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     unsigned numArgs = cb.arg_size();
     Function *f = getTargetFunction(fp, state);
 
+#if SEMU_ENABLED_MACRO == 1
+    // @KLEE-SEMu
+    // if the state executing is original (ks_mutantID==0) and first time this is executed
+    // by this state (This instruction ki is not in ks_covMutPointInst of this state), 
+    // and the condition of switch is the value of the global variable 
+    // @klee_semu_GenMu_Mutant_ID_Selector, do mutations branchings.
+    if (f == semuEHelper.ks_mutantIDSelectorGlobal_Func) {
+        if (state.semuESHelper.ks_mutantID == 0 && state.semuESHelper.ks_VisitedMutPointsSet.count(i) == 0) {
+
+            uint64_t fromMID = dyn_cast<ConstantInt>(dyn_cast<CallInst>(i)->getArgOperand(0))->getZExtValue();
+            uint64_t toMID = dyn_cast<ConstantInt>(dyn_cast<CallInst>(i)->getArgOperand(1))->getZExtValue();
+            assert (fromMID <= toMID && "Invalid mutant range");
+
+            std::vector<uint64_t> mIdsHere;
+            for (unsigned mIds = fromMID; mIds <= toMID; mIds++) {
+                auto ins_ret = state.semuESHelper.ks_VisitedMutantsSet.insert(mIds);
+                // Consider only the mutants that were not seen before (Higher order mutant case)
+                if (ins_ret.second)
+                    mIdsHere.push_back(mIds);
+            }
+            // produce mutants states from the current original's state with each state having 
+            // one of the possible Mutants of this mutation point (successors of this switch)
+            if (!mIdsHere.empty())
+                semuEHelper.ks_mutationPointBranching(state, mIdsHere);
+            //llvm::errs() << fromMID << " " << toMID << " --\n";    
+            //i->dump();
+            // Set to visited, so that subsequent pass do not mutate anymore
+            state.semuESHelper.ks_VisitedMutPointsSet.insert(i);
+
+            break;  //case
+        }
+        else { //Simply skip that call when mutant or already seen
+            break;  //case
+        }
+    } else if (f == semuEHelper.ks_postMutationPoint_Func) {
+      // Do nothing. Will be checked later, if !semuDisableCheckAtPostMutationPoint
+      break;
+    }
+    //~KS
+#endif
+
     // evaluate arguments
     std::vector< ref<Expr> > arguments;
     arguments.reserve(numArgs);
@@ -2517,6 +2618,17 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         free = res.second;
       } while (free);
     }
+
+#if SEMU_ENABLED_MACRO == 1
+    // @KLEE-SEMu
+#ifdef SEMU_RELMUT_PRED_ENABLED
+    // branch old new
+    if (f == semuEHelper.ks_klee_change_function && state.semuESHelper.ks_old_new == 0)
+      semuEHelper.ks_oldNewBranching(state);
+#endif
+    //~KS
+#endif
+
     break;
   }
   case Instruction::PHI: {
@@ -3459,6 +3571,23 @@ bool Executor::checkMemoryUsage() {
 }
 
 void Executor::doDumpStates() {
+
+#if SEMU_ENABLED_MACRO == 1
+  // @KLEE-SEMu
+  if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+    // In case there was timeout, compare the states that already reached watchpoint
+    std::vector<ExecutionState *> remainWPStates;
+    semuEHelper.ks_checkID++;
+    semuEHelper.ks_compareStates(remainWPStates); // TODO TODO: modify comparestates to take account of the fact that some states may not have reached the watchpoint
+    for (auto *s: remainWPStates) {
+      s->pc = s->prevPC;
+      terminateState (*s);
+    }
+    return; // do not do the real dumpStates
+  }
+  //~KS
+#endif
+
   if (!DumpStatesOnHalt || states.empty()) {
     interpreterHandler->incPathsExplored(states.size());
     return;
@@ -3478,6 +3607,57 @@ void Executor::run(ExecutionState &initialState) {
 
   states.insert(&initialState);
 
+#if SEMU_ENABLED_MACRO == 1
+  // @KLEE-SEMu         //Temporary TODO
+  if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+    // Must not be only seed mode XXX: need to check this, but should be okay
+    //if (OnlySeed)
+    //  klee_error("SEMU@ERROR: OnlySeed must not be enabled in SEMU mode");
+
+    // OnlyReplaySeeds must be set if precondition is enabled by giving seed dir or so
+    // XXX Maybe need to automatically set OnlyReplaySeeds here instead of displaying error?
+    if (usingSeeds) { //!seedMap.empty()) {
+      if (!OnlyReplaySeeds) {
+        klee_error("SEMU@ERROR: OnlyReplaySeeds is not set in Semu mode whith seed precondition. Must be set!");
+        exit(1);
+      }
+    }
+
+    semuEHelper.ks_checkID = 0;
+    semuEHelper.ks_nextDepthID = 1;
+
+    semuEHelper.ks_runStartTime = time::getWallTime();
+
+    // In SEMU mode set optional user specified precondition, before any seeding
+    // Precondition (bounded) symb ex for scalability, existing TC precond
+    // XXX: in case want to specify precondition instead of using seeds
+    std::vector<ConstraintSet> symbexPreconditionsList;
+    semuEHelper.ks_loadKQueryConstraints(symbexPreconditionsList);
+    // Make precondition Expression
+    if (symbexPreconditionsList.size() > 0)
+        assert (semuEHelper.cfgSemuPreconditionLength >= 0 && "Must use symbexPreconditionsList only with fixed preconditionLength");
+    unsigned nSelectedConds = semuEHelper.cfgSemuPreconditionLength;
+    ref<Expr> mergedPrecond = ConstantExpr::alloc(0, Expr::Bool);  //False
+    for (auto &testcasePC: symbexPreconditionsList) {
+      ref<Expr> tcPCCond = ConstantExpr::alloc(1, Expr::Bool); //True
+      unsigned condcount = 0;
+      for (auto cit=testcasePC.begin(); cit != testcasePC.end();++cit) {
+        if (condcount++ >= nSelectedConds)
+          break;
+        tcPCCond = AndExpr::create(tcPCCond, *cit);
+      }
+      mergedPrecond = OrExpr::create(mergedPrecond, tcPCCond);
+    }
+    // add precondition  
+    if (!mergedPrecond->isFalse())
+      for (auto *as: states) {
+        as->addConstraint(mergedPrecond);
+          //(mergedPrecond)->dump();
+      }
+  }
+  //~KS
+#endif
+
   if (usingSeeds) {
     std::vector<SeedInfo> &v = seedMap[&initialState];
     
@@ -3488,25 +3668,117 @@ void Executor::run(ExecutionState &initialState) {
     int lastNumSeeds = usingSeeds->size()+10;
     time::Point lastTime, startTime = lastTime = time::getWallTime();
     ExecutionState *lastState = 0;
+
+#if SEMU_ENABLED_MACRO == 1
+    // @KLEE-SEMu         //Temporary TODO
+    //semuEHelper.ks_watchpoint = true;
+    time::Point ks_initTime = time::getWallTime();
+    ExecutionState *ks_prevState = nullptr;  
+
+    // will have the number of states that already reached precondition(for compare to be sound)
+    uint64_t precond_offset = 0;
+    uint64_t prevSeedMapSize = seedMap.size();
+    //~KS
+#endif
+
     while (!seedMap.empty()) {
       if (haltExecution) {
         doDumpStates();
         return;
       }
 
+#if SEMU_ENABLED_MACRO == 1
+      // @KLEE-SEMu
+      std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it;
+      if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+        if (seedMap.size() != prevSeedMapSize) {
+          it = seedMap.upper_bound(lastState); // take another if seedMap changed
+          prevSeedMapSize = seedMap.size();
+        } else { 
+          it = seedMap.lower_bound(lastState); //take same if no change (for loop break)
+        }
+      } else {
+        it = seedMap.upper_bound(lastState);
+      }
+
+      // Disable following statement
+      if (0) {
+      //~KS
+#endif
       std::map<ExecutionState*, std::vector<SeedInfo> >::iterator it = 
         seedMap.upper_bound(lastState);
+#if SEMU_ENABLED_MACRO == 1
+      // @KLEE-SEMu
+      }
+      //~KS
+#endif
+
       if (it == seedMap.end())
         it = seedMap.begin();
       lastState = it->first;
       ExecutionState &state = *lastState;
       KInstruction *ki = state.pc;
+
+#if SEMU_ENABLED_MACRO == 1
+      // @KLEE-SEMu
+      if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+        // remove the last state from seedMap if depth exceeded the precondition length
+        if (semuEHelper.cfgSemuPreconditionLength < 0) {
+          // We are in non fixed mode: precondition until we reach a point:
+          // == -1: until any state reach a mutant and the depth is fixed for others
+          // < -1: until each state reach a mutant
+          if (semuEHelper.ks_reachedAMutant(ki)
+#ifdef SEMU_RELMUT_PRED_ENABLED
+              || semuEHelper.ks_reachedAnOldNew(ki)
+#endif
+                                  ) {
+            if (semuEHelper.cfgSemuPreconditionLength == -1)
+              semuEHelper.cfgSemuPreconditionLength = state.depth; 
+            // else ;
+            seedMap.erase(it);
+            precond_offset++;
+            continue;
+          }
+        } else if (state.depth >= semuEHelper.cfgSemuPreconditionLength) {
+          seedMap.erase(it);
+          precond_offset++;
+          continue;
+        }
+
+      //Handle infinite loop, TODO: Check whether it fits the search strategy of seedMap (next elem) 
+  //#ifdef SEMU_INFINITE_LOOP_BREAK
+        semuEHelper.ks_CheckAndBreakInfinitLoop(state, ks_prevState, ks_initTime);
+  //#endif
+      }
+      //~KS
+#endif    
+
       stepInstruction(state);
 
       executeInstruction(state, ki);
       timers.invoke();
       if (::dumpStates) dumpStates();
       if (::dumpPTree) dumpPTree();
+
+#if SEMU_ENABLED_MACRO == 1
+      // @KLEE-SEMu
+      if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+	// No check when precondlength is -2 because seeding stop when a mutant reached
+        if (semuEHelper.cfgSemuPreconditionLength >= -1) {
+          if (semuEHelper.ks_CheckpointingMainCheck(state, ki, true/*is Seeidng*/, precond_offset)) {
+            timers.reset(); // Make sure inst timer is reset
+            continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
+          }
+        } else {
+          // No check, thus we need to terminate terminated originals that did not reach a mutant
+          for (auto *s: semuEHelper.ks_justTerminatedStates)
+                  terminateState(*s);
+          semuEHelper.ks_justTerminatedStates.clear();
+        }
+      }
+      //~KS
+#endif
+
       updateStates(&state);
 
       if ((stats::instructions % 1000) == 0) {
@@ -3543,19 +3815,81 @@ void Executor::run(ExecutionState &initialState) {
 
   searcher = constructUserSearcher(*this);
 
+#if SEMU_ENABLED_MACRO == 1
+  // @KLEE-SEMu
+  // XXX require bfs as searcher (for SEMU execution) for now
+  std::string searcherName;
+  llvm::raw_string_ostream rsos(searcherName);
+  searcher->printName(rsos);
+  if (rsos.str().compare("BFSSearcher\n")) {
+    llvm::errs() << "SEMU@ERROR: SEMU require BFS as search!";
+    assert (false && "SEMU require BFS as search");
+  }
+
+  std::vector<ExecutionState *> newStates;
+  for (auto *s: states) {
+    if (semuEHelper.ks_terminatedBeforeWP.count(s) > 0 
+        || semuEHelper.ks_reachedWatchPoint.count(s) > 0 
+        || semuEHelper.ks_reachedOutEnv.count(s) > 0
+        || semuEHelper.ks_atPointPostMutation.count(s) > 0
+        || semuEHelper.ks_ongoingExecutionAtWP.count(s) > 0)
+      continue;
+    newStates.push_back(s);
+  }
+  // disable
+  if (0) {
+  //~KS
+#endif
   std::vector<ExecutionState *> newStates(states.begin(), states.end());
+#if SEMU_ENABLED_MACRO == 1
+  // @KLEE-SEMu
+  }
+  //~KS
+#endif
+
   searcher->update(0, newStates, std::vector<ExecutionState *>());
+
+#if SEMU_ENABLED_MACRO == 1
+  // @KLEE-SEMu         //Temporary TODO
+  //semuEHelper.ks_watchpoint = true;
+  time::Point ks_initTime = time::getWallTime();
+  ExecutionState *ks_prevState = nullptr;  
+  //~KS
+#endif
 
   // main interpreter loop
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
     KInstruction *ki = state.pc;
+
+#if SEMU_ENABLED_MACRO == 1
+    // @KLEE-SEMu
+    //Handle infinite loop, This requires BFS search strategy XXX
+//#ifdef SEMU_INFINITE_LOOP_BREAK
+    if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+      semuEHelper.ks_CheckAndBreakInfinitLoop(state, ks_prevState, ks_initTime);
+    }
+//#endif
+    //~KS
+#endif
+
     stepInstruction(state);
 
     executeInstruction(state, ki);
     timers.invoke();
     if (::dumpStates) dumpStates();
     if (::dumpPTree) dumpPTree();
+
+#if SEMU_ENABLED_MACRO == 1
+    // @KLEE-SEMu
+    if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+      if (semuEHelper.ks_CheckpointingMainCheck(state, ki, false/*is Seeding*/)) {
+        timers.reset(); //Make sure instruction timer is reset
+        continue;  // avoid putting back the state in the searcher bellow "updateStates(&state);"
+      }
+    }
+    //~KS
+#endif
 
     updateStates(&state);
 
@@ -3667,6 +4001,23 @@ static std::string terminationTypeFileExtension(StateTerminationType type) {
 };
 
 void Executor::terminateStateOnExit(ExecutionState &state) {
+
+#if SEMU_ENABLED_MACRO == 1
+  // @KLEE-SEMu
+  if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+    semuEHelper.ks_justTerminatedStates.insert(&state);
+    return;
+  }
+  if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::TESTGEN_MODE) {
+    // Do not generate test for seeding mutant, the original will have it
+    if (state.semuESHelper.ks_mutantID > 0 && state.semuESHelper.isTestGenMutSeeding) {
+      terminateState(state);
+      return;
+    }
+  }
+  //~KS
+#endif
+
   if (shouldWriteTest(state) || (AlwaysOutputSeeds && seedMap.count(&state)))
     interpreterHandler->processTestCase(
         state, nullptr,
@@ -3678,6 +4029,23 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
 
 void Executor::terminateStateEarly(ExecutionState &state, const Twine &message,
                                    StateTerminationType terminationType) {
+
+#if SEMU_ENABLED_MACRO == 1
+  // @KLEE-SEMu
+  if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+    semuEHelper.ks_justTerminatedStates.insert(&state);
+    return;
+  }
+  if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::TESTGEN_MODE) {
+    // Do not generate test for seeding mutant, the original will have it
+    if (state.semuESHelper.ks_mutantID > 0 && state.semuESHelper.isTestGenMutSeeding) {
+      terminateState(state);
+      return;
+    }
+  }
+  //~KS
+#endif
+
   if ((terminationType <= StateTerminationType::EXECERR &&
        shouldWriteTest(state)) ||
       (AlwaysOutputSeeds && seedMap.count(&state))) {
@@ -3780,8 +4148,29 @@ void Executor::terminateStateOnError(ExecutionState &state,
     const std::string ext = terminationTypeFileExtension(terminationType);
     // use user provided suffix from klee_report_error()
     const char * file_suffix = suffix ? suffix : ext.c_str();
+
+#if SEMU_ENABLED_MACRO == 1
+    // @KLEE-SEMu
+    if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) 
+      ; //do nothing
+    else // process test case only for original or bounded symbex mutants in test gen mode
+      if (!(ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::TESTGEN_MODE && state.semuESHelper.ks_mutantID > 0 && state.semuESHelper.isTestGenMutSeeding)) 
+    //~KS
+#endif
+
     interpreterHandler->processTestCase(state, msg.str().c_str(), file_suffix);
   }
+
+#if SEMU_ENABLED_MACRO == 1
+  // @KLEE-SEMu
+  if (ExecutionStateHelperSemu::ks_getMode() == ExecutionStateHelperSemu::KS_Mode::SEMU_MODE) {
+    if (!shouldExitOn(terminationType)) {
+      semuEHelper.ks_justTerminatedStates.insert(&state);
+      return;
+    }
+  }
+  //~KS
+#endif
 
   terminateState(state);
 
@@ -3913,7 +4302,60 @@ void Executor::callExternalFunction(ExecutionState &state,
       klee_warning_once(callable->getValue(), "%s", os.str().c_str());
   }
 
+#if SEMU_ENABLED_MACRO == 1
+#ifndef WINDOWS
+  // @KLEE-SEMu
+  bool success;
+  // XXX keep this only to function that output (input with new process may need more)
+  if (semuEHelper.cfgSemuForkProcessForSegvExternalCalls && callable->getName() == "printf") {
+    pid_t my_pid;
+    int child_status;
+    // Use of vfork, be careful about multi threading
+    if ((my_pid = ::vfork()) < 0) {
+      llvm::errs() << "SEMU@ERROR: fork failure for external call (to avoid Segmentation fault)";
+      exit(1);
+    }
+    if (my_pid == 0) {
+      // Child process 
+      _Exit((int) !externalDispatcher->executeCall(callable, target->inst, args));
+    } else {
+      // Parent process 
+      ::wait(&child_status);
+      if (WIFEXITED(child_status)) {
+         const int es = WEXITSTATUS(child_status);
+         if (es) {
+           //perror ("exited with error code");
+           success = false;
+         } else {
+           //perror ("exited normally");
+           success = true;
+         }
+      } else if (WIFSIGNALED(child_status)) {
+         const int signum = WTERMSIG(child_status);
+         llvm::errs() << "SEMU@Error: External call child process signaled with signum: " << signum << " !\n";
+         assert (false);
+         exit (1);
+      } else {
+         llvm::errs() << "SEMU@Error: External call child process other error!\n";
+         assert (false);
+         exit (1);
+      }
+    }
+  } else {
+    success = externalDispatcher->executeCall(callable, target->inst, args);
+    // ignore
+    if(0) {
+    // ~KS
+#endif
+#endif
   bool success = externalDispatcher->executeCall(callable, target->inst, args);
+#if SEMU_ENABLED_MACRO == 1
+#ifndef WINDOWS
+    }
+  }  
+#endif
+#endif
+
   if (!success) {
     terminateStateOnError(state, "failed external call: " + callable->getName(),
                           StateTerminationType::External);
